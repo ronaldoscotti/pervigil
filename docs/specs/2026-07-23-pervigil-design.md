@@ -52,7 +52,11 @@ up in a screenshot). The video still has to win on craft and the timeline.
 11. **Settings panel** — short and opinionated (see §4).
 12. **Hook install** — show the snippet + copy button + live "hooks detected ✓/✗" indicator.
     Never auto-writes to `~/.claude/settings.json`.
-13. **Usage limits (opt-in)** — a settings toggle (default **off**) switches the footer from $
+13. **Session name** — each row shows Claude Code's own AI-generated session title (the
+    `aiTitle` record in the transcript, same as `claude --resume` shows), tiered fallback:
+    `aiTitle` → `lastPrompt` → branch → short session id. Tells you *what* a session is doing,
+    not just where it lives. Truncated; never treated as authoritative (titles can lag).
+14. **Usage limits (opt-in)** — a settings toggle (default **off**) switches the footer from $
     cost to account-accurate **5-hour + weekly limit gauges** with reset timers, via the OAuth
     endpoint the CLI uses (reads `~/.claude/.credentials.json`). Off by default because it's a
     fragile, undocumented dependency that touches credentials; enabling it is the user's explicit
@@ -120,7 +124,8 @@ point where "cross-platform" becomes an architecture decision rather than a clai
 > timeout, always exit 0. A monitor that can wedge the thing it monitors is worse than no monitor.
 
 **Two inputs, deliberately separate.** Hooks → *state* (exact; `Notification` is the only honest
-signal for "blocked on you right now"). Transcripts → *cost* (tokens × shipped price table). They
+signal for "blocked on you right now"). Transcripts → *cost + session title* (tokens × shipped
+price table; `aiTitle`/`lastPrompt` records). They
 answer different questions and fail independently: no hooks installed → sessions + cost still work,
 state degrades to `idle` rather than breaking.
 

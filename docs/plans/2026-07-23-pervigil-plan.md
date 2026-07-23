@@ -224,7 +224,9 @@ Claude Code turn.
   a failure here must not fail the host turn.
 - `watcher`: `notify`-based tail of `events.jsonl`; emits parsed `Event`s to the
   Tauri layer. Corrupt lines counted + skipped.
-- `transcript`: parse `~/.claude/projects/**/*.jsonl` → per-session token counts.
+- `transcript`: parse `~/.claude/projects/**/*.jsonl` → per-session token counts **and session
+  title** (`{"type":"ai-title","aiTitle":…}`, fallback `{"type":"last-prompt","lastPrompt":…}` —
+  verified present in real transcripts). Tiered: `aiTitle` → `lastPrompt` → branch → short id.
 
 **Verification (TDD where pure):**
 - [ ] TDD: line parser round-trips every `Event` variant; a corrupt line yields
