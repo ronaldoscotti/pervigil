@@ -64,6 +64,11 @@ review.
 - **Two inputs, separate failure domains:** hooks → state; transcripts → cost.
 - The hook shim **must never block or fail a Claude Code turn** — fire-and-forget,
   hard timeout, always exit 0.
+- **Comments are the exception, always in English, few and short.** Docblocks on
+  public/exported functions; a non-obvious decision or known limit; an opaque
+  regex or algorithm. Never section banners, narration of the next line, or
+  commented-out code. Try renaming or extracting first — usually that removes the
+  need. Rationale for a choice belongs in the commit, the PR, or a doc.
 
 ## Git
 

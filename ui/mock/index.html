@@ -18,15 +18,12 @@
 <body>
 <div style="min-height:100%;box-sizing:border-box;display:flex;align-items:center;justify-content:center;padding:60px 40px;font-family:'Space Grotesk',system-ui,sans-serif;background:radial-gradient(120% 120% at 22% 8%, #23262f 0%, #14161d 42%, #0c0d12 100%);position:relative;overflow:hidden">
 
-  <!-- out-of-focus desktop backdrop blobs -->
   <div style="position:absolute;top:-8%;left:6%;width:420px;height:300px;border-radius:60px;background:linear-gradient(135deg,#2e3340,#1a1d26);filter:blur(46px);opacity:.55"></div>
   <div style="position:absolute;bottom:-6%;right:4%;width:520px;height:360px;border-radius:70px;background:linear-gradient(135deg,#20303a,#151820);filter:blur(58px);opacity:.5"></div>
   <div style="position:absolute;top:38%;right:26%;width:180px;height:140px;border-radius:40px;background:#3a2f22;filter:blur(52px);opacity:.28"></div>
 
-  <!-- ============ FLOATING PANEL ============ -->
   <div style="position:relative;width:380px;height:776px;box-sizing:border-box;display:flex;flex-direction:column;background:linear-gradient(180deg,#181a22 0%,#141620 100%);border-radius:16px;border:1px solid #2a2e39;box-shadow:0 1px 0 rgba(255,255,255,.04) inset, 0 40px 80px -24px rgba(0,0,0,.75), 0 10px 30px -12px rgba(0,0,0,.6);overflow:hidden">
 
-    <!-- header -->
     <div style="flex:none;display:flex;align-items:center;justify-content:space-between;padding:15px 18px 13px;border-bottom:1px solid #262A34">
       <div style="display:flex;align-items:center;gap:9px">
         <div style="position:relative;width:9px;height:9px">
@@ -38,7 +35,6 @@
       <span style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:#565C6A;border:1px solid #262A34;border-radius:5px;padding:3px 7px">Pinned</span>
     </div>
 
-    <!-- hero count -->
     <div style="flex:none;position:relative;padding:15px 18px 14px;border-bottom:1px solid #262A34;overflow:hidden">
       <div style="position:absolute;top:-30px;left:-20px;width:220px;height:160px;background:radial-gradient(circle at 30% 40%,rgba(244,184,96,.16),transparent 68%);pointer-events:none"></div>
       <div style="position:relative;display:flex;align-items:center;gap:14px">
@@ -50,14 +46,12 @@
       </div>
     </div>
 
-    <!-- ============ SIGNATURE: combined 6h activity lane ============ -->
     <div style="flex:none;padding:16px 18px 15px;border-bottom:1px solid #262A34">
       <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px">
         <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#878D9A">Last 6 hours</span>
         <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.04em;color:#C89A58">35% waiting on you</span>
       </div>
 
-      <!-- the lane -->
       <div style="position:relative;height:32px;border-radius:4px;background:#101218;box-shadow:inset 0 0 0 1px rgba(234,231,222,.05)">
         <!-- aggregate state segments, −6h (left) → now (right) -->
         <div style="position:absolute;inset:0;display:flex;gap:2px;border-radius:4px;overflow:hidden">
@@ -70,13 +64,11 @@
           <div style="flex:5;background:#6FB2C4;opacity:.85"></div>
           <div style="flex:21;background:#F4B860;box-shadow:0 0 14px rgba(244,184,96,.55)"></div>
         </div>
-        <!-- gridlines + NOW, drawn over segments -->
         <div style="position:absolute;left:33.333%;top:-3px;bottom:-3px;width:1px;background:repeating-linear-gradient(180deg,rgba(20,22,29,.9) 0 2px,transparent 2px 5px)"></div>
         <div style="position:absolute;left:66.666%;top:-3px;bottom:-3px;width:1px;background:repeating-linear-gradient(180deg,rgba(20,22,29,.9) 0 2px,transparent 2px 5px)"></div>
         <div style="position:absolute;right:0;top:-4px;bottom:-4px;width:2px;background:#EAE7DE;opacity:.85;box-shadow:0 0 8px rgba(234,231,222,.4)"></div>
       </div>
 
-      <!-- axis -->
       <div style="position:relative;height:11px;margin-top:8px;font-family:'IBM Plex Mono',monospace;font-size:8.5px;letter-spacing:.03em;color:#565C6A">
         <span style="position:absolute;left:0;top:0">−6h</span>
         <span style="position:absolute;left:33.333%;top:0;transform:translateX(-50%)">−4h</span>
@@ -85,15 +77,12 @@
       </div>
     </div>
 
-    <!-- sessions label -->
     <div style="flex:none;padding:12px 18px 4px">
       <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#565C6A">Sessions</span>
     </div>
 
-    <!-- session list -->
     <div style="flex:1 1 auto;overflow:hidden;display:flex;flex-direction:column">
 
-      <!-- ROW 1 · posicionamento · WAITING (single session) -->
       <div tabindex="0" style="position:relative;padding:13px 18px;outline:none">
         <div style="position:absolute;inset:0;background:radial-gradient(130% 90% at 8% 50%,rgba(244,184,96,.15),transparent 62%);pointer-events:none;animation:lampPulse 6s ease-in-out infinite"></div>
         <div style="position:relative;display:flex;align-items:center;justify-content:space-between;gap:12px">
@@ -114,7 +103,6 @@
         </div>
       </div>
 
-      <!-- ROW 2 · pervigil · main · WAITING (2 sessions) -->
       <div tabindex="0" style="position:relative;padding:13px 18px;border-top:1px solid #20242e;outline:none">
         <div style="position:absolute;inset:0;background:radial-gradient(130% 90% at 8% 50%,rgba(244,184,96,.13),transparent 62%);pointer-events:none;animation:lampPulse 6.6s ease-in-out infinite"></div>
         <div style="position:relative;display:flex;align-items:center;justify-content:space-between;gap:12px">
@@ -141,10 +129,8 @@
         </div>
       </div>
 
-      <!-- group gap -->
       <div style="height:5px;flex:none"></div>
 
-      <!-- ROW · pervigil · feat/timeline · WORKING (2 sessions) -->
       <div tabindex="0" style="position:relative;padding:13px 18px;border-top:1px solid #20242e;outline:none">
         <div style="position:relative;display:flex;align-items:center;justify-content:space-between;gap:12px">
           <div style="display:flex;align-items:center;gap:11px;min-width:0">
@@ -167,7 +153,6 @@
         </div>
       </div>
 
-      <!-- ROW 3 · meu-feed-catolico-api · WORKING (single) -->
       <div tabindex="0" style="position:relative;padding:13px 18px;border-top:1px solid #20242e;outline:none">
         <div style="position:relative;display:flex;align-items:center;justify-content:space-between;gap:12px">
           <div style="display:flex;align-items:center;gap:11px;min-width:0">
@@ -184,7 +169,6 @@
         </div>
       </div>
 
-      <!-- ROW 4 · catecismo-builder · WORKING (single) -->
       <div tabindex="0" style="position:relative;padding:13px 18px;border-top:1px solid #20242e;outline:none">
         <div style="position:relative;display:flex;align-items:center;justify-content:space-between;gap:12px">
           <div style="display:flex;align-items:center;gap:11px;min-width:0">
@@ -201,10 +185,8 @@
         </div>
       </div>
 
-      <!-- group gap -->
       <div style="height:5px;flex:none"></div>
 
-      <!-- ROW 5 · temperamentos-online · IDLE (single) -->
       <div tabindex="0" style="position:relative;padding:13px 18px;border-top:1px solid #20242e;outline:none;opacity:.72">
         <div style="position:relative;display:flex;align-items:center;justify-content:space-between;gap:12px">
           <div style="display:flex;align-items:center;gap:11px;min-width:0">
@@ -221,7 +203,6 @@
         </div>
       </div>
 
-      <!-- ROW 6 · meu-feed-catolico-app · IDLE (single) -->
       <div tabindex="0" style="position:relative;padding:13px 18px;border-top:1px solid #20242e;outline:none;opacity:.72">
         <div style="position:relative;display:flex;align-items:center;justify-content:space-between;gap:12px">
           <div style="display:flex;align-items:center;gap:11px;min-width:0">
@@ -240,7 +221,6 @@
 
     </div>
 
-    <!-- footer -->
     <div style="flex:none;display:flex;align-items:center;justify-content:space-between;padding:13px 18px;border-top:1px solid #262A34;background:#12141b">
       <div style="display:flex;align-items:baseline;gap:6px">
         <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#565C6A">Today</span>
