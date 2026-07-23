@@ -46,6 +46,12 @@ artifacts land here and the checklist advances. That status-accuracy is the whol
 point: the repo is proof precisely because it never claims a stage it hasn't
 reached.
 
+## Reference
+
+- [`02-sota-alignment.md`](02-sota-alignment.md) — the method mapped against the
+  2026 five-layer stack (SDD, evals, guardrails, observability, orchestration),
+  marking honestly where this repo demonstrates each layer and where it doesn't.
+
 ## Why a session monitor, built this way
 
 The recursion is deliberate. Pervigil is a tool for staying on top of many
