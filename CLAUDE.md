@@ -73,5 +73,7 @@ review.
 
 ## Current position
 
-At the **spec-approval gate** (stage 4). Spec written and under review; the plan
-(stage 5) has not started. See `docs/method/README.md` for the live status.
+Spec **approved** (human gate passed 2026-07-23). Plan written
+(`docs/plans/2026-07-23-pervigil-plan.md`). At the **plan-approval gate** — next
+stage after approval is TDD implementation. See `docs/method/README.md` for live
+status.

@@ -38,9 +38,10 @@ Read [`docs/method/`](docs/method/) to follow it, or the git log to verify it.
 [x] Understand the problem      docs/method/00-understand.md
 [x] Gather context              docs/method/01-context.md
 [x] Brainstorm (superpowers)    → spec
-[x] Spec written                docs/specs/2026-07-23-pervigil-design.md
-[ ] Spec approved               ← current gate
-[ ] Plan → TDD → QA → review → PR
+[x] Spec approved               human gate passed 2026-07-23
+[x] Plan written                docs/plans/2026-07-23-pervigil-plan.md
+[ ] Plan approved               ← current gate
+[ ] TDD → QA → review → PR
 ```
 
 The checklist is status-accurate on purpose: there is no `src/` yet because the

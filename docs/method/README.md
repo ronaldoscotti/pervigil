@@ -19,7 +19,7 @@ docs, and reproduce it.
 | 1 | Gather context | web + `context7` | [`01-context.md`](01-context.md) | — |
 | 2 | Brainstorm | `superpowers:brainstorming` | dialogue → spec | — |
 | 3 | Spec | `superpowers:brainstorming` | [`../specs/2026-07-23-pervigil-design.md`](../specs/2026-07-23-pervigil-design.md) | **human + AI review** |
-| 4 | Plan | `superpowers:writing-plans` | `../plans/` *(not started)* | **human + AI review** |
+| 4 | Plan | `superpowers:writing-plans` | [`../plans/2026-07-23-pervigil-plan.md`](../plans/2026-07-23-pervigil-plan.md) | **human + AI review** |
 | 5 | Implement | `superpowers:test-driven-development` | `src/` + tests *(not started)* | tests green |
 | 6 | QA | manual + `agent-browser` | screenshots / notes *(not started)* | works as a user |
 | 7 | Code review | `code-review` skill + self | review notes *(not started)* | issues resolved |
@@ -32,8 +32,9 @@ docs, and reproduce it.
 [x] 1  Context         — docs/method/01-context.md
 [x] 2  Brainstorm      — ran superpowers:brainstorming (one-question-at-a-time)
 [x] 3  Spec written    — docs/specs/2026-07-23-pervigil-design.md
-[ ] 3  Spec APPROVED   — ← WE ARE HERE (awaiting human approval gate)
-[ ] 4  Plan
+[x] 3  Spec APPROVED   — human review gate passed (2026-07-23)
+[x] 4  Plan written    — docs/plans/2026-07-23-pervigil-plan.md
+[ ] 4  Plan APPROVED   — ← WE ARE HERE (awaiting human approval gate)
 [ ] 5  TDD implementation
 [ ] 6  QA
 [ ] 7  Code review

@@ -1,7 +1,7 @@
 # Pervigil — Design Spec
 
 **Date:** 2026-07-23
-**Status:** At the spec-approval gate — written, pending human approval (stage 3 of `docs/method/`)
+**Status:** Approved — human review gate passed 2026-07-23. Plan: `docs/plans/2026-07-23-pervigil-plan.md`
 **Type:** Portfolio artifact (open source) — cross-platform monitor for Claude Code sessions
 
 ---
