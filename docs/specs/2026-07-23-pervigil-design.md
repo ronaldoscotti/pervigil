@@ -43,8 +43,8 @@ up in a screenshot). The video still has to win on craft and the timeline.
    centerpiece. Filter: `4h · Today · Week`. Same filter scopes the cost readout.
 5. **Elapsed timer** on the current state ("Blocked for 22m" is the line that makes you act).
 6. **Click to focus** — jump to the session's window/tab/pane. 4-tier best-available (see §5).
-7. **Cost** — per session and per day/week. Token counts × a shipped price table. Text only,
-   no charts.
+7. **Cost (default footer)** — per session and per day/week. Token counts × a shipped price
+   table. Text only, no charts. Zero-dependency — reads no credentials, fully portable.
 8. **Native notification** on entering `waiting`. Only on `waiting` — `done` stays quiet.
 9. **Pin / dismiss** — pin keeps a project at the top; dismiss self-clears when the session next
    acts. No archive (the sort already solves the dead-session problem).
@@ -52,13 +52,20 @@ up in a screenshot). The video still has to win on craft and the timeline.
 11. **Settings panel** — short and opinionated (see §4).
 12. **Hook install** — show the snippet + copy button + live "hooks detected ✓/✗" indicator.
     Never auto-writes to `~/.claude/settings.json`.
+13. **Usage limits (opt-in)** — a settings toggle (default **off**) switches the footer from $
+    cost to account-accurate **5-hour + weekly limit gauges** with reset timers, via the OAuth
+    endpoint the CLI uses (reads `~/.claude/.credentials.json`). Off by default because it's a
+    fragile, undocumented dependency that touches credentials; enabling it is the user's explicit
+    consent to that trade. Degrades back to $ cost if the endpoint is unavailable or changes.
+    *(Added after M2 prototype feedback — most Claude Code users are on subscriptions where a plan
+    limit, not dollars, is the real attention signal. See `docs/method/` for the loop.)*
 
 ### Explicitly out of v1
 
 - Windows / Linux **binaries** — architecture supports them, we don't ship or claim them yet
   (marked "architecturally supported, untested — help wanted").
 - **Approve-from-panel** — the v2 wedge (monitor → control surface). Needs its own design.
-- Charts, budgets, quota tracking — that lane is saturated by usage trackers.
+- Charts, budgets. (Account usage-limit gauges are **in**, but opt-in — never the default; item 13.)
 - Codex / Gemini / Cursor session support.
 - History beyond 30 days.
 - Wide-open configurability.
@@ -66,7 +73,8 @@ up in a screenshot). The video still has to win on craft and the timeline.
 ### Config philosophy
 
 Configurable when reasonable people genuinely disagree; opinionated default otherwise. v1 exposes:
-notification behavior, project visibility, terminal/focus preferences. Not exposed: timeline
+notification behavior, project visibility, terminal/focus preferences, and the usage-limits opt-in
+(item 13). Not exposed: timeline
 colors, sort order, retention window. Rule of thumb stated for interviews: *"I'd rather ship sane
 defaults with an escape hatch for the two things people actually disagree about than expose 40
 checkboxes."*

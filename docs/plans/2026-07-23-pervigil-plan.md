@@ -245,6 +245,14 @@ Claude Code turn.
   (the spec's honesty rule).
 - [ ] TDD: cost aggregates per session and per time-window (`4h/Today/Week`).
 
+**Opt-in usage limits (spec item 13) — separate module, gated by config.** Default footer is $
+cost (above). A settings toggle enables `usage::limits()`, which reads `~/.claude/.credentials.json`
+and calls the OAuth usage endpoint for the 5h + weekly bars. Kept behind its own module + trait so
+the endpoint call is mockable and the whole feature is off unless enabled.
+- [ ] TDD (pure): footer selector — toggle off → render $ cost; toggle on → render limit gauges.
+- [ ] TDD: endpoint failure → degrade to $ cost + a quiet notice (never a blank/wrong gauge).
+- [ ] Manual: with a real token, gauges match `claude.ai/settings/usage`.
+
 ---
 
 ## M5 — Liveness + prune
