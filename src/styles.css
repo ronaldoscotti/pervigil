@@ -108,8 +108,14 @@ body.mac .topbar {
   align-items: center;
   gap: 9px;
   /* Let clicks fall through to the drag region — Tauri only starts a window drag
-     when the grabbed element itself is the drag handle, and these spans aren't. */
+     when the grabbed element itself is the drag handle. */
   pointer-events: none;
+}
+
+.brand-logo {
+  height: 26px;
+  width: auto;
+  display: block;
 }
 
 .lamp {

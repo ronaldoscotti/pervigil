@@ -1,4 +1,9 @@
-# Pervigil
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-light.png">
+    <img alt="Pervigil" src="assets/logo-dark.png" width="440">
+  </picture>
+</p>
 
 **A pinned desktop panel for your Claude Code sessions.** See every session across
 every project, which ones are **waiting on you**, and what your day actually looked
