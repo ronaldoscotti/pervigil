@@ -771,16 +771,21 @@ body.mac .topbar {
 }
 
 .row-action {
-  font-family: var(--mono);
-  font-size: 8.5px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 27px;
   color: var(--muted);
   background: var(--sunken);
   border: 1px solid var(--edge);
-  border-radius: 5px;
-  padding: 4px 7px;
+  border-radius: 6px;
+  padding: 0;
   cursor: pointer;
+}
+
+.row-action svg {
+  display: block;
 }
 
 .row-action:hover {

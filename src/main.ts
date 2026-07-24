@@ -55,6 +55,10 @@ const TONE: Record<SessionState, string> = {
   Idle: "idle",
 };
 
+// Inline (Lucide-style) so there's no icon dependency.
+const PIN_ICON = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>`;
+const CHECK_ICON = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`;
+
 type Lang = "en" | "pt";
 
 const STRINGS: Record<Lang, Record<string, string>> = {
@@ -238,8 +242,10 @@ function row(session: SessionView, now: number): HTMLElement {
     </div>
     <div class="row-actions">
       <button type="button" class="row-action pin" data-act="pin" aria-pressed="${session.pinned}"
-        title="${session.pinned ? t("unpinTitle") : t("pinTitle")}">${session.pinned ? t("pinned") : t("pin")}</button>
-      <button type="button" class="row-action" data-act="dismiss" title="${t("dismissTitle")}">${t("dismiss")}</button>
+        aria-label="${session.pinned ? t("unpinTitle") : t("pinTitle")}"
+        title="${session.pinned ? t("unpinTitle") : t("pinTitle")}">${PIN_ICON}</button>
+      <button type="button" class="row-action" data-act="dismiss"
+        aria-label="${t("dismissTitle")}" title="${t("dismissTitle")}">${CHECK_ICON}</button>
     </div>
     <div class="row-right">
       <div class="elapsed"></div>
