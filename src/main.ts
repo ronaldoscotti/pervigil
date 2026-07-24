@@ -4,7 +4,7 @@ import "@fontsource/ibm-plex-mono/400.css";
 import "@fontsource/ibm-plex-mono/500.css";
 import "@fontsource/ibm-plex-mono/600.css";
 
-type SessionState = "Working" | "WaitingOnYou" | "Idle";
+type SessionState = "Working" | "WaitingOnYou" | "YourTurn" | "Idle";
 type Span = "4h" | "today" | "week";
 
 interface SessionView {
@@ -50,12 +50,14 @@ interface Snapshot {
 const TONE: Record<SessionState, string> = {
   Working: "working",
   WaitingOnYou: "waiting",
+  YourTurn: "your-turn",
   Idle: "idle",
 };
 
 const STATE_LABEL: Record<SessionState, string> = {
   Working: "Working",
   WaitingOnYou: "Waiting on you",
+  YourTurn: "Your turn",
   Idle: "Idle",
 };
 
@@ -263,9 +265,9 @@ function render(snapshot: Snapshot, span: Span) {
   waiting.classList.toggle("quiet", snapshot.waiting === 0);
 
   const total = snapshot.sessions.length;
-  el("tally").textContent = `${total} session${total === 1 ? "" : "s"} · ${
-    total - snapshot.waiting
-  } quiet`;
+  const yourTurn = snapshot.sessions.filter((s) => s.state === "YourTurn").length;
+  const tail = yourTurn > 0 ? `${yourTurn} your turn` : `${total - snapshot.waiting} quiet`;
+  el("tally").textContent = `${total} session${total === 1 ? "" : "s"} · ${tail}`;
 
   el("lane-label").textContent = SPAN_LABEL[span];
   el("cost-label").textContent = SPAN_LABEL[span];

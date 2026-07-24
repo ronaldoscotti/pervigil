@@ -128,12 +128,11 @@ pub fn states(sessions: &[Session]) -> HashMap<SessionId, SessionState> {
 }
 
 fn tier(session: &Session, prefs: &ViewPrefs) -> u8 {
-    if session.state == SessionState::WaitingOnYou {
-        0
-    } else if prefs.pinned.contains(&session.id) {
-        1
-    } else {
-        2
+    match session.state {
+        SessionState::WaitingOnYou => 0,
+        SessionState::YourTurn => 1,
+        _ if prefs.pinned.contains(&session.id) => 2,
+        _ => 3,
     }
 }
 
@@ -171,7 +170,7 @@ pub fn fold(events: &[Event], _now: Timestamp, prefs: &ViewPrefs) -> Vec<Session
             Event::Notification { id, at } => {
                 transition(&mut sessions, id, SessionState::WaitingOnYou, *at)
             }
-            Event::Stop { id, at } => transition(&mut sessions, id, SessionState::Idle, *at),
+            Event::Stop { id, at } => transition(&mut sessions, id, SessionState::YourTurn, *at),
             Event::UserPromptSubmit { id, at } => {
                 transition(&mut sessions, id, SessionState::Working, *at)
             }
@@ -231,7 +230,7 @@ mod tests {
     }
 
     #[test]
-    fn stop_makes_session_idle() {
+    fn stop_means_your_turn_a_live_session_waiting_at_its_prompt() {
         let events = vec![
             start("s1", 100),
             Event::Stop {
@@ -242,8 +241,30 @@ mod tests {
 
         let sessions = fold_default(&events, 400);
 
-        assert_eq!(sessions[0].state, SessionState::Idle);
+        assert_eq!(sessions[0].state, SessionState::YourTurn);
         assert_eq!(sessions[0].since, 300);
+    }
+
+    #[test]
+    fn your_turn_sorts_above_working_but_below_waiting() {
+        let events = vec![
+            start("waiting", 100),
+            Event::Notification {
+                id: "waiting".into(),
+                at: 500,
+            },
+            start("your-turn", 110),
+            Event::Stop {
+                id: "your-turn".into(),
+                at: 400,
+            },
+            start("working", 120),
+        ];
+
+        let sessions = fold_default(&events, 600);
+        let ids: Vec<&str> = sessions.iter().map(|s| s.id.as_str()).collect();
+
+        assert_eq!(ids, vec!["waiting", "your-turn", "working"]);
     }
 
     #[test]
@@ -268,22 +289,16 @@ mod tests {
 
     #[test]
     fn waiting_sorts_first_then_pinned_then_recency() {
+        // Among plain live (working) sessions, a pin beats recency; waiting still tops
+        // all. Your-turn's own tier is covered separately.
         let events = vec![
             start("s1", 100),
-            Event::Stop {
-                id: "s1".into(),
-                at: 500,
-            },
             start("s2", 110),
             Event::Notification {
                 id: "s2".into(),
                 at: 200,
             },
             start("s3", 120),
-            Event::Stop {
-                id: "s3".into(),
-                at: 300,
-            },
         ];
         let prefs = ViewPrefs {
             pinned: HashSet::from(["s3".to_string()]),

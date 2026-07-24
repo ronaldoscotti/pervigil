@@ -10,6 +10,7 @@
   --faint: #565c6a;
   --waiting: #f4b860;
   --waiting-soft: #e7c08a;
+  --your-turn: #c89a58;
   --working: #6fb2c4;
   --working-soft: #9fcbd6;
   --idle: #565c6a;
@@ -577,6 +578,12 @@ body.mac .topbar {
   animation: lamp-breath 5s ease-in-out infinite;
 }
 
+/* Your turn: the lamp is on but steady — no bloom, no pulse. Calm, not urgent. */
+.row.your-turn .dot {
+  background: var(--your-turn);
+  box-shadow: 0 0 6px rgba(200, 154, 88, 0.5);
+}
+
 .row-main {
   position: relative;
   flex: 1 1 auto;
@@ -653,6 +660,10 @@ body.mac .topbar {
   color: var(--waiting);
 }
 
+.row.your-turn .state {
+  color: var(--your-turn);
+}
+
 .name {
   min-width: 0;
   color: var(--faint);
@@ -719,6 +730,10 @@ body.mac .topbar {
 .row.waiting .elapsed {
   color: var(--waiting);
   text-shadow: 0 0 14px rgba(244, 184, 96, 0.4);
+}
+
+.row.your-turn .elapsed {
+  color: var(--your-turn);
 }
 
 .row.idle .elapsed {
