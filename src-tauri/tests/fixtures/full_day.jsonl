@@ -1,0 +1,11 @@
+{"type":"SessionStart","id":"s-killed","cwd":"/Users/scotti/work/personal/temperamentos-online","pid":4001,"at":28800}
+{"type":"SessionStart","id":"s-pos","cwd":"/Users/scotti/work/personal/posicionamento","pid":4002,"at":32400}
+{"type":"Notification","id":"s-pos","at":33600}
+{"type":"UserPromptSubmit","id":"s-pos","at":33900}
+{"type":"Stop","id":"s-pos","at":34800}
+{"type":"SessionStart","id":"s-perv-main","cwd":"/Users/scotti/work/personal/pervigil","pid":4003,"at":36000}
+{"type":"SessionStart","id":"s-perv-feat","cwd":"/Users/scotti/work/personal/pervigil","pid":4004,"at":36300}
+{"type":"Stop","id":"s-perv-feat","at":37800}
+{"type":"Notification","id":"s-perv-main","at":39600}
+{"type":"UserPromptSubmit","id":"s-perv-feat","at":61200}
+{"type":"UserPromptSubmit","id":"s-pos","at":64800}
