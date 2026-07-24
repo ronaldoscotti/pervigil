@@ -3,6 +3,7 @@ use std::path::PathBuf;
 pub mod hooks;
 pub mod record;
 pub mod scan;
+pub mod terminals;
 pub mod transcript;
 
 /// `~`, under the two names the supported platforms give it.

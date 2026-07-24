@@ -264,6 +264,16 @@ impl App {
 
         self.notify(&config, &sessions);
 
+        // The shim caches each session's terminal on every hook, so even a session
+        // that never fired SessionStart (no event-borne terminal) is focusable.
+        let terminals = io::terminals::read_all(&self.home);
+        let terminal_of = |session: &Session| {
+            terminals
+                .get(&session.id)
+                .cloned()
+                .or_else(|| session.terminal.clone())
+        };
+
         *self.targets.lock().expect("targets lock") = sessions
             .iter()
             .map(|s| {
@@ -271,7 +281,7 @@ impl App {
                     s.id.clone(),
                     Target {
                         cwd: s.cwd.clone(),
-                        terminal: s.terminal.clone(),
+                        terminal: terminal_of(s),
                     },
                 )
             })
@@ -293,7 +303,7 @@ impl App {
                     .get(&session.id)
                     .and_then(|entries| pricing::total(&self.prices, entries)),
                 focus: focuser::select(
-                    session.terminal.as_ref(),
+                    terminal_of(session).as_ref(),
                     &session.cwd,
                     &session.id,
                     self.caps,

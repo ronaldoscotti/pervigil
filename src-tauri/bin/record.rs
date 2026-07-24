@@ -3,6 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use pervigil_lib::core::terminal::Terminal;
 use pervigil_lib::io::record::{append_line, build_event};
+use pervigil_lib::io::terminals;
 
 /// Always exits 0. A monitor that can fail the turn it monitors is worse than none,
 /// so every error path here is silently swallowed.
@@ -17,15 +18,19 @@ fn record() -> Option<()> {
     std::io::stdin().read_to_string(&mut payload).ok()?;
 
     let at = SystemTime::now().duration_since(UNIX_EPOCH).ok()?.as_secs();
-    let event = build_event(&kind, &payload, at, parent_pid(), terminal())?;
+    let term = terminal();
+    let event = build_event(&kind, &payload, at, parent_pid(), term.clone())?;
     let line = serde_json::to_string(&event).ok()?;
 
-    let path = std::env::var_os("HOME")
-        .map(std::path::PathBuf::from)?
-        .join(".pervigil")
-        .join("events.jsonl");
+    let home = std::env::var_os("HOME").map(std::path::PathBuf::from)?;
 
-    append_line(&path, &line).ok()
+    // Cache the terminal for focus, keyed by session id, on every hook — so a session
+    // that never fired SessionStart still becomes focusable on its next event.
+    if let Some(hint) = term.some() {
+        let _ = terminals::write(&home, event.id(), &hint);
+    }
+
+    append_line(&home.join(".pervigil").join("events.jsonl"), &line).ok()
 }
 
 /// Read the terminal context from the shim's own environment — the hook runs inside
