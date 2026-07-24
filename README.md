@@ -1,9 +1,14 @@
 # Pervigil
 
-**Cross-platform desktop panel for your Claude Code sessions.** See which agents
-are **waiting on you**, at a glance — across every project, in one pinned window.
+**A pinned desktop panel for your Claude Code sessions.** See every session across
+every project, which ones are **waiting on you**, and what your day actually looked
+like — at a glance.
 
 > *pervigil* (Latin) — ever-watchful; keeping watch through the whole night.
+
+<p align="center">
+  <img src="docs/qa/m6-panel-4h.png" alt="The Pervigil panel: two sessions waiting on you, a combined activity lane, per-session cost." width="360">
+</p>
 
 ---
 
@@ -11,47 +16,107 @@ are **waiting on you**, at a glance — across every project, in one pinned wind
 
 Running many Claude Code sessions across many projects, work falls through the
 cracks: a session finishes unnoticed, or sits **blocked on your input** while
-you're heads-down elsewhere. Every existing tool in this space is macOS-only and
-read-only. Pervigil is:
+you're heads-down elsewhere. The category is validated but every incumbent is
+macOS-only and read-only. Pervigil's two wedges:
 
-- **Cross-platform** — macOS, Windows, Linux (one Rust/Tauri core, honest per-OS
-  adapters).
-- **Organized around the urgent state** — "waiting on you" sorts to the top and is
-  the whole point, not one column among many.
-- **A timeline of your day** — per-project bands (working / waiting / idle) so the
-  dead time is visible.
-- **Click-to-focus** — jump straight to the session's window/tab/pane.
+- **"Waiting on you" is the organizing principle** — the urgent state sorts to the
+  top and is the whole point, not one column among many. A native notification fires
+  the moment a session enters it.
+- **Cross-platform by architecture** — one Rust/Tauri core, per-OS adapters behind
+  traits, with honest capability detection. macOS is the tested target; Windows and
+  Linux are architecturally supported and open for contribution.
+
+Plus what you'd expect once it's watching: a combined **activity lane** with a
+"% waiting on you" stat, per-session and per-window **cost** from a shipped price
+table, **click-to-focus** to jump to a session's terminal, and **pin / dismiss /
+project visibility**.
 
 *(Full design: [`docs/specs/2026-07-23-pervigil-design.md`](docs/specs/2026-07-23-pervigil-design.md).)*
 
-## Built in the open, by an explicit method
-
-This repo is also a demonstration. Pervigil is built with a disciplined,
-spec-first, review-gated AI-assisted workflow — and the repo is the **honest
-record** of that workflow, not a description of it. Every stage deposits a real
-artifact; the git history records the order; nothing is faked ahead of where the
-work actually is.
-
-Read [`docs/method/`](docs/method/) to follow it, or the git log to verify it.
+## How it works
 
 ```
-[x] Understand the problem      docs/method/00-understand.md
-[x] Gather context              docs/method/01-context.md
-[x] Brainstorm (superpowers)    → spec
-[x] Spec approved               human gate passed 2026-07-23
-[x] Plan written                docs/plans/2026-07-23-pervigil-plan.md
-[ ] Plan approved               ← current gate
-[ ] TDD → QA → review → PR
+Claude Code session
+   │  SessionStart / Notification / Stop / UserPromptSubmit hooks
+   ▼
+hook shim ──► `pervigil record`  (bundled CLI, atomic append, always exit 0)
+                    │
+        ~/.pervigil/events.jsonl        ← source of truth for state
+                    +
+   ~/.claude/projects/**/*.jsonl        ← second input: tokens → cost, session title
+                    │
+                    ▼
+             pure Rust core  ──  fold(events) → sessions,  timeline(events) → lane
+                    │
+                    ▼
+          Tauri v2 panel + tray badge
 ```
 
-The checklist is status-accurate on purpose: there is no `src/` yet because the
-implementation stages haven't run. When they do, they land here.
+Two design decisions carry the whole thing:
+
+- **An event-log file, not a daemon.** The app isn't always running — the core case
+  is a closed laptop with a session left blocked. An append-only file plus
+  fold-on-launch reconstructs exact state across restarts, crashes, and reboots, with
+  no socket, port, or IPC, identically on all three platforms.
+- **`store` is a pure function** — `fold(events, now, prefs) -> sessions`, no clock,
+  no filesystem, no GUI. That's what makes the heart of the product a fixture test
+  instead of a UI harness. Two inputs (hooks → state, transcripts → cost) fail
+  independently: no hooks installed → sessions and cost still render, state degrades
+  to `idle`.
+
+## Cross-platform posture
+
+Portable for free (pure data from `~/.claude` + hooks): session discovery, state,
+lane, cost. Platform-specific, **degrading honestly**:
+
+| Feature          | macOS              | Windows   | Linux X11 | Linux Wayland            |
+|------------------|--------------------|-----------|-----------|--------------------------|
+| Tray icon        | ✅                 | ✅        | ⚠️        | ⚠️                       |
+| Click-to-focus   | ✅ AX / AppleScript | ✅ Win32 | ✅ wmctrl | ❌ blocked by compositor |
+| Always-on-top    | ✅                 | ✅        | ✅        | ⚠️                       |
+
+Click-to-focus is tiered and best-available: tmux pane → iTerm2 tab → VS Code folder
+→ copy the resume command (the universal floor, so it never fully fails).
+**Correct-but-coarse beats precise-but-wrong** — pervigil never raises a guessed
+window. Where a platform blocks a capability (Wayland activation), it says so and
+falls back rather than pretending.
+
+## Install (from source)
+
+macOS, with a Rust toolchain and Node:
+
+```bash
+git clone <this repo> && cd pervigil
+npm install
+npm run tauri dev      # run it
+npm run tauri build    # or build a bundle
+```
+
+Then open **Settings** in the panel and paste the shown hook snippet into
+`~/.claude/settings.json` — pervigil never edits that file for you. The panel's
+install card disappears the moment the hooks are detected.
 
 ## Status
 
-**Design stage — at the spec-approval gate.** Not yet implemented. This is a
-positioning artifact under active construction; the design is committed, the build
-follows the method above.
+Built through **M9** of the plan — click-to-focus, notifications, config,
+pin/dismiss, project visibility, and the hook-install card are all implemented and
+QA'd, on a pure core with **103 tests**. Remaining: **M10 — a signed/notarized
+build and the demo capture.**
+
+Verified honestly. The pure logic and the checkable side effects (clipboard copy,
+config and snippet round-trips, tier selection) are tested; three OS-surface effects
+are real code but **not yet visually confirmed** on the dev machine — the on-screen
+window raise for tmux/iTerm2, the macOS tray badge, and the notification banner (that
+box has neither tmux nor iTerm2, and the CI/dev environment can't capture the native
+surfaces). See [`docs/qa/`](docs/qa/) for what each milestone did and did not prove.
+
+## Built in the open, by an explicit method
+
+This repo is also a demonstration. Pervigil is built with a disciplined, spec-first,
+review-gated AI-assisted workflow, and the repo is the **honest record** of it — not
+a description. Every stage deposits a real artifact; the git history records the
+order; nothing is claimed ahead of where the work actually is. Read
+[`docs/method/`](docs/method/) to follow it, or the git log to verify it.
 
 ## License
 

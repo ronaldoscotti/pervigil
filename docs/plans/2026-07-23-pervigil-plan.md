@@ -533,13 +533,27 @@ button + **live "hooks detected ✓/✗"** indicator.
 
 ---
 
-## M10 — Packaging + README + demo capture
+## M10 — Packaging + README + demo capture  ◑ partly done (blocked on credentials + capture)
 
-- [ ] Signed/notarized macOS build launches from a clean machine.
-- [ ] Add Windows/Linux CI jobs as **allowed-to-fail**, README marks them
-  "architecturally supported, untested — help wanted" (matches spec §4).
-- [ ] Record the ~30s demo: waiting session surfaces → click → window snaps to it.
-- [ ] README: real screenshot from M6, GIF from the demo.
+**Done autonomously (verifiable without a desktop or secrets):**
+- [x] **Windows/Linux CI jobs, allowed-to-fail** (`continue-on-error`), macOS stays the gating
+  job. Linux installs the Tauri system deps. README marks the two as "architecturally supported,
+  untested — help wanted" (spec §4). `.github/workflows/ci.yml`.
+- [x] **README** rewritten to the real state: the M6 screenshot as hero, the two-input
+  architecture, the honest cross-platform table, from-source install + the hook-paste step, and a
+  "verified honestly" section listing the three OS-surface effects still unconfirmed.
+
+**Blocked — needs the user (a real blockage, not deferrable work):**
+- [ ] **Signed/notarized macOS build launches from a clean machine.** Needs an Apple Developer ID
+  certificate + notarization credentials (`APPLE_CERTIFICATE`, `APPLE_SIGNING_IDENTITY`,
+  `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`). Can't be produced or verified without them.
+- [ ] **Bundle the `record` shim inside the .app** (`bundle.externalBin` — a triple-suffixed
+  binary + a before-build copy step) so M9's install snippet points at the *installed* path, not
+  the dev target. Sketched but deliberately **not** blind-configured: it can only be verified by a
+  real `tauri build` + inspecting the bundle, which pairs naturally with the signing step above.
+- [ ] **The ~30s demo** (waiting session surfaces → click → window snaps to it) and the README GIF.
+  Needs a real desktop with tmux/iTerm2 and Screen Recording permission — the same capture wall
+  that left the tray badge, on-screen raise, and notification banner visually unconfirmed.
 
 ---
 

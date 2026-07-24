@@ -35,7 +35,8 @@ docs, and reproduce it.
 [x] 3  Spec APPROVED   — human review gate passed (2026-07-23)
 [x] 4  Plan written    — docs/plans/2026-07-23-pervigil-plan.md
 [x] 4  Plan APPROVED   — human approval gate passed
-[~] 5  TDD implementation — M0–M9 done (103 tests). M10 (packaging) open.
+[~] 5  TDD implementation — M0–M9 done (103 tests). M10 partial: README + CI done;
+                            signing, bundling, and the demo are blocked on the user.
 [~] 6  QA              — M6–M9 pass done; on-screen raise, tray badge, notif banner unverified
 [ ] 7  Code review
 [ ] 8  PR + colleague review
