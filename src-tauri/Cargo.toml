@@ -27,3 +27,6 @@ chrono = { version = "0.4.45", default-features = false, features = ["std", "ser
 [[bin]]
 name = "record"
 path = "bin/record.rs"
+
+[target."cfg(unix)".dependencies]
+libc = "0.2.189"
