@@ -41,9 +41,10 @@ interface Snapshot {
   segments: Segment[];
   waitingShare: number;
   cost: number;
-  hooks: boolean;
   notifications: boolean;
   hidden: string[];
+  hooksInstalled: boolean;
+  hookSnippet: string;
 }
 
 const TONE: Record<SessionState, string> = {
@@ -180,15 +181,43 @@ function renderLane(snapshot: Snapshot, span: Span) {
   el("share").textContent = `${Math.round(snapshot.waitingShare * 100)}% waiting on you`;
 }
 
-/** Degrade, never fake: with no hooks every row is transcript-derived and reads idle. */
-function renderNotice(hooks: boolean) {
-  document.querySelector(".notice")?.remove();
-  if (hooks) return;
+let hooksWere: boolean | undefined;
 
-  const notice = document.createElement("div");
-  notice.className = "notice";
-  notice.textContent = "Hooks not installed — states read idle; names and cost are live.";
-  el("sessions").after(notice);
+/**
+ * The install card: shown only while the hooks are missing, so its disappearance is
+ * the live "detected" signal. Pervigil never writes settings.json — the user pastes.
+ */
+function renderHooks(snapshot: Snapshot) {
+  if (hooksWere === false && snapshot.hooksInstalled) toast("Hooks detected ✓");
+  hooksWere = snapshot.hooksInstalled;
+
+  const existing = document.querySelector<HTMLElement>(".hook-card");
+  if (snapshot.hooksInstalled) {
+    existing?.remove();
+    return;
+  }
+  if (existing) return; // already showing; don't clobber a scroll position mid-poll
+
+  const card = document.createElement("section");
+  card.className = "hook-card";
+  card.innerHTML = `
+    <div class="hook-head">
+      <span class="hook-mark">Not detected</span>
+      <span class="hook-title">Install hooks to track live state</span>
+    </div>
+    <p class="hook-note">States read <em>idle</em> until these run. Names and cost are already live. Paste into <code>~/.claude/settings.json</code> — pervigil never edits it for you.</p>
+    <pre class="hook-snippet"></pre>
+    <button type="button" class="hook-copy">Copy snippet</button>`;
+  (card.querySelector(".hook-snippet") as HTMLElement).textContent = snapshot.hookSnippet;
+  card.querySelector(".hook-copy")?.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(snapshot.hookSnippet);
+      toast("Snippet copied — paste into settings.json");
+    } catch {
+      toast("Copy failed — select the snippet manually");
+    }
+  });
+  el("sessions").after(card);
 }
 
 function render(snapshot: Snapshot, span: Span) {
@@ -207,7 +236,7 @@ function render(snapshot: Snapshot, span: Span) {
 
   renderLane(snapshot, span);
   renderSessions(snapshot);
-  renderNotice(snapshot.hooks);
+  renderHooks(snapshot);
   renderSettings(snapshot);
 }
 

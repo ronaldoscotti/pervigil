@@ -507,13 +507,29 @@ checkbox without a decision behind it. Add it only if a real need to override th
 
 ---
 
-## M9 — Hook-install UX
+## M9 — Hook-install UX  ✅ done
 
 **Goal:** Never auto-write `~/.claude/settings.json`. Show the snippet + copy
 button + **live "hooks detected ✓/✗"** indicator.
 
-- [ ] TDD: detection logic reads settings and reports installed/not for each hook.
-- [ ] Manual: paste snippet → indicator flips to ✓ within one watch cycle.
+**Files:** `src-tauri/src/io/hooks.rs` (detect + snippet), `app.rs` (wiring + `record_path`),
+`index.html` + `src/main.ts` + `src/styles.css` (install card).
+
+- [x] TDD: `detect(settings_json)` reports installed/not **per event**, not rounded up; degrades to
+  "nothing installed" on an empty/corrupt/hook-less file; recognises an install by any absolute
+  path (case-robust — see the self-review note). The `snippet(record_path)` we emit satisfies our
+  own detector (round-trip test). 5 tests.
+- [x] The install card renders only while hooks are missing, so its **disappearance is the live
+  "detected" signal**; a "Hooks detected ✓" toast confirms the flip. Snippet is copy-buttoned and
+  selectable (honest fallback). Verified with `agent-browser` against the detect→install→vanish
+  cycle. `docs/qa/2026-07-24-m9.md`.
+- [x] **Self-review fixes:** detection had matched the brand string (missed capital-P app paths);
+  the copy fallback pointed at text a global `user-select: none` had made unselectable; and the
+  dead M6-era `hooks` field was removed in favour of the single settings-based signal.
+- [ ] Manual on a real install: paste the snippet into a live `~/.claude/settings.json` and watch
+  the card vanish within one poll. The detection + snippet round-trip is unit-proven and the flip
+  is browser-verified with a stub; the end-to-end paste on the real file is the one step left, and
+  it needs the packaged shim path from M10 to be the *installed* path rather than the dev target.
 
 ---
 

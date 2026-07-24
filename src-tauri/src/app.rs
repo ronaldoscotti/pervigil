@@ -20,6 +20,7 @@ use crate::platform::liveness::{retain_live, SystemProcesses};
 const LOG: &str = ".pervigil/events.jsonl";
 const PROJECTS: &str = ".claude/projects";
 const CONFIG: &str = ".pervigil/config.json";
+const SETTINGS: &str = ".claude/settings.json";
 
 /// The one filter in the UI. It scopes the lane, the cost readout, and how far back
 /// transcripts are read — the panel shows the window you picked, and nothing else.
@@ -92,13 +93,15 @@ pub struct Snapshot {
     pub segments: Vec<Segment>,
     pub waiting_share: f64,
     pub cost: f64,
-    /// False when the event log is empty: state is transcript-derived and every row
-    /// reads `idle`. The UI says so rather than implying the sessions are quiet.
-    pub hooks: bool,
     /// Current settings the panel renders: the notifications toggle, and the projects
     /// the user hid (so they can be restored even with no live session).
     pub notifications: bool,
     pub hidden: Vec<String>,
+    /// True once all four hooks are wired in `~/.claude/settings.json`. When false the
+    /// panel shows the install card; pervigil never writes the file itself (spec item 12).
+    pub hooks_installed: bool,
+    /// The block to paste, with the bundled shim's real path baked in.
+    pub hook_snippet: String,
 }
 
 /// What a click needs to reach a session — kept from the last snapshot so a click is
@@ -141,6 +144,8 @@ pub struct App {
     /// about sessions that were already waiting.
     seen: Mutex<Option<HashMap<SessionId, SessionState>>>,
     pending: Mutex<Vec<Notice>>,
+    /// Absolute path to the bundled `record` shim, baked into the install snippet.
+    record_path: String,
 }
 
 impl App {
@@ -157,6 +162,7 @@ impl App {
             targets: Mutex::new(HashMap::new()),
             seen: Mutex::new(None),
             pending: Mutex::new(Vec::new()),
+            record_path: record_path(),
             home,
         }
     }
@@ -315,9 +321,13 @@ impl App {
                 .filter(|entry| entry.at >= from && entry.at <= to)
                 .filter_map(|entry| pricing::cost(&self.prices, &entry.model, &entry.usage))
                 .sum(),
-            hooks: !events.is_empty(),
             notifications: config.notifications,
             hidden: config.hidden_projects.iter().cloned().collect(),
+            hooks_installed: io::hooks::detect(
+                &std::fs::read_to_string(self.home.join(SETTINGS)).unwrap_or_default(),
+            )
+            .all_installed,
+            hook_snippet: io::hooks::snippet(&self.record_path),
             sessions,
             segments,
         }
@@ -365,6 +375,17 @@ fn project(cwd: &str) -> String {
         .find(|part| !part.is_empty())
         .unwrap_or(cwd)
         .to_string()
+}
+
+/// The bundled `record` shim sits beside the app binary. Falls back to the bare name
+/// (assuming `PATH`) if the exe path can't be resolved — the snippet still reads
+/// sensibly and the user can correct it.
+fn record_path() -> String {
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join("record")))
+        .map(|path| path.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "record".to_string())
 }
 
 /// Advance the seen-state baseline and return a notice per session that just entered

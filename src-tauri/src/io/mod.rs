@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+pub mod hooks;
 pub mod record;
 pub mod scan;
 pub mod transcript;
