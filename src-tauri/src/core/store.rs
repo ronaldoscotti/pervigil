@@ -12,23 +12,75 @@ pub struct Segment {
     pub to: Timestamp,
 }
 
-/// Takes no [`ViewPrefs`] on purpose: the lane is a record of the day, so dismissed,
-/// dead and hidden sessions all still count.
+/// How long a `Notification` keeps painting the lane before it decays to idle. A
+/// notification means Claude is blocked on you *now*; a session that fires one and
+/// then goes silent (killed terminal, no `Stop` ever) is stale, not a day-long wait.
+const WAITING_TTL_SECS: Timestamp = 30 * 60;
+
+/// Takes no [`ViewPrefs`] on purpose: the lane is a record of the day, so dismissed
+/// and hidden sessions still count. A `WaitingOnYou` state decays to idle after
+/// [`WAITING_TTL_SECS`] of silence, so a session that was notified and then died —
+/// no `Stop` ever — can't paint the whole window.
 pub fn timeline(events: &[Event], from: Timestamp, to: Timestamp) -> Vec<Segment> {
-    let mut states: HashMap<&SessionId, SessionState> = HashMap::new();
+    let mut ticks: Vec<Tick> = Vec::new();
+    for event in events.iter().filter(|event| event.at() <= to) {
+        ticks.push(Tick::Event(event));
+        if let Event::Notification { id, at } = event {
+            let expiry = at + WAITING_TTL_SECS;
+            if expiry <= to {
+                ticks.push(Tick::Expire(id, expiry));
+            }
+        }
+    }
+    // Stable by time; a real event beats an expiry at the same instant.
+    ticks.sort_by_key(|tick| (tick.at(), tick.is_expire()));
+
+    let mut states: HashMap<&SessionId, (SessionState, Timestamp)> = HashMap::new();
     let mut segments: Vec<Segment> = Vec::new();
     let mut cursor = from;
 
-    for event in events.iter().filter(|event| event.at() <= to) {
-        if event.at() > cursor {
-            extend(&mut segments, aggregate(&states), cursor, event.at());
-            cursor = event.at();
+    for tick in &ticks {
+        if tick.at() > cursor {
+            extend(&mut segments, aggregate(&states), cursor, tick.at());
+            cursor = tick.at();
         }
-        states.insert(event.id(), state_after(event));
+        match tick {
+            Tick::Event(event) => {
+                let expiry = match event {
+                    Event::Notification { at, .. } => at + WAITING_TTL_SECS,
+                    _ => 0,
+                };
+                states.insert(event.id(), (state_after(event), expiry));
+            }
+            // Ignore an expiry the session has already left or renotified past.
+            Tick::Expire(id, expiry) => {
+                if states.get(id) == Some(&(SessionState::WaitingOnYou, *expiry)) {
+                    states.insert(id, (SessionState::Idle, 0));
+                }
+            }
+        }
     }
 
     extend(&mut segments, aggregate(&states), cursor, to);
     segments
+}
+
+enum Tick<'a> {
+    Event(&'a Event),
+    Expire(&'a SessionId, Timestamp),
+}
+
+impl Tick<'_> {
+    fn at(&self) -> Timestamp {
+        match self {
+            Tick::Event(event) => event.at(),
+            Tick::Expire(_, at) => *at,
+        }
+    }
+
+    fn is_expire(&self) -> bool {
+        matches!(self, Tick::Expire(..))
+    }
 }
 
 /// Fraction of the window spent waiting on you, in `0.0..=1.0`.
@@ -54,10 +106,11 @@ fn state_after(event: &Event) -> SessionState {
     }
 }
 
-fn aggregate(states: &HashMap<&SessionId, SessionState>) -> SessionState {
-    if states.values().any(|s| *s == SessionState::WaitingOnYou) {
+fn aggregate(states: &HashMap<&SessionId, (SessionState, Timestamp)>) -> SessionState {
+    let any = |target| states.values().any(|(state, _)| *state == target);
+    if any(SessionState::WaitingOnYou) {
         SessionState::WaitingOnYou
-    } else if states.values().any(|s| *s == SessionState::Working) {
+    } else if any(SessionState::Working) {
         SessionState::Working
     } else {
         SessionState::Idle
@@ -427,6 +480,69 @@ mod tests {
         let segments = timeline(&two_session_window(), 0, 600);
 
         assert!((waiting_share(&segments) - 0.5).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn a_stale_notification_decays_instead_of_painting_the_whole_lane() {
+        // The reported bug: a session fires a Notification then goes silent (killed
+        // terminal, no Stop ever). It must not fill the window with amber.
+        let events = vec![Event::Notification {
+            id: "dead".into(),
+            at: 0,
+        }];
+
+        let segments = timeline(&events, 0, 10 * WAITING_TTL_SECS);
+
+        let share = waiting_share(&segments);
+        assert!(share < 0.2, "one stale notification painted {share} of the lane");
+    }
+
+    #[test]
+    fn a_notification_already_expired_before_the_window_paints_nothing() {
+        // The worst offender: notified hours before the window, never seen again. By
+        // `from` the wait has long decayed, so the window is all idle.
+        let events = vec![Event::Notification {
+            id: "dead".into(),
+            at: 0,
+        }];
+        let from = 5 * WAITING_TTL_SECS;
+
+        let segments = timeline(&events, from, from + WAITING_TTL_SECS);
+
+        assert_eq!(waiting_share(&segments), 0.0);
+    }
+
+    #[test]
+    fn a_recent_notification_still_counts_as_waiting_until_it_expires() {
+        // Decay must not erase a genuine, current block.
+        let events = vec![Event::Notification {
+            id: "s1".into(),
+            at: 0,
+        }];
+
+        let segments = timeline(&events, 0, WAITING_TTL_SECS);
+
+        assert_eq!(waiting_share(&segments), 1.0);
+    }
+
+    #[test]
+    fn a_second_notification_restarts_the_waiting_clock() {
+        // The first notification's expiry must not cut the wait short while a later
+        // one still holds.
+        let events = vec![
+            Event::Notification {
+                id: "s1".into(),
+                at: 0,
+            },
+            Event::Notification {
+                id: "s1".into(),
+                at: WAITING_TTL_SECS - 10,
+            },
+        ];
+
+        let segments = timeline(&events, 0, 2 * WAITING_TTL_SECS - 20);
+
+        assert_eq!(waiting_share(&segments), 1.0);
     }
 
     fn session(id: &str, state: SessionState, title: Option<&str>, pid: Option<u32>) -> Session {
