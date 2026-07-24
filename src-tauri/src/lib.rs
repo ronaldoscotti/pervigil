@@ -11,6 +11,9 @@ pub(crate) const TRAY_ID: &str = "pervigil";
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "macos")]
+    platform::restore_tool_path();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
         .manage(app::App::new())
