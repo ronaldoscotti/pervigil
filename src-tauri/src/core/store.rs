@@ -1,5 +1,13 @@
-use super::event::{Event, Timestamp};
+use super::event::{Event, SessionId, Timestamp};
 use super::session::{Session, SessionState, ViewPrefs};
+
+fn transition(sessions: &mut [Session], id: &SessionId, state: SessionState, at: Timestamp) {
+    if let Some(session) = sessions.iter_mut().find(|s| &s.id == id) {
+        session.state = state;
+        session.since = at;
+        session.last_active = at;
+    }
+}
 
 /// Replay the event log into the current set of sessions.
 ///
@@ -18,13 +26,12 @@ pub fn fold(events: &[Event], _now: Timestamp, _prefs: &ViewPrefs) -> Vec<Sessio
                 last_active: *at,
             }),
             Event::Notification { id, at } => {
-                if let Some(session) = sessions.iter_mut().find(|s| &s.id == id) {
-                    session.state = SessionState::WaitingOnYou;
-                    session.since = *at;
-                    session.last_active = *at;
-                }
+                transition(&mut sessions, id, SessionState::WaitingOnYou, *at)
             }
-            _ => {}
+            Event::Stop { id, at } => transition(&mut sessions, id, SessionState::Idle, *at),
+            Event::UserPromptSubmit { id, at } => {
+                transition(&mut sessions, id, SessionState::Working, *at)
+            }
         }
     }
 
@@ -34,27 +41,87 @@ pub fn fold(events: &[Event], _now: Timestamp, _prefs: &ViewPrefs) -> Vec<Sessio
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::session::SessionState;
+
+    fn start(id: &str, at: Timestamp) -> Event {
+        Event::SessionStart {
+            id: id.into(),
+            cwd: format!("/{id}"),
+            pid: 10,
+            at,
+        }
+    }
+
+    fn fold_default(events: &[Event], now: Timestamp) -> Vec<Session> {
+        fold(events, now, &ViewPrefs::default())
+    }
 
     #[test]
     fn session_start_then_notification_is_waiting() {
         let events = vec![
-            Event::SessionStart {
-                id: "s1".into(),
-                cwd: "/p".into(),
-                pid: 10,
-                at: 100,
-            },
+            start("s1", 100),
             Event::Notification {
                 id: "s1".into(),
                 at: 200,
             },
         ];
 
-        let sessions = fold(&events, 250, &ViewPrefs::default());
+        let sessions = fold_default(&events, 250);
 
         assert_eq!(sessions.len(), 1);
         assert_eq!(sessions[0].state, SessionState::WaitingOnYou);
         assert_eq!(sessions[0].since, 200);
+    }
+
+    #[test]
+    fn stop_makes_session_idle() {
+        let events = vec![
+            start("s1", 100),
+            Event::Stop {
+                id: "s1".into(),
+                at: 300,
+            },
+        ];
+
+        let sessions = fold_default(&events, 400);
+
+        assert_eq!(sessions[0].state, SessionState::Idle);
+        assert_eq!(sessions[0].since, 300);
+    }
+
+    #[test]
+    fn user_prompt_after_waiting_resumes_working() {
+        let events = vec![
+            start("s1", 100),
+            Event::Notification {
+                id: "s1".into(),
+                at: 200,
+            },
+            Event::UserPromptSubmit {
+                id: "s1".into(),
+                at: 250,
+            },
+        ];
+
+        let sessions = fold_default(&events, 300);
+
+        assert_eq!(sessions[0].state, SessionState::Working);
+        assert_eq!(sessions[0].since, 250);
+    }
+
+    #[test]
+    fn same_cwd_different_ids_are_distinct_sessions() {
+        let events = vec![
+            start("s1", 100),
+            Event::SessionStart {
+                id: "s2".into(),
+                cwd: "/s1".into(),
+                pid: 11,
+                at: 110,
+            },
+        ];
+
+        let sessions = fold_default(&events, 200);
+
+        assert_eq!(sessions.len(), 2);
     }
 }
