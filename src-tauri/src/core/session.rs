@@ -22,6 +22,8 @@ pub struct Session {
     pub last_active: Timestamp,
     /// Only transcripts carry one; hook-derived sessions start `None`.
     pub title: Option<String>,
+    /// `HEAD` and empty are normalised to `None` — neither names a branch.
+    pub git_branch: Option<String>,
 }
 
 /// Lives in config, not the event log, so it enters `fold` as data and keeps it pure.

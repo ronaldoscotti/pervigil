@@ -82,7 +82,10 @@ fn extend(segments: &mut Vec<Segment>, state: SessionState, from: Timestamp, to:
 pub fn merge(mut hooks: Vec<Session>, transcripts: Vec<Session>) -> Vec<Session> {
     for transcript in transcripts {
         match hooks.iter_mut().find(|hook| hook.id == transcript.id) {
-            Some(hook) => hook.title = hook.title.take().or(transcript.title),
+            Some(hook) => {
+                hook.title = hook.title.take().or(transcript.title);
+                hook.git_branch = hook.git_branch.take().or(transcript.git_branch);
+            }
             None => hooks.push(transcript),
         }
     }
@@ -121,6 +124,7 @@ pub fn fold(events: &[Event], _now: Timestamp, prefs: &ViewPrefs) -> Vec<Session
                 since: *at,
                 last_active: *at,
                 title: None,
+                git_branch: None,
             }),
             Event::Notification { id, at } => {
                 transition(&mut sessions, id, SessionState::WaitingOnYou, *at)
@@ -347,6 +351,7 @@ mod tests {
             since: 100,
             last_active: 100,
             title: title.map(str::to_string),
+            git_branch: None,
         }
     }
 
