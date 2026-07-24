@@ -135,25 +135,56 @@ function row(session: SessionView, now: number): HTMLElement {
   return node;
 }
 
+let sessionSig = "";
+
+/** Everything that changes a row's identity, order, or shape — but NOT the ticking
+ *  elapsed timer or cost, which update in place so an active session never forces a
+ *  rebuild (a rebuild would reset the scroll position). */
+function structuralSignature(snapshot: Snapshot): string {
+  return snapshot.sessions
+    .map((s) => [s.id, s.state, s.pinned, s.siblings, s.branch ?? "", s.name].join(""))
+    .join("");
+}
+
+function refreshRow(node: HTMLElement, session: SessionView, now: number) {
+  const set = (selector: string, value: string) => {
+    const target = node.querySelector(selector);
+    if (target) target.textContent = value;
+  };
+  set(".elapsed", elapsed(now - session.since));
+  set(".row-cost", money(session.cost));
+}
+
 function renderSessions(snapshot: Snapshot) {
   const list = el("sessions");
-  const focused = (document.activeElement as HTMLElement | null)?.dataset?.id;
-  // The panel re-renders every second; keep the reader where they scrolled to.
-  const scroll = list.scrollTop;
-  list.replaceChildren();
 
   if (snapshot.sessions.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "empty";
-    empty.innerHTML =
-      "<strong>No sessions in this window.</strong>Start Claude Code in a project, or widen the window below.";
-    list.append(empty);
+    if (!list.querySelector(".empty")) {
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      empty.innerHTML =
+        "<strong>No sessions in this window.</strong>Start Claude Code in a project, or widen the window below.";
+      list.replaceChildren(empty);
+    }
+    sessionSig = "";
     return;
   }
 
-  for (const session of snapshot.sessions) {
-    list.append(row(session, snapshot.now));
+  const sig = structuralSignature(snapshot);
+  if (sig === sessionSig && list.querySelector(".row")) {
+    // Structure unchanged — only the ticking fields move. Update them in place and
+    // leave the DOM (and the scroll position, and any focus) alone.
+    for (const session of snapshot.sessions) {
+      const node = list.querySelector<HTMLElement>(`[data-id="${CSS.escape(session.id)}"]`);
+      if (node) refreshRow(node, session, snapshot.now);
+    }
+    return;
   }
+
+  sessionSig = sig;
+  const focused = (document.activeElement as HTMLElement | null)?.dataset?.id;
+  const scroll = list.scrollTop;
+  list.replaceChildren(...snapshot.sessions.map((session) => row(session, snapshot.now)));
   list.scrollTop = scroll;
   if (focused) list.querySelector<HTMLElement>(`[data-id="${CSS.escape(focused)}"]`)?.focus();
 }
