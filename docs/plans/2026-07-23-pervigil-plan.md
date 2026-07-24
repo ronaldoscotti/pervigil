@@ -6,7 +6,7 @@
 
 **Architecture:** A pure Rust core (`fold(events) -> sessions`) with no clock/fs/GUI, fed by an append-only event log that a bundled `record` shim writes from Claude Code hooks. Cost is a second, independent input read from transcripts. A Tauri v2 shell renders the state; per-OS adapters (`WindowFocuser`, `liveness`) sit behind traits with honest capability detection.
 
-**Tech Stack:** Rust, Tauri v2, vanilla-ts frontend, `serde`/`serde_json`, `chrono` (transcript timestamps), `sysinfo` (liveness, M5). Testing: Rust `#[test]` + JSON fixtures.
+**Tech Stack:** Rust, Tauri v2, vanilla-ts frontend, `serde`/`serde_json`, `chrono` (transcript timestamps), `libc` (liveness, unix). Testing: Rust `#[test]` + JSON fixtures.
 
 ---
 
@@ -36,7 +36,7 @@ QA, manual capability check on real terminals) instead of pretending to TDD.
 | M2 | **Design-direction spike** (`frontend-design`) | static mockup renders fixture data; the first screenshot |
 | M3 | Ingestion — `record` shim + transcripts | TDD on parsing; integration test on a temp log |
 | M4 | Cost — `pricing` + price table | TDD |
-| M5 | Liveness + prune | TDD |
+| M5 | Liveness + prune | TDD + real process lifecycle check |
 | M6 | UI implementation (wire core → M2 design) | `agent-browser` QA |
 | M7 | Focuser — trait + tiers + capability detection | TDD tier-selection; manual focus check |
 | M8 | Notifications + config + pin/dismiss + project visibility | TDD logic; manual UX |
@@ -345,15 +345,17 @@ whole feature is off unless enabled.
 
 ---
 
-## M5 — Liveness + prune
+## M5 — Liveness + prune  ✅ done
 
-**Files:** `src-tauri/src/platform/liveness.rs`, `src-tauri/src/core/prune.rs`
+**Files:** `src-tauri/src/platform/liveness.rs`, `src-tauri/src/core/prune.rs`.
+`sysinfo` was **not** used — it enumerates every process to answer one question. `libc::kill(pid, 0)`
+is the whole check; `EPERM` means alive-but-not-ours. Non-unix returns `None` (undeterminable).
 
-- [ ] TDD (`prune`, pure): events older than 30d dropped; boundary exact.
-- [ ] `liveness`: `sysinfo` — is pid alive? Dead session → hidden from list, cost
+- [x] TDD (`prune`, pure): events older than 30d dropped; boundary exact.
+- [x] `liveness`: `sysinfo` — is pid alive? Dead session → hidden from list, cost
   still counted. TDD the *filter* logic with an injected `is_alive` fn (keep the
   syscall behind a trait so the rule is testable without real processes).
-- [ ] TDD: **`pid: None` is not evidence of death — keep the session.** Transcript-derived
+- [x] TDD: **`pid: None` is not evidence of death — keep the session.** Transcript-derived
   sessions (M3) have no pid; hiding them would silently re-break the hooks-not-installed path.
 
 ---
