@@ -97,8 +97,17 @@ mod tests {
         assert_eq!(survivors(Some(42), None), 1);
     }
 
+    #[cfg(unix)]
     #[test]
     fn the_real_check_sees_this_test_process_as_alive() {
         assert_eq!(SystemProcesses.is_alive(std::process::id()), Some(true));
+    }
+
+    #[cfg(not(unix))]
+    #[test]
+    fn the_real_check_cannot_answer_off_unix() {
+        // No syscall-backed impl yet, so liveness honestly degrades to "unknown"
+        // and the caller keeps the session rather than hiding it.
+        assert_eq!(SystemProcesses.is_alive(std::process::id()), None);
     }
 }

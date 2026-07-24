@@ -494,7 +494,10 @@ mod tests {
         let segments = timeline(&events, 0, 10 * WAITING_TTL_SECS);
 
         let share = waiting_share(&segments);
-        assert!(share < 0.2, "one stale notification painted {share} of the lane");
+        assert!(
+            share < 0.2,
+            "one stale notification painted {share} of the lane"
+        );
     }
 
     #[test]
