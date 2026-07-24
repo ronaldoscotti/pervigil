@@ -25,10 +25,12 @@ states are temperatures of light:
 | Working | teal `#6FB2C4` | alive, but quiet |
 | Idle | ash `#565C6A`, dimmed row | asleep |
 
-Ground `#13151B`–`#181A22`, ink `#EAE7DE`. Labels in **Space Grotesk**; **all data —
-timers, costs, axis — in IBM Plex Mono with tabular figures**, because this is a watch
-instrument and the numerals are its readout. *(A serif — Fraunces — was tried to echo the
-owl wordmark, but it read too heavy against the compact UI; the modern sans stays.)*
+Ground `#13151B`–`#181A22`, ink `#EAE7DE`. Display and labels in **Spectral** — a
+screen-optimised serif that echoes the owl wordmark without the weight of a display serif;
+**all data — timers, costs, axis — in IBM Plex Mono with tabular figures**, because this is
+a watch instrument and the numerals are its readout. *(The M2 mock used Space Grotesk;
+Fraunces was tried first but read too heavy, so the lighter Spectral carries the serif
+voice.)*
 
 **Signature element:** the combined `LAST 6 HOURS` activity lane, with the `35% waiting on
 you` stat. It answers *"what did my day look like, and how much of it was I the

@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
-import "@fontsource-variable/space-grotesk";
+import "@fontsource/spectral/300.css";
+import "@fontsource/spectral/400.css";
+import "@fontsource/spectral/500.css";
 import "@fontsource/ibm-plex-mono/400.css";
 import "@fontsource/ibm-plex-mono/500.css";
 import "@fontsource/ibm-plex-mono/600.css";
