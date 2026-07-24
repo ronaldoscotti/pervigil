@@ -85,6 +85,10 @@ pub fn merge(mut hooks: Vec<Session>, transcripts: Vec<Session>) -> Vec<Session>
             Some(hook) => {
                 hook.title = hook.title.take().or(transcript.title);
                 hook.git_branch = hook.git_branch.take().or(transcript.git_branch);
+                // A hook session born from a Notification has no cwd; the transcript does.
+                if hook.cwd.is_empty() {
+                    hook.cwd = transcript.cwd;
+                }
             }
             None => hooks.push(transcript),
         }
@@ -136,6 +140,24 @@ fn tier(session: &Session, prefs: &ViewPrefs) -> u8 {
     }
 }
 
+/// Add a bare session for `id` if none exists yet — cwd/pid/state get set by the
+/// event that follows.
+fn ensure(sessions: &mut Vec<Session>, id: &SessionId, at: Timestamp) {
+    if !sessions.iter().any(|s| &s.id == id) {
+        sessions.push(Session {
+            id: id.clone(),
+            cwd: String::new(),
+            pid: None,
+            state: SessionState::Working,
+            since: at,
+            last_active: at,
+            title: None,
+            git_branch: None,
+            terminal: None,
+        });
+    }
+}
+
 fn transition(sessions: &mut [Session], id: &SessionId, state: SessionState, at: Timestamp) {
     if let Some(session) = sessions.iter_mut().find(|s| &s.id == id) {
         session.state = state;
@@ -149,6 +171,13 @@ pub fn fold(events: &[Event], _now: Timestamp, prefs: &ViewPrefs) -> Vec<Session
     let mut sessions: Vec<Session> = Vec::new();
 
     for event in events {
+        // Any event materialises its session. `SessionStart` only fires for *new*
+        // `claude` runs, so a session already running when hooks are installed never
+        // sees one — but its Notification/Stop/UserPromptSubmit still arrive, and
+        // dropping them would freeze it at the transcript's idle. cwd/pid/terminal
+        // stay empty until a SessionStart (or the transcript, via `merge`) fills them.
+        ensure(&mut sessions, event.id(), event.at());
+
         match event {
             Event::SessionStart {
                 id,
@@ -156,17 +185,16 @@ pub fn fold(events: &[Event], _now: Timestamp, prefs: &ViewPrefs) -> Vec<Session
                 pid,
                 at,
                 term,
-            } => sessions.push(Session {
-                id: id.clone(),
-                cwd: cwd.clone(),
-                pid: *pid,
-                state: SessionState::Working,
-                since: *at,
-                last_active: *at,
-                title: None,
-                git_branch: None,
-                terminal: term.clone(),
-            }),
+            } => {
+                if let Some(session) = sessions.iter_mut().find(|s| &s.id == id) {
+                    session.cwd = cwd.clone();
+                    session.pid = *pid;
+                    session.terminal = term.clone();
+                    session.state = SessionState::Working;
+                    session.since = *at;
+                    session.last_active = *at;
+                }
+            }
             Event::Notification { id, at } => {
                 transition(&mut sessions, id, SessionState::WaitingOnYou, *at)
             }
@@ -443,6 +471,51 @@ mod tests {
         assert_eq!(merged[0].state, SessionState::WaitingOnYou);
         assert_eq!(merged[0].pid, Some(10));
         assert_eq!(merged[0].title.as_deref(), Some("Design panel"));
+    }
+
+    #[test]
+    fn an_event_without_a_prior_session_start_still_creates_the_session() {
+        // Hooks installed mid-session: SessionStart never fired for an already-running
+        // session, but its Notification/Stop/UserPromptSubmit still do. Those must not
+        // be dropped, or the session stays frozen at the transcript's idle.
+        let events = vec![
+            Event::UserPromptSubmit {
+                id: "s1".into(),
+                at: 100,
+            },
+            Event::Notification {
+                id: "s1".into(),
+                at: 200,
+            },
+        ];
+
+        let sessions = fold_default(&events, 300);
+
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].id, "s1");
+        assert_eq!(sessions[0].state, SessionState::WaitingOnYou);
+        assert_eq!(sessions[0].since, 200);
+        assert_eq!(sessions[0].pid, None, "no SessionStart, so no pid");
+    }
+
+    #[test]
+    fn merge_backfills_cwd_from_the_transcript_for_a_hookmade_session() {
+        // A session born from a Notification has no cwd of its own; the transcript has it.
+        let hooks = vec![Session {
+            cwd: String::new(),
+            ..session("s1", SessionState::WaitingOnYou, None, Some(10))
+        }];
+        let transcripts = vec![session("s1", SessionState::Idle, Some("Fix login"), None)];
+
+        let merged = merge(hooks, transcripts);
+
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].cwd, "/s1", "cwd comes from the transcript");
+        assert_eq!(
+            merged[0].state,
+            SessionState::WaitingOnYou,
+            "hook state still wins"
+        );
     }
 
     #[test]
