@@ -92,6 +92,17 @@ review.
 **Files:**
 - Create: `src-tauri/Cargo.toml`, `src-tauri/src/main.rs`, `src-tauri/tauri.conf.json`, `ui/` (Tauri v2 init), `.github/workflows/ci.yml`
 
+- [ ] **Step 0: Verify the toolchain**
+
+Run: `node -v && npm -v && cargo -V && rustc -V && xcode-select -p`
+Expected: all five print a version/path. Tauri needs a Rust toolchain and, on macOS,
+Xcode command-line tools. If `cargo`/`rustc` are missing:
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+source "$HOME/.cargo/env"
+```
+
 - [ ] **Step 1: Scaffold Tauri v2 app**
 
 Run: `npm create tauri-app@latest pervigil -- --template vanilla-ts` (or chosen
