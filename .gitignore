@@ -15,3 +15,9 @@ dist-ssr
 .vscode/*
 !.vscode/extensions.json
 *.log
+
+# Secrets — signing / notarization credentials
+.env
+
+# Staged sidecar binary (regenerated from `cargo build --bin record`)
+/src-tauri/binaries/
