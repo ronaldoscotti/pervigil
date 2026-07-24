@@ -119,7 +119,7 @@ pub fn fold(events: &[Event], _now: Timestamp, prefs: &ViewPrefs) -> Vec<Session
             Event::SessionStart { id, cwd, pid, at } => sessions.push(Session {
                 id: id.clone(),
                 cwd: cwd.clone(),
-                pid: Some(*pid),
+                pid: *pid,
                 state: SessionState::Working,
                 since: *at,
                 last_active: *at,
@@ -160,7 +160,7 @@ mod tests {
         Event::SessionStart {
             id: id.into(),
             cwd: format!("/{id}"),
-            pid: 10,
+            pid: Some(10),
             at,
         }
     }
@@ -392,7 +392,7 @@ mod tests {
             Event::SessionStart {
                 id: "s2".into(),
                 cwd: "/s1".into(),
-                pid: 11,
+                pid: Some(11),
                 at: 110,
             },
         ];

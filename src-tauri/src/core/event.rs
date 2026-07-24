@@ -10,7 +10,9 @@ pub enum Event {
     SessionStart {
         id: SessionId,
         cwd: String,
-        pid: u32,
+        /// `None` where the platform can't report the parent pid.
+        #[serde(default)]
+        pid: Option<u32>,
         at: Timestamp,
     },
     Notification {
@@ -72,7 +74,7 @@ mod tests {
             Event::SessionStart {
                 id: "s1".into(),
                 cwd: "/p".into(),
-                pid: 1,
+                pid: Some(1),
                 at: 10,
             },
             Event::Notification {
@@ -88,6 +90,24 @@ mod tests {
                 at: 40,
             },
         ]
+    }
+
+    #[test]
+    fn a_session_start_without_a_pid_still_parses() {
+        let line = r#"{"type":"SessionStart","id":"s1","cwd":"/p","at":10}"#;
+
+        let (events, skipped) = parse_log(line);
+
+        assert_eq!(skipped, 0);
+        assert_eq!(
+            events,
+            vec![Event::SessionStart {
+                id: "s1".into(),
+                cwd: "/p".into(),
+                pid: None,
+                at: 10,
+            }]
+        );
     }
 
     #[test]
