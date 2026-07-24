@@ -34,7 +34,7 @@ QA, manual capability check on real terminals) instead of pretending to TDD.
 | M0 | Scaffold + CI + test harness | build + a trivial passing test in CI |
 | M1 | **The pure core** — `store::fold` | TDD, JSON fixtures (crown jewel) |
 | M2 | **Design-direction spike** (`frontend-design`) | static mockup renders fixture data; the first screenshot |
-| M3 | Ingestion — `record` shim + `watcher` | TDD on parsing; integration test on a temp log |
+| M3 | Ingestion — `record` shim + transcripts | TDD on parsing; integration test on a temp log |
 | M4 | Cost — `pricing` + price table | TDD |
 | M5 | Liveness + prune | TDD |
 | M6 | UI implementation (wire core → M2 design) | `agent-browser` QA |
@@ -274,7 +274,7 @@ settled — per-row timelines cut, branch chips only when they disambiguate — 
 
 ---
 
-## M3 — Ingestion: `record` shim + `watcher`
+## M3 — Ingestion: `record` shim + transcripts  ✅ done
 
 **Goal:** Get real events into the log and into the core, without ever blocking a
 Claude Code turn.
@@ -295,8 +295,12 @@ belongs beside `fold`, never in `io/`).
 - `record`: reads hook JSON on stdin/args, appends one atomic line to
   `~/.pervigil/events.jsonl`. **Hard timeout, always `exit(0)`, never panics** —
   a failure here must not fail the host turn.
-- `watcher`: `notify`-based tail of `events.jsonl`; emits parsed `Event`s to the
-  Tauri layer. Corrupt lines counted + skipped.
+- ~~`watcher`: `notify`-based tail~~ — **deferred to M6.** A watcher exists to push
+  updates to a consumer, and no consumer exists yet; building it now means designing
+  against an imagined UI. `parse_log` + `fold` already read the log on demand, and M6
+  can choose polling (simpler, no dependency, portable) over `notify` if polling proves
+  good enough for a panel that redraws a handful of rows. Adding `notify` before that
+  is a dependency and three platform behaviours bought on speculation.
 - `transcript`: parse `~/.claude/projects/**/*.jsonl` → per-session token counts **and session
   title** (`{"type":"ai-title","aiTitle":…}`, fallback `{"type":"last-prompt","lastPrompt":…}` —
   verified present in real transcripts). Tiered: `aiTitle` → `lastPrompt` → branch → short id.
@@ -306,16 +310,16 @@ hooks uninstalled the list would be empty — but the spec promises sessions + c
 state degraded to `idle`. Transcripts already carry session id, cwd, tokens and title, so they are a
 second discovery source. `transcript::sessions()` enumerates them; `merge(hook_sessions,
 transcript_sessions)` unions by session id, hook state winning where present.
-- [ ] TDD: transcript-only session → present, `state == Idle`, cost + title intact.
-- [ ] TDD: same id from both sources → one session, hook state wins, no duplicate.
+- [x] TDD: transcript-only session → present, `state == Idle`, cost + title intact.
+- [x] TDD: same id from both sources → one session, hook state wins, no duplicate.
 
 **Verification (TDD where pure):**
-- [ ] TDD: line parser round-trips every `Event` variant; a corrupt line yields
+- [x] TDD: line parser round-trips every `Event` variant; a corrupt line yields
   `Err` and is skipped, not fatal.
-- [ ] TDD: `record` append is atomic under concurrent writers (write to temp +
+- [x] TDD: `record` append is atomic under concurrent writers (write to temp +
   rename, or `O_APPEND` single `write`) — test with N threads appending, assert
   no interleaved/torn lines.
-- [ ] Integration: write events to a temp log, run `watcher` fold, assert sessions.
+- [x] Integration: write events to a temp log, run `watcher` fold, assert sessions.
 
 ---
 
