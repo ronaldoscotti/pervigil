@@ -368,9 +368,23 @@ is the whole check; `EPERM` means alive-but-not-ours. Non-unix returns `None` (u
 **Verification:** `agent-browser` QA — screenshot the running app against the same
 scenarios as the M2 mock; diff intent. This is where QA-as-user happens. Not TDD.
 
-**Tasks (expanded when reached):** Tauri commands exposing `sessions()`, `cost(window)` and
-`timeline(from, to)`; frontend subscribes to watcher events; tray icon + badge; timeline filter;
-pin/dismiss wired to config; the settings panel surface (spec item 11).
+**Everything this milestone renders already exists and is tested** (52 tests): `store::fold`,
+`store::timeline`, `store::waiting_share`, `store::merge`, `pricing::cost_in_window`,
+`liveness::retain_live`, `transcript::{parse_session, usage_entries}`, `event::parse_log`.
+M6 wires them to the locked design in `design/index.html` — it should not need new core logic.
+
+**Tasks (expanded when reached):**
+- Tauri commands exposing `sessions()`, `cost(window)`, `timeline(from, to)`.
+- **Decide refresh strategy here** — polling vs `notify`. The watcher was deferred from M3
+  precisely so this call is made against a real consumer. Try polling first (no dependency,
+  identical on all three platforms); reach for `notify` only if a poll interval that feels live
+  proves too expensive for a panel of ~10 rows.
+- Render the design: session list, `LAST 6 HOURS` lane + `% waiting on you`, elapsed timers,
+  cost footer, tray icon + badge, timeline filter (`4h · Today · Week`).
+- **Add the session name row** (spec item 13) — the mock is one revision behind the spec here.
+  Row layout: line 1 = dot · project · `×N` + branch chip *only when a project has multiple live
+  sessions*; line 2 = short state label · session name (muted, truncated) · cost.
+- Pin/dismiss wired to config; the settings panel surface (spec item 11).
 
 ---
 
