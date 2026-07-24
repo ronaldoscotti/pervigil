@@ -491,6 +491,28 @@ pub fn dismiss(id: String, app: tauri::State<'_, App>) {
     app.dismiss(&id, Local::now().timestamp().max(0) as Timestamp);
 }
 
+/// Open `~/.claude/settings.json` in the user's default editor for JSON — pervigil
+/// never edits it, so the fastest honest help is to take you there.
+#[tauri::command]
+pub fn open_settings(app: tauri::State<'_, App>) {
+    let path = app.home.join(SETTINGS);
+    let program = if cfg!(target_os = "macos") {
+        "open"
+    } else if cfg!(target_os = "windows") {
+        "explorer"
+    } else {
+        "xdg-open"
+    };
+    let _ = std::process::Command::new(program).arg(path).spawn();
+}
+
+/// Toggle the panel's always-on-top. A watch instrument you keep in view, but yours
+/// to unpin when it's in the way.
+#[tauri::command]
+pub fn set_window_pinned(pinned: bool, window: tauri::WebviewWindow) {
+    let _ = window.set_always_on_top(pinned);
+}
+
 /// The tray title is the count of sessions blocked on you — the product thesis, at
 /// menu-bar size. Blank at zero: nothing is waiting, so nothing shouts.
 fn badge(handle: &tauri::AppHandle, waiting: usize) {

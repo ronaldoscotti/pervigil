@@ -14,61 +14,67 @@
         <span class="lamp"></span>
         <span class="wordmark">Pervigil</span>
       </div>
-      <button type="button" class="chip chip-button" id="settings-toggle" aria-expanded="false">
-        Settings
-      </button>
-    </header>
-
-    <section class="settings" id="settings" hidden>
-      <div class="settings-row">
-        <span class="settings-label">Notifications</span>
-        <button type="button" class="switch" id="notifications-switch" role="switch" aria-checked="true">
-          <span class="switch-knob"></span>
+      <div class="topbar-actions">
+        <button type="button" class="chip chip-toggle" id="pin-toggle" aria-pressed="true"
+          title="Keep the panel above other windows">Pinned</button>
+        <button type="button" class="chip chip-button" id="settings-toggle" aria-expanded="false">
+          Settings
         </button>
       </div>
-      <div class="settings-group">
-        <span class="label">Projects shown</span>
-        <div class="project-list" id="project-list"></div>
-      </div>
-    </section>
+    </header>
 
-    <section class="headline">
-      <span class="headline-count" id="waiting">—</span>
-      <div class="headline-text">
-        <span class="headline-label">waiting on you</span>
-        <span class="headline-sub" id="tally"></span>
-      </div>
-    </section>
+    <div class="content">
+      <section class="settings" id="settings" hidden>
+        <div class="settings-row">
+          <span class="settings-label">Notifications</span>
+          <button type="button" class="switch" id="notifications-switch" role="switch" aria-checked="true">
+            <span class="switch-knob"></span>
+          </button>
+        </div>
+        <div class="settings-group">
+          <span class="label">Projects shown</span>
+          <div class="project-list" id="project-list"></div>
+        </div>
+      </section>
 
-    <section class="lane">
-      <div class="lane-head">
-        <span class="label" id="lane-label">Last 4 hours</span>
-        <span class="lane-share" id="share"></span>
-      </div>
-      <div class="lane-track">
-        <div class="lane-segments" id="segments"></div>
-        <span class="lane-tick" style="left: 33.333%"></span>
-        <span class="lane-tick" style="left: 66.666%"></span>
-        <span class="lane-now"></span>
-      </div>
-      <div class="lane-axis" id="axis"></div>
-    </section>
+      <section class="headline">
+        <span class="headline-count" id="waiting">—</span>
+        <div class="headline-text">
+          <span class="headline-label">waiting on you</span>
+          <span class="headline-sub" id="tally"></span>
+        </div>
+      </section>
 
-    <div class="section-label">Sessions</div>
-    <main class="sessions" id="sessions"></main>
+      <section class="lane">
+        <div class="lane-head">
+          <span class="label" id="lane-label">Last 4 hours</span>
+          <span class="lane-share" id="share"></span>
+        </div>
+        <div class="lane-track">
+          <div class="lane-segments" id="segments"></div>
+          <span class="lane-tick" style="left: 33.333%"></span>
+          <span class="lane-tick" style="left: 66.666%"></span>
+          <span class="lane-now"></span>
+        </div>
+        <div class="lane-axis" id="axis"></div>
+      </section>
 
-    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+      <div class="section-label">Sessions</div>
+      <main class="sessions" id="sessions"></main>
 
-    <footer class="footer">
-      <div class="spend">
-        <span class="label" id="cost-label">Last 4 hours</span>
-        <span class="spend-value" id="cost">—</span>
-      </div>
-      <div class="spans" id="spans">
-        <button type="button" data-span="4h" class="on">4h</button>
-        <button type="button" data-span="today">Today</button>
-        <button type="button" data-span="week">Week</button>
-      </div>
-    </footer>
+      <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+      <footer class="footer">
+        <div class="spend">
+          <span class="label" id="cost-label">Last 4 hours</span>
+          <span class="spend-value" id="cost">—</span>
+        </div>
+        <div class="spans" id="spans">
+          <button type="button" data-span="4h" class="on">4h</button>
+          <button type="button" data-span="today">Today</button>
+          <button type="button" data-span="week">Week</button>
+        </div>
+      </footer>
+    </div>
   </body>
 </html>

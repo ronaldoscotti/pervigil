@@ -20,7 +20,9 @@ pub fn run() {
             app::set_notifications,
             app::set_pinned,
             app::set_project_hidden,
-            app::dismiss
+            app::dismiss,
+            app::open_settings,
+            app::set_window_pinned
         ])
         .setup(|app| {
             let mut tray = TrayIconBuilder::with_id(TRAY_ID).on_tray_icon_event(|tray, event| {

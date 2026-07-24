@@ -138,6 +138,8 @@ function row(session: SessionView, now: number): HTMLElement {
 function renderSessions(snapshot: Snapshot) {
   const list = el("sessions");
   const focused = (document.activeElement as HTMLElement | null)?.dataset?.id;
+  // The panel re-renders every second; keep the reader where they scrolled to.
+  const scroll = list.scrollTop;
   list.replaceChildren();
 
   if (snapshot.sessions.length === 0) {
@@ -152,6 +154,7 @@ function renderSessions(snapshot: Snapshot) {
   for (const session of snapshot.sessions) {
     list.append(row(session, snapshot.now));
   }
+  list.scrollTop = scroll;
   if (focused) list.querySelector<HTMLElement>(`[data-id="${CSS.escape(focused)}"]`)?.focus();
 }
 
@@ -205,10 +208,13 @@ function renderHooks(snapshot: Snapshot) {
       <span class="hook-mark">Not detected</span>
       <span class="hook-title">Install hooks to track live state</span>
     </div>
-    <p class="hook-note">States read <em>idle</em> until these run. Names and cost are already live. Paste into <code>~/.claude/settings.json</code> — pervigil never edits it for you.</p>
+    <p class="hook-note">States read <em>idle</em> until these run. Names and cost are already live. Paste into <button type="button" class="hook-path">~/.claude/settings.json</button> — pervigil never edits it for you.</p>
     <pre class="hook-snippet"></pre>
     <button type="button" class="hook-copy">Copy snippet</button>`;
   (card.querySelector(".hook-snippet") as HTMLElement).textContent = snapshot.hookSnippet;
+  card.querySelector(".hook-path")?.addEventListener("click", () => {
+    invoke("open_settings").catch(console.error);
+  });
   card.querySelector(".hook-copy")?.addEventListener("click", async () => {
     try {
       await navigator.clipboard.writeText(snapshot.hookSnippet);
@@ -240,14 +246,22 @@ function render(snapshot: Snapshot, span: Span) {
   renderSettings(snapshot);
 }
 
-/** Reflect current settings; skipped while the sheet is open so a click isn't fought. */
+let projectSig = "";
+
+/** The notifications switch tracks the server every poll — cheap, no flicker. */
 function renderSettings(snapshot: Snapshot) {
-  const sw = el("notifications-switch");
-  sw.setAttribute("aria-checked", String(snapshot.notifications));
+  el("notifications-switch").setAttribute("aria-checked", String(snapshot.notifications));
+  if (!el("settings").hidden) renderProjects(snapshot);
+}
 
-  if (el("settings").hidden) return;
-
+/** Rebuild the project list only when it actually changed, so the open sheet doesn't
+ *  flicker or fight a click each second. */
+function renderProjects(snapshot: Snapshot) {
   const projects = [...new Set([...snapshot.sessions.map((s) => s.project), ...snapshot.hidden])].sort();
+  const sig = `${projects.join("|")}::${[...snapshot.hidden].sort().join("|")}`;
+  if (sig === projectSig) return;
+  projectSig = sig;
+
   const list = el("project-list");
   list.replaceChildren();
   for (const project of projects) {
@@ -298,12 +312,14 @@ async function set(command: string, args: Record<string, unknown>) {
 }
 
 let inflight = false;
+let lastSnapshot: Snapshot | undefined;
 
 async function poll() {
   if (inflight) return;
   inflight = true;
   try {
-    render(await invoke<Snapshot>("snapshot", { span }), span);
+    lastSnapshot = await invoke<Snapshot>("snapshot", { span });
+    render(lastSnapshot, span);
   } catch (error) {
     console.error(error);
   } finally {
@@ -350,9 +366,20 @@ window.addEventListener("DOMContentLoaded", () => {
 
   el("settings-toggle").addEventListener("click", () => {
     const sheet = el("settings");
-    sheet.hidden = !sheet.hidden;
-    el("settings-toggle").setAttribute("aria-expanded", String(!sheet.hidden));
-    if (!sheet.hidden) poll();
+    const opening = sheet.hidden;
+    sheet.hidden = !opening;
+    const button = el("settings-toggle");
+    button.setAttribute("aria-expanded", String(opening));
+    button.textContent = opening ? "‹ Back" : "Settings";
+    if (opening && lastSnapshot) renderProjects(lastSnapshot);
+  });
+
+  el("pin-toggle").addEventListener("click", (event) => {
+    const button = event.currentTarget as HTMLElement;
+    const pinned = button.getAttribute("aria-pressed") !== "true";
+    button.setAttribute("aria-pressed", String(pinned));
+    button.textContent = pinned ? "Pinned" : "Unpinned";
+    invoke("set_window_pinned", { pinned }).catch(console.error);
   });
 
   el("notifications-switch").addEventListener("click", (event) => {
