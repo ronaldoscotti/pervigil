@@ -6,7 +6,7 @@
 
 **Architecture:** A pure Rust core (`fold(events) -> sessions`) with no clock/fs/GUI, fed by an append-only event log that a bundled `record` shim writes from Claude Code hooks. Cost is a second, independent input read from transcripts. A Tauri v2 shell renders the state; per-OS adapters (`WindowFocuser`, `liveness`) sit behind traits with honest capability detection.
 
-**Tech Stack:** Rust, Tauri v2, a web frontend (framework chosen in M0), `notify` (fs-watching), `serde`/`serde_json`, `sysinfo` (liveness). Testing: Rust `#[test]` + JSON fixtures.
+**Tech Stack:** Rust, Tauri v2, vanilla-ts frontend, `serde`/`serde_json`, `chrono` (transcript timestamps), `sysinfo` (liveness, M5). Testing: Rust `#[test]` + JSON fixtures.
 
 ---
 
@@ -60,8 +60,8 @@ pervigil/
 │   │   │   ├── pricing.rs       # tokens × price table -> cost
 │   │   │   └── prune.rs         # drop events older than 30d
 │   │   ├── io/
-│   │   │   ├── watcher.rs       # tail events.jsonl + transcript dir (notify)
-│   │   │   ├── transcript.rs    # parse ~/.claude/projects/**/*.jsonl -> tokens, title, sessions
+│   │   │   ├── record.rs        # hook payload -> Event, atomic append
+│   │   │   ├── transcript.rs    # parse ~/.claude/projects/**/*.jsonl -> sessions, title, branch
 │   │   │   └── usage.rs         # opt-in: credentials + OAuth usage endpoint (network, not core/)
 │   │   ├── platform/
 │   │   │   ├── focuser.rs       # trait WindowFocuser + tier dispatch
