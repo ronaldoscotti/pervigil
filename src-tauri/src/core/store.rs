@@ -92,6 +92,17 @@ pub fn merge(mut hooks: Vec<Session>, transcripts: Vec<Session>) -> Vec<Session>
     hooks
 }
 
+/// The list's whole order, in one place: waiting-on-you, then pinned, then recency.
+/// Public because [`merge`] appends transcript-derived sessions after [`fold`] has
+/// already sorted, and both sources must end up in the same order.
+pub fn sort(sessions: &mut [Session], prefs: &ViewPrefs) {
+    sessions.sort_by(|a, b| {
+        tier(a, prefs)
+            .cmp(&tier(b, prefs))
+            .then(b.last_active.cmp(&a.last_active))
+    });
+}
+
 fn tier(session: &Session, prefs: &ViewPrefs) -> u8 {
     if session.state == SessionState::WaitingOnYou {
         0
@@ -141,12 +152,7 @@ pub fn fold(events: &[Event], _now: Timestamp, prefs: &ViewPrefs) -> Vec<Session
         None => true,
     });
 
-    sessions.sort_by(|a, b| {
-        tier(a, prefs)
-            .cmp(&tier(b, prefs))
-            .then(b.last_active.cmp(&a.last_active))
-    });
-
+    sort(&mut sessions, prefs);
     sessions
 }
 

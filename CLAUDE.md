@@ -78,7 +78,8 @@ review.
 
 ## Current position
 
-Spec **approved** (human gate passed 2026-07-23). Plan written
-(`docs/plans/2026-07-23-pervigil-plan.md`). At the **plan-approval gate** — next
-stage after approval is TDD implementation. See `docs/method/README.md` for live
-status.
+Spec and plan **approved**. Implementation through **M6** (UI wired to the live
+core): 70 tests green, panel renders real sessions, cost, and the activity lane.
+Next is **M7 — the focuser** (trait + tiers + honest capability detection); no row
+is clickable until it lands. See `docs/plans/2026-07-23-pervigil-plan.md` for the
+milestone map and `docs/method/README.md` for live status.

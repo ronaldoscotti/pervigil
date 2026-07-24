@@ -13,9 +13,14 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "pervigil",
-        "width": 800,
-        "height": 600
+        "title": "Pervigil",
+        "width": 380,
+        "height": 780,
+        "minWidth": 340,
+        "minHeight": 420,
+        "alwaysOnTop": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
       }
     ],
     "security": {

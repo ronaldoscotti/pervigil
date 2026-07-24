@@ -74,6 +74,17 @@ pub fn cost_in_window(
         .sum()
 }
 
+/// A session's own total. `None` when nothing here can be priced — the row shows
+/// `—` rather than `$0.00`, which would read as "this session was free".
+pub fn total(table: &PriceTable, entries: &[UsageEntry]) -> Option<f64> {
+    let priced: Vec<f64> = entries
+        .iter()
+        .filter_map(|entry| cost(table, &entry.model, &entry.usage))
+        .collect();
+
+    (!priced.is_empty()).then(|| priced.iter().sum())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -180,5 +191,41 @@ mod tests {
         }];
 
         assert!(near(cost_in_window(&table, &entries, 0, 200), 0.0));
+    }
+
+    #[test]
+    fn a_session_nothing_can_price_has_no_total() {
+        let table = shipped();
+        let entries = vec![UsageEntry {
+            at: 100,
+            model: "some-future-model".into(),
+            usage: real_turn(),
+        }];
+
+        assert_eq!(total(&table, &entries), None);
+    }
+
+    #[test]
+    fn a_session_with_no_usage_at_all_has_no_total() {
+        assert_eq!(total(&shipped(), &[]), None);
+    }
+
+    #[test]
+    fn a_priceable_session_totals_every_entry() {
+        let table = shipped();
+        let entries = vec![
+            UsageEntry {
+                at: 100,
+                model: "claude-opus-4-8".into(),
+                usage: real_turn(),
+            },
+            UsageEntry {
+                at: 200,
+                model: "some-future-model".into(),
+                usage: real_turn(),
+            },
+        ];
+
+        assert!(near(total(&table, &entries).unwrap(), 0.293_654));
     }
 }

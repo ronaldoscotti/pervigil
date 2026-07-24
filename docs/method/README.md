@@ -20,8 +20,8 @@ docs, and reproduce it.
 | 2 | Brainstorm | `superpowers:brainstorming` | dialogue → spec | — |
 | 3 | Spec | `superpowers:brainstorming` | [`../specs/2026-07-23-pervigil-design.md`](../specs/2026-07-23-pervigil-design.md) | **human + AI review** |
 | 4 | Plan | `superpowers:writing-plans` | [`../plans/2026-07-23-pervigil-plan.md`](../plans/2026-07-23-pervigil-plan.md) | **human + AI review** |
-| 5 | Implement | `superpowers:test-driven-development` | `src/` + tests *(not started)* | tests green |
-| 6 | QA | manual + `agent-browser` | screenshots / notes *(not started)* | works as a user |
+| 5 | Implement | `superpowers:test-driven-development` | `src-tauri/` + 70 tests *(M0–M6 done)* | tests green |
+| 6 | QA | manual + `agent-browser` | screenshots / notes *(M6 pass done)* | works as a user |
 | 7 | Code review | `code-review` skill + self | review notes *(not started)* | issues resolved |
 | 8 | PR | git | pull request *(not started)* | **colleague review** |
 
@@ -34,16 +34,18 @@ docs, and reproduce it.
 [x] 3  Spec written    — docs/specs/2026-07-23-pervigil-design.md
 [x] 3  Spec APPROVED   — human review gate passed (2026-07-23)
 [x] 4  Plan written    — docs/plans/2026-07-23-pervigil-plan.md
-[ ] 4  Plan APPROVED   — ← WE ARE HERE (awaiting human approval gate)
-[ ] 5  TDD implementation
-[ ] 6  QA
+[x] 4  Plan APPROVED   — human approval gate passed
+[~] 5  TDD implementation — M0–M6 done (70 tests). M7–M10 open.
+[~] 6  QA              — M6 pass done; native window + tray badge unverified
 [ ] 7  Code review
 [ ] 8  PR + colleague review
 ```
 
-**Nothing below the current line has been faked.** There is no `src/`, no test
-suite, and no plan yet, because those stages have not run. When they do, their
-artifacts land here and the checklist advances. That status-accuracy is the whole
+**Nothing below the current line has been faked.** The checklist advances only
+when the artifacts exist. Two things are deliberately *not* claimed right now:
+click-to-focus (M7 — no `focuser` code exists yet, so no row is clickable), and
+visual confirmation of the macOS tray badge, which needs Screen Recording
+permission this environment doesn't have. That status-accuracy is the whole
 point: the repo is proof precisely because it never claims a stage it hasn't
 reached.
 

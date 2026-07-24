@@ -44,8 +44,19 @@ bottleneck?"* — the product thesis in one band.
   everywhere) carries no information. Branch + `×2` appear only when a project has multiple
   live sessions — which is how the parallel-agent case finally became visible.
 
-## Known gap
+## Where the shipped panel differs
 
-This render is **one revision behind the spec**: it does not yet show the **session name**
-(spec item 13 — `aiTitle` from the transcript). Rows currently show project · branch ·
-state · elapsed · cost. Adding the name is the next design revision.
+This file is the **frozen M2 direction**, not a mirror of the app. The live UI
+(`index.html` + `src/`) moved on in three places during M6, all deliberate:
+
+- **Session name** (spec item 13) — the mock predates it. Rows in the app carry a second
+  line: state label · session name (`aiTitle` → `lastPrompt` → branch → short id, muted and
+  truncated). The mock still shows project · branch · state · elapsed · cost.
+- **Footer** — the mock's `Today | This week` pair became one window-scoped cost plus the
+  `4h · Today · Week` control. The filter already scopes the figure; showing two totals next
+  to a filter that governs one of them reads as a bug.
+- **Lane header** — labelled by the selected span (`Last 4 hours` / `Today` / `This week`)
+  rather than a fixed `LAST 6 HOURS`.
+
+Everything else — the palette, the lamp metaphor, the type pairing, the combined lane, and
+the branch-chip-only-when-it-disambiguates rule — shipped as drawn.

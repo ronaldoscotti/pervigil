@@ -1,4 +1,226 @@
+import { invoke } from "@tauri-apps/api/core";
+import "@fontsource-variable/space-grotesk";
+import "@fontsource/ibm-plex-mono/400.css";
+import "@fontsource/ibm-plex-mono/500.css";
+import "@fontsource/ibm-plex-mono/600.css";
+
+type SessionState = "Working" | "WaitingOnYou" | "Idle";
+type Span = "4h" | "today" | "week";
+
+interface SessionView {
+  id: string;
+  project: string;
+  name: string;
+  branch: string | null;
+  state: SessionState;
+  since: number;
+  siblings: number;
+  cost: number | null;
+}
+
+interface Segment {
+  state: SessionState;
+  from: number;
+  to: number;
+}
+
+interface Snapshot {
+  now: number;
+  from: number;
+  waiting: number;
+  sessions: SessionView[];
+  segments: Segment[];
+  waitingShare: number;
+  cost: number;
+  hooks: boolean;
+}
+
+const TONE: Record<SessionState, string> = {
+  Working: "working",
+  WaitingOnYou: "waiting",
+  Idle: "idle",
+};
+
+const STATE_LABEL: Record<SessionState, string> = {
+  Working: "Working",
+  WaitingOnYou: "Waiting on you",
+  Idle: "Idle",
+};
+
+const SPAN_LABEL: Record<Span, string> = {
+  "4h": "Last 4 hours",
+  today: "Today",
+  week: "This week",
+};
+
+const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+
+/** One unit, the largest that fits — a watch face, not a stopwatch. */
+function elapsed(seconds: number): string {
+  const since = Math.max(seconds, 0);
+  if (since < 60) return `${since}s`;
+  if (since < 3600) return `${Math.floor(since / 60)}m`;
+  if (since < 86400) return `${Math.floor(since / 3600)}h`;
+  return `${Math.floor(since / 86400)}d`;
+}
+
+const money = (amount: number | null) => (amount === null ? "—" : `$${amount.toFixed(2)}`);
+
+function axisLabel(at: number, span: Span): string {
+  const moment = new Date(at * 1000);
+  return span === "week"
+    ? moment.toLocaleDateString(undefined, { weekday: "short" })
+    : moment.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+function row(session: SessionView, now: number): HTMLElement {
+  const node = document.createElement("div");
+  node.className = `row ${TONE[session.state]}`;
+  node.tabIndex = 0;
+  node.dataset.id = session.id;
+
+  // A branch and a count only earn their space where a project runs more than one
+  // session — otherwise they label everything and say nothing.
+  const parallel = session.siblings > 1;
+  node.innerHTML = `
+    <span class="dot"></span>
+    <div class="row-main">
+      <div class="row-top">
+        <span class="project"></span>
+        ${parallel ? '<span class="siblings"></span>' : ""}
+        ${parallel && session.branch ? '<span class="branch"></span>' : ""}
+      </div>
+      <div class="row-sub">
+        <span class="state"></span>
+        <span class="name"></span>
+      </div>
+    </div>
+    <div class="row-right">
+      <div class="elapsed"></div>
+      <div class="row-cost"></div>
+    </div>`;
+
+  const text = (selector: string, value: string) => {
+    const target = node.querySelector(selector);
+    if (target) target.textContent = value;
+  };
+  text(".project", session.project);
+  text(".siblings", `×${session.siblings}`);
+  text(".branch", session.branch ?? "");
+  text(".state", STATE_LABEL[session.state]);
+  text(".name", session.name);
+  text(".elapsed", elapsed(now - session.since));
+  text(".row-cost", money(session.cost));
+
+  return node;
+}
+
+function renderSessions(snapshot: Snapshot) {
+  const list = el("sessions");
+  const focused = (document.activeElement as HTMLElement | null)?.dataset?.id;
+  list.replaceChildren();
+
+  if (snapshot.sessions.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.innerHTML =
+      "<strong>No sessions in this window.</strong>Start Claude Code in a project, or widen the window below.";
+    list.append(empty);
+    return;
+  }
+
+  for (const session of snapshot.sessions) {
+    list.append(row(session, snapshot.now));
+  }
+  if (focused) list.querySelector<HTMLElement>(`[data-id="${CSS.escape(focused)}"]`)?.focus();
+}
+
+function renderLane(snapshot: Snapshot, span: Span) {
+  const lane = el("segments");
+  lane.replaceChildren();
+  for (const segment of snapshot.segments) {
+    const band = document.createElement("span");
+    band.className = TONE[segment.state];
+    band.style.flex = `${segment.to - segment.from} 0 0`;
+    lane.append(band);
+  }
+
+  const width = snapshot.now - snapshot.from;
+  const axis = el("axis");
+  axis.replaceChildren();
+  for (const fraction of [0, 1 / 3, 2 / 3]) {
+    const tick = document.createElement("span");
+    tick.style.left = `${fraction * 100}%`;
+    tick.textContent = axisLabel(snapshot.from + width * fraction, span);
+    axis.append(tick);
+  }
+  const now = document.createElement("span");
+  now.textContent = "now";
+  axis.append(now);
+
+  el("share").textContent = `${Math.round(snapshot.waitingShare * 100)}% waiting on you`;
+}
+
+/** Degrade, never fake: with no hooks every row is transcript-derived and reads idle. */
+function renderNotice(hooks: boolean) {
+  document.querySelector(".notice")?.remove();
+  if (hooks) return;
+
+  const notice = document.createElement("div");
+  notice.className = "notice";
+  notice.textContent = "Hooks not installed — states read idle; names and cost are live.";
+  el("sessions").after(notice);
+}
+
+function render(snapshot: Snapshot, span: Span) {
+  const waiting = el("waiting");
+  waiting.textContent = String(snapshot.waiting);
+  waiting.classList.toggle("quiet", snapshot.waiting === 0);
+
+  const total = snapshot.sessions.length;
+  el("tally").textContent = `${total} session${total === 1 ? "" : "s"} · ${
+    total - snapshot.waiting
+  } quiet`;
+
+  el("lane-label").textContent = SPAN_LABEL[span];
+  el("cost-label").textContent = SPAN_LABEL[span];
+  el("cost").textContent = money(snapshot.cost);
+
+  renderLane(snapshot, span);
+  renderSessions(snapshot);
+  renderNotice(snapshot.hooks);
+}
+
+let span: Span = "4h";
+let inflight = false;
+
+async function poll() {
+  if (inflight) return;
+  inflight = true;
+  try {
+    render(await invoke<Snapshot>("snapshot", { span }), span);
+  } catch (error) {
+    console.error(error);
+  } finally {
+    inflight = false;
+  }
+}
+
 window.addEventListener("DOMContentLoaded", () => {
-  const app = document.querySelector<HTMLElement>("#app");
-  if (app) app.textContent = "Pervigil";
+  if (navigator.userAgent.includes("Mac")) document.body.classList.add("mac");
+
+  el("spans").addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-span]");
+    if (!button) return;
+    span = button.dataset.span as Span;
+    for (const other of el("spans").querySelectorAll("button")) {
+      other.classList.toggle("on", other === button);
+    }
+    poll();
+  });
+
+  // ponytail: polling, not a filesystem watcher — the panel is ~10 rows and the
+  // scanner only reads the bytes appended since the last tick. Revisit if that changes.
+  setInterval(poll, 1000);
+  poll();
 });

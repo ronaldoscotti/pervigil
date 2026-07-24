@@ -265,8 +265,13 @@ screenshot is the deliverable, so design is de-risked *now*, not at QA.
 **Tasks (not TDD — this is design):**
 - [x] Produce a static, self-contained mockup with `frontend-design`: session list (waiting-on-you first), the activity lane, elapsed timers, cost footer.
 - [x] **Gate: does it read as staff-level?** Iterated four rounds; passed.
-- [ ] Add the session name row (spec item 13) — the mock is one revision behind the spec.
-- [ ] Re-check the lane against the real `Segment` shape once M1 Step 7 lands, so the mock isn't asserting a shape the core can't produce.
+- [x] Add the session name row (spec item 13) — **landed in the live UI at M6**, not back-ported
+  into `design/index.html`. The mock's job was to lock the direction and it did; editing a frozen
+  artifact to match a shipped screen is bookkeeping, not design. `design/README.md` records where
+  the two now differ.
+- [x] Re-check the lane against the real `Segment` shape once M1 Step 7 lands, so the mock isn't asserting a shape the core can't produce. The mock's eight hand-tuned bands are exactly what
+  `timeline()` emits — contiguous, closed at `to`, one state each — and the live lane renders
+  `Segment`s straight into that layout with `flex-grow: to − from`.
 
 **Verification:** a screenshot exists and clears the bar. Two decisions this milestone
 settled — per-row timelines cut, branch chips only when they disambiguate — are recorded in
@@ -360,7 +365,7 @@ is the whole check; `EPERM` means alive-but-not-ours. Non-unix returns `None` (u
 
 ---
 
-## M6 — UI implementation (wire live core → the M2 design)
+## M6 — UI implementation (wire live core → the M2 design)  ✅ done
 
 **Goal:** Render real `fold` output in the already-approved M2 look. Tray badge
 (count of waiting sessions), pinned panel, always-on-top.
@@ -373,18 +378,60 @@ scenarios as the M2 mock; diff intent. This is where QA-as-user happens. Not TDD
 `liveness::retain_live`, `transcript::{parse_session, usage_entries}`, `event::parse_log`.
 M6 wires them to the locked design in `design/index.html` — it should not need new core logic.
 
-**Tasks (expanded when reached):**
-- Tauri commands exposing `sessions()`, `cost(window)`, `timeline(from, to)`.
-- **Decide refresh strategy here** — polling vs `notify`. The watcher was deferred from M3
-  precisely so this call is made against a real consumer. Try polling first (no dependency,
-  identical on all three platforms); reach for `notify` only if a poll interval that feels live
-  proves too expensive for a panel of ~10 rows.
-- Render the design: session list, `LAST 6 HOURS` lane + `% waiting on you`, elapsed timers,
-  cost footer, tray icon + badge, timeline filter (`4h · Today · Week`).
-- **Add the session name row** (spec item 13) — the mock is one revision behind the spec here.
-  Row layout: line 1 = dot · project · `×N` + branch chip *only when a project has multiple live
-  sessions*; line 2 = short state label · session name (muted, truncated) · cost.
-- Pin/dismiss wired to config; the settings panel surface (spec item 11).
+*(That last sentence held for the core. What M6 did need was an `io/` layer able to read
+1.3 GB of transcripts without melting — see the scanner note below.)*
+
+**Files:** `src-tauri/src/app.rs` (view model + the Tauri command), `src-tauri/src/io/scan.rs`
+(incremental transcript reader), `index.html`, `src/main.ts`, `src/styles.css`.
+
+- [x] **One command, `snapshot(span)`, not three.** `sessions()` + `cost(window)` +
+  `timeline(from, to)` would each re-read the event log and re-stat the transcript tree, three
+  times per tick, and could tear against one another mid-poll. One command returns one
+  internally consistent view of both inputs.
+- [x] **Refresh strategy: polling at 1s, no `notify`.** Measured on the real machine —
+  **0.5–0.7% CPU, ~95 MB RSS** with 2 176 transcript files on disk. A watcher would have bought
+  a dependency and three platform behaviours for a number that is already free. The deferral
+  from M3 paid off exactly as intended: the call was made against a real consumer, with a
+  measurement.
+- [x] **Incremental transcript scanner** (`io/scan.rs`) — the one thing M6 genuinely needed and
+  the plan didn't foresee. `~/.claude/projects` is **1.3 GB across 2 176 files** here; re-parsing
+  even the *active* files once a second is 50 MB/s of wasted work. Transcripts are append-only,
+  so each file is remembered by how many bytes we have consumed and only the tail is parsed —
+  and only up to the last complete line, since a transcript is usually mid-write. Cold start on
+  a 4h window: **0.82 s**.
+- [x] **The span filter bounds transcript discovery, not just the readout.** Files untouched
+  since the window start are never opened. The rule the panel states plainly: *it shows the
+  window you picked.* Live hook-derived sessions always show regardless.
+- [x] Render the design: session list, lane + `% waiting on you`, elapsed timers, cost footer,
+  tray icon + badge, filter (`4h · Today · Week`).
+- [x] **Session name row** (spec item 13). Line 1 = dot · project · `×N` + branch chip *only when
+  a project has multiple live sessions*; line 2 = state label · session name (muted, truncated).
+  Elapsed + cost stay in the right column, as in the mock. Tiering finished here too: the
+  transcript owns `aiTitle → lastPrompt → branch`, and the **short-id floor moved to the view**,
+  because a hook-only session has no transcript to reach it through.
+- [x] **Footer**: one window-scoped cost plus the filter control, replacing the mock's
+  `Today | This week` pair. Two costs where the filter already scopes one is a duplicated
+  number; putting the control next to the figure it scopes makes the filter discoverable and
+  costs nothing.
+- [x] **Per-session cost is `None` only when *nothing* in the session can be priced** → `—`.
+  Blanking the whole figure on any single unpriced entry sounds more honest but isn't usable:
+  real transcripts carry stray `<synthetic>` and alias model ids, so the strict rule blanks a
+  correct total over rounding dust. `cost_in_window` (the footer) still skips unpriced entries.
+- [x] `default-run = "pervigil"` in `Cargo.toml` — latent since M3 added the `record` binary;
+  `tauri dev` cannot pick between two binaries and had been failing.
+- [ ] Pin/dismiss + the settings surface — **moved to M8**, where the config file that persists
+  them is built. `fold` and `sort` already take `ViewPrefs`; M6 passes the default. Wiring a
+  control to state with nowhere to live would have to be redone a milestone later.
+
+**QA performed.** Real `~/.claude` (15 sessions, 5 projects) + real events written through the
+actual `record` shim, driven by hand exactly as a hook would. Verified: waiting-first ordering,
+the `×N` + branch chip appearing only where a project runs several sessions, the short-id floor,
+`—` for an unpriceable session, span switching (label, axis, footer, lane), the empty state, and
+the hooks-not-installed notice. Screenshots in the M6 QA notes.
+
+**Not yet verified:** the native window chrome and the **tray badge**, which need Screen
+Recording permission to capture on macOS. The code is in place and the app runs; the visual
+confirmation is outstanding and is *not* claimed.
 
 ---
 

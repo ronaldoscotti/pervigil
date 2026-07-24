@@ -9,6 +9,49 @@
   </head>
 
   <body>
-    <main id="app"></main>
+    <header class="topbar" data-tauri-drag-region>
+      <div class="brand" data-tauri-drag-region>
+        <span class="lamp"></span>
+        <span class="wordmark">Pervigil</span>
+      </div>
+      <span class="chip">Pinned</span>
+    </header>
+
+    <section class="headline">
+      <span class="headline-count" id="waiting">—</span>
+      <div class="headline-text">
+        <span class="headline-label">waiting on you</span>
+        <span class="headline-sub" id="tally"></span>
+      </div>
+    </section>
+
+    <section class="lane">
+      <div class="lane-head">
+        <span class="label" id="lane-label">Last 4 hours</span>
+        <span class="lane-share" id="share"></span>
+      </div>
+      <div class="lane-track">
+        <div class="lane-segments" id="segments"></div>
+        <span class="lane-tick" style="left: 33.333%"></span>
+        <span class="lane-tick" style="left: 66.666%"></span>
+        <span class="lane-now"></span>
+      </div>
+      <div class="lane-axis" id="axis"></div>
+    </section>
+
+    <div class="section-label">Sessions</div>
+    <main class="sessions" id="sessions"></main>
+
+    <footer class="footer">
+      <div class="spend">
+        <span class="label" id="cost-label">Last 4 hours</span>
+        <span class="spend-value" id="cost">—</span>
+      </div>
+      <div class="spans" id="spans">
+        <button type="button" data-span="4h" class="on">4h</button>
+        <button type="button" data-span="today">Today</button>
+        <button type="button" data-span="week">Week</button>
+      </div>
+    </footer>
   </body>
 </html>
