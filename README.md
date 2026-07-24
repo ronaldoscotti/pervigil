@@ -11,8 +11,11 @@ like — at a glance.
 
 > *pervigil* (Latin) — ever-watchful; keeping watch through the whole night.
 
+> 🚧 **Work in progress.** The macOS MVP is built, tested, and signed; the demo
+> capture and a couple of OS-surface confirmations are still open. Not yet released.
+
 <p align="center">
-  <img src="docs/qa/m6-panel-4h.png" alt="The Pervigil panel: two sessions waiting on you, a combined activity lane, per-session cost." width="360">
+  <img src="assets/demos/pervigil-demo.jpg" alt="The Pervigil panel: a session waiting on you sorts to the top, a combined activity lane, per-session cost." width="360">
 </p>
 
 ---
@@ -91,7 +94,7 @@ falls back rather than pretending.
 macOS, with a Rust toolchain and Node:
 
 ```bash
-git clone <this repo> && cd pervigil
+git clone https://github.com/ronaldoscotti/pervigil.git && cd pervigil
 npm install
 npm run tauri dev      # run it
 npm run tauri build    # or build a bundle
@@ -103,10 +106,10 @@ install card disappears the moment the hooks are detected.
 
 ## Status
 
-Built through **M9** of the plan — click-to-focus, notifications, config,
-pin/dismiss, project visibility, and the hook-install card are all implemented and
-QA'd, on a pure core with **103 tests**. Remaining: **M10 — a signed/notarized
-build and the demo capture.**
+Built through **M10** of the plan — click-to-focus (confirmed raising the window
+under a real GUI launch), notifications, config, pin/dismiss, project visibility,
+the hook-install card, and a **signed + notarized macOS build** — on a pure core
+with **118 tests**. Remaining: the **demo capture**.
 
 Verified honestly. The pure logic and the checkable side effects (clipboard copy,
 config and snippet round-trips, tier selection) are tested; three OS-surface effects
@@ -123,6 +126,10 @@ a description. Every stage deposits a real artifact; the git history records the
 order; nothing is claimed ahead of where the work actually is. Read
 [`docs/method/`](docs/method/) to follow it, or the git log to verify it.
 
+<p align="center">
+  <img src="assets/demos/pervigil.gif" alt="Pervigil watching its own build — sessions across projects, one waiting on you, sorted to the top." width="760">
+</p>
+
 ## License
 
-TBD.
+[MIT](LICENSE) © 2026 Ronaldo Scotti
