@@ -86,8 +86,13 @@ impl Runner for SystemRunner {
                 .ok_or_else(|| io::Error::other("no stdin"))?
                 .write_all(input.as_bytes())?;
         }
-        child.wait()?;
-        Ok(())
+        // A non-zero exit is a real failure — a stale tmux pane, an app that isn't
+        // running — so the focuser can degrade instead of claiming a false success.
+        if child.wait()?.success() {
+            Ok(())
+        } else {
+            Err(io::Error::other(format!("{program} exited non-zero")))
+        }
     }
 }
 

@@ -151,7 +151,7 @@ impl App {
             Strategy::Clipboard { resume } => resume.clone(),
             _ => format!("claude --resume {id}"),
         };
-        outcome(self.focuser.focus(&strategy), resume, strategy.label())
+        focus_with(self.focuser.as_ref(), strategy, resume)
     }
 
     /// Both inputs, folded into one view. Hooks give state, transcripts give cost,
@@ -279,6 +279,28 @@ fn project(cwd: &str) -> String {
         .to_string()
 }
 
+/// Try the chosen tier; if a precise raise fails (a stale pane, an unreachable app),
+/// fall to the clipboard floor so a click still does *something* real — degrade,
+/// never fake. Only when even the floor fails is an error surfaced.
+fn focus_with(
+    focuser: &(dyn WindowFocuser + Send + Sync),
+    strategy: Strategy,
+    resume: String,
+) -> FocusOutcome {
+    match focuser.focus(&strategy) {
+        Ok(reach) => outcome(Ok(reach), resume, strategy.label()),
+        Err(error) => match strategy {
+            Strategy::Clipboard { .. } => outcome(Err(error), resume, strategy.label()),
+            _ => {
+                let floor = Strategy::Clipboard {
+                    resume: resume.clone(),
+                };
+                outcome(focuser.focus(&floor), resume, floor.label())
+            }
+        },
+    }
+}
+
 /// Shape a focus attempt for the UI. A raise needs no follow-up; a copy or a failure
 /// both hand back the resume command so the user is never stranded.
 fn outcome(result: std::io::Result<Reach>, resume: String, label: &str) -> FocusOutcome {
@@ -365,6 +387,59 @@ mod tests {
         assert_eq!(start.weekday(), chrono::Weekday::Mon);
         assert!(start <= now);
         assert!(now - start < Duration::days(7));
+    }
+
+    /// Fails the precise tiers; only the clipboard floor works — like a Mac where a
+    /// stale tmux pane id can't be selected but `pbcopy` still runs.
+    struct OnlyClipboard;
+    impl WindowFocuser for OnlyClipboard {
+        fn focus(&self, strategy: &Strategy) -> std::io::Result<Reach> {
+            match strategy {
+                Strategy::Clipboard { .. } => Ok(Reach::Copied),
+                _ => Err(std::io::Error::other("stale window")),
+            }
+        }
+    }
+
+    /// Nothing works — an unsupported platform.
+    struct FocusNothing;
+    impl WindowFocuser for FocusNothing {
+        fn focus(&self, _strategy: &Strategy) -> std::io::Result<Reach> {
+            Err(std::io::Error::other("unsupported"))
+        }
+    }
+
+    #[test]
+    fn a_failed_raise_degrades_to_actually_copying_the_resume_command() {
+        let strategy = Strategy::Tmux { pane: "%3".into() };
+
+        let result = focus_with(&OnlyClipboard, strategy, "claude --resume s1".into());
+
+        assert!(!result.raised, "the pane was not raised");
+        assert_eq!(
+            result.error, None,
+            "the copy fallback succeeded, so no error"
+        );
+        assert_eq!(
+            result.resume.as_deref(),
+            Some("claude --resume s1"),
+            "the copied command is reported"
+        );
+        assert_eq!(result.label, "Copy resume command");
+    }
+
+    #[test]
+    fn when_even_the_clipboard_fails_the_error_is_surfaced_not_a_false_copy() {
+        let strategy = Strategy::VsCode { path: "/p".into() };
+
+        let result = focus_with(&FocusNothing, strategy, "claude --resume s1".into());
+
+        assert!(!result.raised);
+        assert!(
+            result.error.is_some(),
+            "a real failure must not read as a copy"
+        );
+        assert_eq!(result.resume.as_deref(), Some("claude --resume s1"));
     }
 
     #[test]

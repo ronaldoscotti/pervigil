@@ -217,7 +217,7 @@ async function jump(id: string) {
   try {
     const result = await invoke<FocusOutcome>("focus", { id });
     if (result.raised) toast(result.label);
-    else if (result.error) toast(`Couldn't focus — ${result.resume} copied instead`);
+    else if (result.error) toast(`Focus unavailable — resume with: ${result.resume}`);
     else toast(`${result.label} — paste to resume`);
   } catch (error) {
     console.error(error);
