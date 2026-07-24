@@ -4,6 +4,7 @@
   --sunken: #101218;
   --edge: #262a34;
   --edge-soft: #20242e;
+  --row-lift: #1c1f28;
   --ink: #eae7de;
   --ink-dim: #b8bec9;
   --muted: #878d9a;
@@ -14,8 +15,10 @@
   --working: #6fb2c4;
   --working-soft: #9fcbd6;
   --idle: #565c6a;
-  --sans: "Spectral", Georgia, serif;
-  --mono: "IBM Plex Mono", ui-monospace, monospace;
+  /* Lora is the heading voice (headline + project names); Space Mono is the body and
+     every data readout — the whole instrument reads in mono, serif marks the moments. */
+  --heading: "Lora", Georgia, serif;
+  --mono: "Space Mono", ui-monospace, monospace;
 }
 
 html,
@@ -28,13 +31,19 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  font-family: var(--sans);
+  font-family: var(--mono);
   font-optical-sizing: auto;
   color: var(--ink);
   background: linear-gradient(180deg, var(--ground) 0%, var(--ground-deep) 100%);
   -webkit-user-select: none;
   user-select: none;
   cursor: default;
+}
+
+/* The only serif moments: the headline and the project names. */
+.headline-label,
+.project {
+  font-family: var(--heading);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -549,7 +558,7 @@ body.mac .topbar {
 }
 
 .row:hover {
-  background: rgba(234, 231, 222, 0.03);
+  background: var(--row-lift);
 }
 
 .toast {
@@ -661,7 +670,7 @@ body.mac .topbar {
 
 .branch {
   font-family: var(--mono);
-  font-size: 9.5px;
+  font-size: 8.5px;
   letter-spacing: 0.02em;
   color: var(--working-soft);
   border: 1px solid rgba(111, 178, 196, 0.38);
@@ -716,6 +725,7 @@ body.mac .topbar {
 
 .name {
   min-width: 0;
+  font-size: 10.5px;
   color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
@@ -731,15 +741,15 @@ body.mac .topbar {
   transform: translateY(-50%);
   display: flex;
   gap: 5px;
-  padding: 5px 7px 5px 24px;
-  background: linear-gradient(90deg, transparent, var(--ground-deep) 30%);
+  padding: 5px 7px 5px 28px;
+  background: linear-gradient(90deg, transparent, var(--row-lift) 40%);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.12s ease;
 }
 
 .row:focus-within {
-  background: rgba(234, 231, 222, 0.03);
+  background: var(--row-lift);
 }
 
 .row:hover .row-actions,

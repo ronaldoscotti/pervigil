@@ -1,10 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
-import "@fontsource/spectral/300.css";
-import "@fontsource/spectral/400.css";
-import "@fontsource/spectral/500.css";
-import "@fontsource/ibm-plex-mono/400.css";
-import "@fontsource/ibm-plex-mono/500.css";
-import "@fontsource/ibm-plex-mono/600.css";
+import "@fontsource/lora/400.css";
+import "@fontsource/lora/500.css";
+import "@fontsource/lora/600.css";
+import "@fontsource/space-mono/400.css";
+import "@fontsource/space-mono/700.css";
 
 type SessionState = "Working" | "WaitingOnYou" | "YourTurn" | "Idle";
 type Span = "4h" | "today" | "week";
