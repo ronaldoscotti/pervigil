@@ -39,8 +39,10 @@ up in a screenshot). The video still has to win on craft and the timeline.
 3. **Session list** — all sessions ordered by last-active. Order: waiting-on-you → user-pinned →
    the rest by recency. Dead sessions (process gone) are hidden entirely, but their cost still
    counts toward totals.
-4. **Timeline band** — per-project colored segments (working / waiting / idle). The visual
-   centerpiece. Filter: `4h · Today · Week`. Same filter scopes the cost readout.
+4. **Activity lane** — one *combined* band across all sessions (working / waiting / idle), with a
+   `% waiting on you` stat. The visual centerpiece. Filter: `4h · Today · Week`; the same filter
+   scopes the cost readout. *(Revised after M2: per-row timelines were cut — a ~380px panel can't
+   legibly carry 6h of multi-state history per row. Rationale in `ui/mock/README.md`.)*
 5. **Elapsed timer** on the current state ("Blocked for 22m" is the line that makes you act).
 6. **Click to focus** — jump to the session's window/tab/pane. 4-tier best-available (see §5).
 7. **Cost (default footer)** — per session and per day/week. Token counts × a shipped price
@@ -69,7 +71,7 @@ up in a screenshot). The video still has to win on craft and the timeline.
 - Windows / Linux **binaries** — architecture supports them, we don't ship or claim them yet
   (marked "architecturally supported, untested — help wanted").
 - **Approve-from-panel** — the v2 wedge (monitor → control surface). Needs its own design.
-- Charts, budgets. (Account usage-limit gauges are **in**, but opt-in — never the default; item 13.)
+- Charts, budgets. (Account usage-limit gauges are **in**, but opt-in — never the default; item 14.)
 - Codex / Gemini / Cursor session support.
 - History beyond 30 days.
 - Wide-open configurability.
@@ -78,7 +80,7 @@ up in a screenshot). The video still has to win on craft and the timeline.
 
 Configurable when reasonable people genuinely disagree; opinionated default otherwise. v1 exposes:
 notification behavior, project visibility, terminal/focus preferences, and the usage-limits opt-in
-(item 13). Not exposed: timeline
+(item 14). Not exposed: timeline
 colors, sort order, retention window. Rule of thumb stated for interviews: *"I'd rather ship sane
 defaults with an escape hatch for the two things people actually disagree about than expose 40
 checkboxes."*

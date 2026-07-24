@@ -55,13 +55,14 @@ pervigil/
 │   │   ├── core/
 │   │   │   ├── mod.rs
 │   │   │   ├── event.rs         # Event enum + serde (the log's line schema)
-│   │   │   ├── store.rs         # fold(Vec<Event>) -> Vec<Session>  ← PURE, the heart
+│   │   │   ├── store.rs         # fold(events, now, prefs) + timeline(events, window)  ← PURE, the heart
 │   │   │   ├── session.rs       # Session, SessionState types
 │   │   │   ├── pricing.rs       # tokens × price table -> cost
 │   │   │   └── prune.rs         # drop events older than 30d
 │   │   ├── io/
 │   │   │   ├── watcher.rs       # tail events.jsonl + transcript dir (notify)
-│   │   │   └── transcript.rs    # parse ~/.claude/projects/**/*.jsonl -> tokens
+│   │   │   ├── transcript.rs    # parse ~/.claude/projects/**/*.jsonl -> tokens, title, sessions
+│   │   │   └── usage.rs         # opt-in: credentials + OAuth usage endpoint (network, not core/)
 │   │   ├── platform/
 │   │   │   ├── focuser.rs       # trait WindowFocuser + tier dispatch
 │   │   │   ├── focuser_macos.rs # AX/AppleScript, tmux, iTerm2, VS Code, clipboard
@@ -94,9 +95,19 @@ review.
 - [ ] **Step 1: Scaffold Tauri v2 app**
 
 Run: `npm create tauri-app@latest pervigil -- --template vanilla-ts` (or chosen
-frontend). Move output into repo layout above. Confirm `npm run tauri dev` opens a
-window on macOS.
-Expected: a window launches.
+frontend) **into a temp directory**, then move pieces into the repo layout above.
+Scaffolding in place would overwrite the existing `ui/` — `ui/mock/` (the M2 design
+artifact) must survive. Confirm `npm run tauri dev` opens a window on macOS.
+Expected: a window launches, `ui/mock/index.html` still present.
+
+Add to `src-tauri/Cargo.toml` — `bin/record.rs` sits outside `src/`, so Cargo won't
+discover it automatically:
+
+```toml
+[[bin]]
+name = "record"
+path = "bin/record.rs"
+```
 
 - [ ] **Step 2: Add a trivial pure-core module + failing test**
 
@@ -151,7 +162,7 @@ fn session_start_then_notification_is_waiting() {
         Event::SessionStart { id: "s1".into(), cwd: "/p".into(), pid: 10, at: 100 },
         Event::Notification { id: "s1".into(), at: 200 },
     ];
-    let sessions = fold(&events, /*now*/ 250);
+    let sessions = fold(&events, /*now*/ 250, &ViewPrefs::default());
     assert_eq!(sessions.len(), 1);
     assert_eq!(sessions[0].state, SessionState::WaitingOnYou);
     assert_eq!(sessions[0].since, 200); // elapsed anchored at the Notification
@@ -167,7 +178,8 @@ Expected: FAIL (types/fn undefined).
 
 `event.rs`: `enum Event { SessionStart{...}, Notification{...}, Stop{...}, UserPromptSubmit{...} }` with `#[serde(tag="type")]`.
 `session.rs`: `enum SessionState { Working, WaitingOnYou, Idle }`, `struct Session { id, cwd, pid, state, since, last_active }`.
-`store.rs`: `fn fold(events: &[Event], now: u64) -> Vec<Session>` — group by id, apply last-writer state transition, set `since`/`last_active`.
+`store.rs`: `fn fold(events: &[Event], now: u64, prefs: &ViewPrefs) -> Vec<Session>` — group by id, apply last-writer state transition, set `since`/`last_active`, then sort.
+`ViewPrefs { pinned: HashSet<SessionId>, dismissed: HashMap<SessionId, Timestamp> }` — pin and dismiss live in config (M8), not in the event log, so they enter `fold` as **data**. This keeps `fold` pure while letting it own the whole sort order.
 
 - [ ] **Step 4: Run — PASS**
 
@@ -176,11 +188,36 @@ Expected: FAIL (types/fn undefined).
 - [ ] **Step 6+: Add one failing test per rule, then satisfy it, then commit.** One rule per cycle:
   - `Stop` → `Idle`; `since` = Stop time.
   - `UserPromptSubmit` after waiting → `Working`.
-  - Ordering: sessions sorted waiting-first, then by `last_active` desc.
+  - Ordering, three tiers (spec item 3): `waiting-on-you` → `prefs.pinned` → the rest by `last_active` desc.
   - Multiple sessions, same cwd → two distinct sessions (keyed by id, not cwd).
   - Corrupt/unknown event line → skipped, never panics (parse layer returns `Result`; `fold` only sees valid events).
-  - Dismissed flag: a dismissed session is hidden until a *newer* event for its id arrives.
+  - Dismissed (`prefs.dismissed[id] = t`): the session is hidden until an event for its id arrives *after* `t`.
   - `now` drives elapsed only; `fold` output is otherwise pure of wall-clock.
+
+- [ ] **Step 7: `timeline()` — the data behind the activity lane (spec item 4).**
+
+`fold` answers *what is true now*; the lane needs *what was true, when*. Separate pure function:
+
+```rust
+pub struct Segment { pub state: SessionState, pub from: u64, pub to: u64 }
+
+#[test]
+fn timeline_collapses_to_aggregate_segments() {
+    // one session working, then a second starts waiting -> the window reads Waiting
+    // while any session is waiting; Working while any is working; else Idle.
+    let segs = timeline(&events, /*from*/ 0, /*to*/ 600);
+    assert_eq!(segs.first().unwrap().state, SessionState::Working);
+    assert_eq!(segs.last().unwrap().state, SessionState::WaitingOnYou);
+    assert_eq!(segs.last().unwrap().to, 600); // always closed at `to`
+}
+```
+
+`fn timeline(events: &[Event], from: u64, to: u64) -> Vec<Segment>` — aggregate across **all**
+sessions (the design settled on one combined lane, not per-row strips; see `ui/mock/README.md`).
+Precedence at any instant: `WaitingOnYou` > `Working` > `Idle`.
+- [ ] TDD: segments are contiguous and cover `[from, to]` with no gaps or overlaps.
+- [ ] TDD: `waiting_share(&segs)` → the "35% waiting on you" stat in the mock.
+- [ ] TDD: an empty event slice yields one `Idle` segment spanning the window.
 
 - [ ] **Step N: Fixture regression test**
 
@@ -228,6 +265,14 @@ Claude Code turn.
   title** (`{"type":"ai-title","aiTitle":…}`, fallback `{"type":"last-prompt","lastPrompt":…}` —
   verified present in real transcripts). Tiered: `aiTitle` → `lastPrompt` → branch → short id.
 
+**Session discovery without hooks (spec §6, item 1).** `fold` consumes only hook events, so with
+hooks uninstalled the list would be empty — but the spec promises sessions + cost still render with
+state degraded to `idle`. Transcripts already carry session id, cwd, tokens and title, so they are a
+second discovery source. `transcript::sessions()` enumerates them; `merge(hook_sessions,
+transcript_sessions)` unions by session id, hook state winning where present.
+- [ ] TDD: transcript-only session → present, `state == Idle`, cost + title intact.
+- [ ] TDD: same id from both sources → one session, hook state wins, no duplicate.
+
 **Verification (TDD where pure):**
 - [ ] TDD: line parser round-trips every `Event` variant; a corrupt line yields
   `Err` and is skipped, not fatal.
@@ -247,10 +292,11 @@ Claude Code turn.
   (the spec's honesty rule).
 - [ ] TDD: cost aggregates per session and per time-window (`4h/Today/Week`).
 
-**Opt-in usage limits (spec item 13) — separate module, gated by config.** Default footer is $
-cost (above). A settings toggle enables `usage::limits()`, which reads `~/.claude/.credentials.json`
-and calls the OAuth usage endpoint for the 5h + weekly bars. Kept behind its own module + trait so
-the endpoint call is mockable and the whole feature is off unless enabled.
+**Opt-in usage limits (spec item 14) — separate module, gated by config.** Default footer is $
+cost (above). A settings toggle enables `io::usage::limits()`, which reads
+`~/.claude/.credentials.json` and calls the OAuth usage endpoint for the 5h + weekly bars. It lives
+in `io/` (network + fs), never `core/`, and sits behind a trait so the endpoint is mockable and the
+whole feature is off unless enabled.
 - [ ] TDD (pure): footer selector — toggle off → render $ cost; toggle on → render limit gauges.
 - [ ] TDD: endpoint failure → degrade to $ cost + a quiet notice (never a blank/wrong gauge).
 - [ ] Manual: with a real token, gauges match `claude.ai/settings/usage`.
