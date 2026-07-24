@@ -20,8 +20,8 @@ docs, and reproduce it.
 | 2 | Brainstorm | `superpowers:brainstorming` | dialogue → spec | — |
 | 3 | Spec | `superpowers:brainstorming` | [`../specs/2026-07-23-pervigil-design.md`](../specs/2026-07-23-pervigil-design.md) | **human + AI review** |
 | 4 | Plan | `superpowers:writing-plans` | [`../plans/2026-07-23-pervigil-plan.md`](../plans/2026-07-23-pervigil-plan.md) | **human + AI review** |
-| 5 | Implement | `superpowers:test-driven-development` | `src-tauri/` + 81 tests *(M0–M7 done)* | tests green |
-| 6 | QA | manual + `agent-browser` | screenshots / notes *(M6–M7 pass done)* | works as a user |
+| 5 | Implement | `superpowers:test-driven-development` | `src-tauri/` + 98 tests *(M0–M8 done)* | tests green |
+| 6 | QA | manual + `agent-browser` | screenshots / notes *(M6–M8 pass done)* | works as a user |
 | 7 | Code review | `code-review` skill + self | review notes *(not started)* | issues resolved |
 | 8 | PR | git | pull request *(not started)* | **colleague review** |
 
@@ -35,8 +35,8 @@ docs, and reproduce it.
 [x] 3  Spec APPROVED   — human review gate passed (2026-07-23)
 [x] 4  Plan written    — docs/plans/2026-07-23-pervigil-plan.md
 [x] 4  Plan APPROVED   — human approval gate passed
-[~] 5  TDD implementation — M0–M7 done (81 tests). M8–M10 open.
-[~] 6  QA              — M6–M7 pass done; on-screen window raise + tray badge unverified
+[~] 5  TDD implementation — M0–M8 done (98 tests). M9–M10 open.
+[~] 6  QA              — M6–M8 pass done; on-screen raise, tray badge, notif banner unverified
 [ ] 7  Code review
 [ ] 8  PR + colleague review
 ```

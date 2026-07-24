@@ -78,11 +78,12 @@ review.
 
 ## Current position
 
-Spec and plan **approved**. Implementation through **M7** (click-to-focus): 81
-tests green; rows jump to the session's tmux pane / iTerm2 tab / VS Code folder,
-or copy the resume command at the floor. Selection, capture, and the pbcopy path
-are verified; the on-screen raise for tmux/iTerm2 is real code but manually
-unverified (no such terminals on the dev box; no Screen Recording permission).
-Next is **M8 — notifications + config + pin/dismiss + project visibility**, which
-brings the config file the deferred pin/dismiss state needs. See
+Spec and plan **approved**. Implementation through **M8**: 98 tests green.
+Click-to-focus (M7) jumps to the tmux pane / iTerm2 tab / VS Code folder or
+copies the resume command; notifications, config persistence, pin/dismiss, and
+project visibility (M8) are wired with a settings sheet. The pure logic and the
+verifiable side effects (pbcopy, config round-trip) are tested; three OS-surface
+effects stay manually unverified on this box — the on-screen window raise for
+tmux/iTerm2, the tray badge, and the notification banner (no such terminals / no
+Screen Recording permission). Next is **M9 — hook-install UX**. See
 `docs/plans/2026-07-23-pervigil-plan.md` and `docs/method/README.md`.

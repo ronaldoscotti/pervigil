@@ -5,10 +5,11 @@ use std::sync::Mutex;
 use chrono::{DateTime, Datelike, Duration, Local, TimeZone};
 use serde::{Deserialize, Serialize};
 
-use crate::core::event::{parse_log, Timestamp};
+use crate::config::Config;
+use crate::core::event::{parse_log, SessionId, Timestamp};
 use crate::core::pricing::{self, PriceTable, UsageEntry};
 use crate::core::prune::prune;
-use crate::core::session::{Session, SessionState, ViewPrefs};
+use crate::core::session::{Session, SessionState};
 use crate::core::store::{self, Segment};
 use crate::core::terminal::Terminal;
 use crate::io;
@@ -18,6 +19,7 @@ use crate::platform::liveness::{retain_live, SystemProcesses};
 
 const LOG: &str = ".pervigil/events.jsonl";
 const PROJECTS: &str = ".claude/projects";
+const CONFIG: &str = ".pervigil/config.json";
 
 /// The one filter in the UI. It scopes the lane, the cost readout, and how far back
 /// transcripts are read — the panel shows the window you picked, and nothing else.
@@ -76,6 +78,8 @@ pub struct SessionView {
     /// What a click will do — "Jump to pane", "Copy resume command", … — so the row's
     /// tooltip is honest before it's clicked.
     pub focus: String,
+    /// User-pinned: keeps the project at the top and marks the row's pin control.
+    pub pinned: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -91,6 +95,10 @@ pub struct Snapshot {
     /// False when the event log is empty: state is transcript-derived and every row
     /// reads `idle`. The UI says so rather than implying the sessions are quiet.
     pub hooks: bool,
+    /// Current settings the panel renders: the notifications toggle, and the projects
+    /// the user hid (so they can be restored even with no live session).
+    pub notifications: bool,
+    pub hidden: Vec<String>,
 }
 
 /// What a click needs to reach a session — kept from the last snapshot so a click is
@@ -112,30 +120,89 @@ pub struct FocusOutcome {
     pub error: Option<String>,
 }
 
+/// A native notification to fire — computed in `snapshot`, drained and shown by the
+/// command wrapper so the pure pipeline stays free of Tauri.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Notice {
+    pub title: String,
+    pub body: String,
+}
+
 pub struct App {
     home: PathBuf,
     prices: PriceTable,
     scanner: Mutex<Scanner>,
-    prefs: ViewPrefs,
     caps: Caps,
     focuser: Box<dyn WindowFocuser + Send + Sync>,
     targets: Mutex<HashMap<String, Target>>,
+    config: Mutex<Config>,
+    /// Last seen state per session, for notification transitions. `None` until the
+    /// first snapshot, which primes silently — the panel must not shout on launch
+    /// about sessions that were already waiting.
+    seen: Mutex<Option<HashMap<SessionId, SessionState>>>,
+    pending: Mutex<Vec<Notice>>,
 }
 
 impl App {
     pub fn new() -> Self {
         let home = io::home().unwrap_or_default();
         prune_log(&home);
+        let config = Config::load(&home.join(CONFIG));
         Self {
-            home,
+            config: Mutex::new(config),
             prices: pricing::shipped(),
             scanner: Mutex::new(Scanner::default()),
-            // ponytail: pin/dismiss land in M8 with the config file that persists them.
-            prefs: ViewPrefs::default(),
             caps: Caps::detect(),
             focuser: focuser::platform(),
             targets: Mutex::new(HashMap::new()),
+            seen: Mutex::new(None),
+            pending: Mutex::new(Vec::new()),
+            home,
         }
+    }
+
+    /// Mutate the config, persist it, and let the next snapshot reflect it.
+    fn update(&self, change: impl FnOnce(&mut Config)) {
+        let mut config = self.config.lock().expect("config lock");
+        change(&mut config);
+        let _ = config.save(&self.home.join(CONFIG));
+    }
+
+    pub fn set_notifications(&self, on: bool) {
+        self.update(|config| config.notifications = on);
+    }
+
+    pub fn set_pinned(&self, id: &str, pinned: bool) {
+        self.update(|config| {
+            if pinned {
+                config.pinned.insert(id.to_string());
+            } else {
+                config.pinned.remove(id);
+            }
+        });
+    }
+
+    pub fn set_project_hidden(&self, project: &str, hidden: bool) {
+        self.update(|config| {
+            if hidden {
+                config.hidden_projects.insert(project.to_string());
+            } else {
+                config.hidden_projects.remove(project);
+            }
+        });
+    }
+
+    /// Dismiss hides the session until it next acts (a later event un-hides it via
+    /// `fold`). Anchored at `at`, which the command passes as now.
+    pub fn dismiss(&self, id: &str, at: Timestamp) {
+        self.update(|config| {
+            config.dismissed.insert(id.to_string(), at);
+        });
+    }
+
+    /// The notices the last snapshot produced, cleared as they're taken.
+    pub fn take_pending(&self) -> Vec<Notice> {
+        std::mem::take(&mut self.pending.lock().expect("pending lock"))
     }
 
     /// Jump to a session's window, tab, or pane — or, at the floor, copy its resume
@@ -154,6 +221,17 @@ impl App {
         focus_with(self.focuser.as_ref(), strategy, resume)
     }
 
+    /// Queue a notice for each session that just entered `WaitingOnYou`. The first
+    /// snapshot only primes the baseline — it never fires, so launching the panel
+    /// doesn't alert on sessions that were already waiting. Off entirely when the
+    /// user disabled notifications, but the baseline still advances so re-enabling
+    /// doesn't replay history.
+    fn notify(&self, config: &Config, sessions: &[Session]) {
+        let mut seen = self.seen.lock().expect("seen lock");
+        let notices = notices(&mut seen, config, sessions);
+        self.pending.lock().expect("pending lock").extend(notices);
+    }
+
     /// Both inputs, folded into one view. Hooks give state, transcripts give cost,
     /// names, and any session hooks never saw; either can be missing.
     pub fn snapshot(&self, span: Span, now: DateTime<Local>) -> Snapshot {
@@ -169,9 +247,16 @@ impl App {
             .expect("scanner lock")
             .scan(&self.home.join(PROJECTS), from);
 
-        let mut sessions = store::merge(store::fold(&events, to, &self.prefs), scan.sessions);
+        let config = self.config.lock().expect("config lock").clone();
+        let prefs = config.view_prefs();
+
+        let mut sessions = store::merge(store::fold(&events, to, &prefs), scan.sessions);
         retain_live(&mut sessions, &SystemProcesses);
-        store::sort(&mut sessions, &self.prefs);
+        store::drop_dismissed(&mut sessions, &prefs);
+        sessions.retain(|session| config.shows(&project(&session.cwd)));
+        store::sort(&mut sessions, &prefs);
+
+        self.notify(&config, &sessions);
 
         *self.targets.lock().expect("targets lock") = sessions
             .iter()
@@ -209,6 +294,7 @@ impl App {
                 )
                 .label()
                 .to_string(),
+                pinned: config.pinned.contains(&session.id),
                 project: project.clone(),
             })
             .collect();
@@ -230,6 +316,8 @@ impl App {
                 .filter_map(|entry| pricing::cost(&self.prices, &entry.model, &entry.usage))
                 .sum(),
             hooks: !events.is_empty(),
+            notifications: config.notifications,
+            hidden: config.hidden_projects.iter().cloned().collect(),
             sessions,
             segments,
         }
@@ -277,6 +365,29 @@ fn project(cwd: &str) -> String {
         .find(|part| !part.is_empty())
         .unwrap_or(cwd)
         .to_string()
+}
+
+/// Advance the seen-state baseline and return a notice per session that just entered
+/// waiting. The first observation (`seen` is `None`) only primes — it never fires, so
+/// launch is silent. The baseline advances even when notifications are off, so
+/// re-enabling them doesn't replay a backlog.
+fn notices(
+    seen: &mut Option<HashMap<SessionId, SessionState>>,
+    config: &Config,
+    sessions: &[Session],
+) -> Vec<Notice> {
+    let notices = match (seen.as_ref(), config.notifications) {
+        (Some(previous), true) => store::newly_waiting(previous, sessions)
+            .into_iter()
+            .map(|session| Notice {
+                title: format!("{} — waiting on you", project(&session.cwd)),
+                body: name(session),
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
+    *seen = Some(store::states(sessions));
+    notices
 }
 
 /// Try the chosen tier; if a precise raise fails (a stale pane, an unreachable app),
@@ -330,6 +441,7 @@ fn outcome(result: std::io::Result<Reach>, resume: String, label: &str) -> Focus
 pub fn snapshot(span: Span, app: tauri::State<'_, App>, handle: tauri::AppHandle) -> Snapshot {
     let snapshot = app.snapshot(span, Local::now());
     badge(&handle, snapshot.waiting);
+    fire(&handle, app.take_pending());
     snapshot
 }
 
@@ -338,11 +450,46 @@ pub fn focus(id: String, app: tauri::State<'_, App>) -> FocusOutcome {
     app.focus(&id)
 }
 
+#[tauri::command]
+pub fn set_notifications(on: bool, app: tauri::State<'_, App>) {
+    app.set_notifications(on);
+}
+
+#[tauri::command]
+pub fn set_pinned(id: String, pinned: bool, app: tauri::State<'_, App>) {
+    app.set_pinned(&id, pinned);
+}
+
+#[tauri::command]
+pub fn set_project_hidden(project: String, hidden: bool, app: tauri::State<'_, App>) {
+    app.set_project_hidden(&project, hidden);
+}
+
+#[tauri::command]
+pub fn dismiss(id: String, app: tauri::State<'_, App>) {
+    app.dismiss(&id, Local::now().timestamp().max(0) as Timestamp);
+}
+
 /// The tray title is the count of sessions blocked on you — the product thesis, at
 /// menu-bar size. Blank at zero: nothing is waiting, so nothing shouts.
 fn badge(handle: &tauri::AppHandle, waiting: usize) {
     if let Some(tray) = handle.tray_by_id(crate::TRAY_ID) {
         let _ = tray.set_title((waiting > 0).then(|| waiting.to_string()));
+    }
+}
+
+/// Show the queued notices. Best-effort: a notification that won't show must never
+/// disturb the panel.
+fn fire(handle: &tauri::AppHandle, notices: Vec<Notice>) {
+    use tauri_plugin_notification::NotificationExt;
+
+    for notice in notices {
+        let _ = handle
+            .notification()
+            .builder()
+            .title(notice.title)
+            .body(notice.body)
+            .show();
     }
 }
 
@@ -387,6 +534,70 @@ mod tests {
         assert_eq!(start.weekday(), chrono::Weekday::Mon);
         assert!(start <= now);
         assert!(now - start < Duration::days(7));
+    }
+
+    fn waiting_session(id: &str, project: &str) -> Session {
+        Session {
+            id: id.into(),
+            cwd: format!("/Users/x/{project}"),
+            pid: Some(1),
+            state: SessionState::WaitingOnYou,
+            since: 0,
+            last_active: 0,
+            title: Some("do the thing".into()),
+            git_branch: None,
+            terminal: None,
+        }
+    }
+
+    #[test]
+    fn the_first_snapshot_primes_silently() {
+        let mut seen = None;
+
+        let fired = notices(
+            &mut seen,
+            &Config::default(),
+            &[waiting_session("s1", "proj")],
+        );
+
+        assert!(
+            fired.is_empty(),
+            "launch must not shout about existing waits"
+        );
+        assert!(seen.is_some(), "but the baseline is now set");
+    }
+
+    #[test]
+    fn entering_waiting_after_priming_fires_a_notice() {
+        let mut seen = Some(HashMap::from([("s1".to_string(), SessionState::Working)]));
+
+        let fired = notices(
+            &mut seen,
+            &Config::default(),
+            &[waiting_session("s1", "proj")],
+        );
+
+        assert_eq!(fired.len(), 1);
+        assert_eq!(fired[0].title, "proj — waiting on you");
+        assert_eq!(fired[0].body, "do the thing");
+    }
+
+    #[test]
+    fn notifications_off_fires_nothing_but_still_advances_the_baseline() {
+        let mut seen = Some(HashMap::from([("s1".to_string(), SessionState::Working)]));
+        let off = Config {
+            notifications: false,
+            ..Config::default()
+        };
+
+        let fired = notices(&mut seen, &off, &[waiting_session("s1", "proj")]);
+
+        assert!(fired.is_empty());
+        assert_eq!(
+            seen.unwrap().get("s1"),
+            Some(&SessionState::WaitingOnYou),
+            "re-enabling must not replay this as new"
+        );
     }
 
     /// Fails the precise tiers; only the clipboard floor works — like a Mac where a

@@ -2,6 +2,7 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::Manager;
 
 pub mod app;
+pub mod config;
 pub mod core;
 pub mod io;
 pub mod platform;
@@ -11,8 +12,16 @@ pub(crate) const TRAY_ID: &str = "pervigil";
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
         .manage(app::App::new())
-        .invoke_handler(tauri::generate_handler![app::snapshot, app::focus])
+        .invoke_handler(tauri::generate_handler![
+            app::snapshot,
+            app::focus,
+            app::set_notifications,
+            app::set_pinned,
+            app::set_project_hidden,
+            app::dismiss
+        ])
         .setup(|app| {
             let mut tray = TrayIconBuilder::with_id(TRAY_ID).on_tray_icon_event(|tray, event| {
                 if let TrayIconEvent::Click {

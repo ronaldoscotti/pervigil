@@ -14,8 +14,23 @@
         <span class="lamp"></span>
         <span class="wordmark">Pervigil</span>
       </div>
-      <span class="chip">Pinned</span>
+      <button type="button" class="chip chip-button" id="settings-toggle" aria-expanded="false">
+        Settings
+      </button>
     </header>
+
+    <section class="settings" id="settings" hidden>
+      <div class="settings-row">
+        <span class="settings-label">Notifications</span>
+        <button type="button" class="switch" id="notifications-switch" role="switch" aria-checked="true">
+          <span class="switch-knob"></span>
+        </button>
+      </div>
+      <div class="settings-group">
+        <span class="label">Projects shown</span>
+        <div class="project-list" id="project-list"></div>
+      </div>
+    </section>
 
     <section class="headline">
       <span class="headline-count" id="waiting">—</span>

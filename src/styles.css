@@ -128,6 +128,143 @@ body.mac .topbar {
   padding: 3px 7px;
 }
 
+.chip-button {
+  background: none;
+  cursor: default;
+}
+
+.chip-button:hover {
+  color: var(--muted);
+  border-color: #313644;
+}
+
+.chip-button[aria-expanded="true"] {
+  color: var(--ink-dim);
+  border-color: #313644;
+  background: rgba(234, 231, 222, 0.04);
+}
+
+.chip-button:focus-visible {
+  outline: 1px solid rgba(244, 184, 96, 0.7);
+}
+
+.settings {
+  flex: none;
+  padding: 14px 18px 16px;
+  border-bottom: 1px solid var(--edge);
+  background: #12141b;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.settings-label {
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+
+.settings-group {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.switch {
+  position: relative;
+  width: 38px;
+  height: 21px;
+  border-radius: 11px;
+  border: 1px solid var(--edge);
+  background: var(--sunken);
+  padding: 0;
+  cursor: default;
+  transition: background 0.16s ease, border-color 0.16s ease;
+}
+
+.switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 0.16s ease, background 0.16s ease;
+}
+
+.switch[aria-checked="true"] {
+  background: rgba(244, 184, 96, 0.22);
+  border-color: rgba(244, 184, 96, 0.5);
+}
+
+.switch[aria-checked="true"] .switch-knob {
+  transform: translateX(17px);
+  background: var(--waiting);
+}
+
+.switch:focus-visible {
+  outline: 1px solid rgba(244, 184, 96, 0.7);
+}
+
+.project-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 190px;
+  overflow-y: auto;
+}
+
+.project-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 4px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  text-align: left;
+  cursor: default;
+}
+
+.project-item:hover {
+  background: rgba(234, 231, 222, 0.03);
+}
+
+.project-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid var(--faint);
+  background: transparent;
+}
+
+.project-item[aria-pressed="true"] .project-dot {
+  background: var(--working);
+  border-color: var(--working);
+  box-shadow: 0 0 6px rgba(111, 178, 196, 0.5);
+}
+
+.project-name {
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-item[aria-pressed="true"] .project-name {
+  color: var(--ink-dim);
+}
+
+.project-item:focus-visible {
+  outline: 1px solid rgba(244, 184, 96, 0.7);
+}
+
 .headline {
   flex: none;
   position: relative;
@@ -492,6 +629,48 @@ body.mac .topbar {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.row-actions {
+  flex: none;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.row:hover .row-actions,
+.row:focus-within .row-actions,
+.row.is-pinned .row-actions {
+  opacity: 1;
+}
+
+.row-action {
+  font-family: var(--mono);
+  font-size: 8.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+  background: none;
+  border: 1px solid var(--edge);
+  border-radius: 5px;
+  padding: 3px 6px;
+  cursor: default;
+}
+
+.row-action:hover {
+  color: var(--ink-dim);
+  border-color: #313644;
+}
+
+.row-action.pin[aria-pressed="true"] {
+  color: var(--waiting-soft);
+  border-color: rgba(244, 184, 96, 0.4);
+  background: rgba(244, 184, 96, 0.07);
+}
+
+.row-action:focus-visible {
+  outline: 1px solid rgba(244, 184, 96, 0.7);
 }
 
 .row-right {

@@ -17,6 +17,7 @@ interface SessionView {
   siblings: number;
   cost: number | null;
   focus: string;
+  pinned: boolean;
 }
 
 interface FocusOutcome {
@@ -41,6 +42,8 @@ interface Snapshot {
   waitingShare: number;
   cost: number;
   hooks: boolean;
+  notifications: boolean;
+  hidden: string[];
 }
 
 const TONE: Record<SessionState, string> = {
@@ -105,10 +108,16 @@ function row(session: SessionView, now: number): HTMLElement {
         <span class="name"></span>
       </div>
     </div>
+    <div class="row-actions">
+      <button type="button" class="row-action pin" data-act="pin" aria-pressed="${session.pinned}"
+        title="${session.pinned ? "Unpin" : "Pin to top"}">${session.pinned ? "Pinned" : "Pin"}</button>
+      <button type="button" class="row-action" data-act="dismiss" title="Dismiss until it acts again">Dismiss</button>
+    </div>
     <div class="row-right">
       <div class="elapsed"></div>
       <div class="row-cost"></div>
     </div>`;
+  node.classList.toggle("is-pinned", session.pinned);
 
   const text = (selector: string, value: string) => {
     const target = node.querySelector(selector);
@@ -199,6 +208,30 @@ function render(snapshot: Snapshot, span: Span) {
   renderLane(snapshot, span);
   renderSessions(snapshot);
   renderNotice(snapshot.hooks);
+  renderSettings(snapshot);
+}
+
+/** Reflect current settings; skipped while the sheet is open so a click isn't fought. */
+function renderSettings(snapshot: Snapshot) {
+  const sw = el("notifications-switch");
+  sw.setAttribute("aria-checked", String(snapshot.notifications));
+
+  if (el("settings").hidden) return;
+
+  const projects = [...new Set([...snapshot.sessions.map((s) => s.project), ...snapshot.hidden])].sort();
+  const list = el("project-list");
+  list.replaceChildren();
+  for (const project of projects) {
+    const shown = !snapshot.hidden.includes(project);
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "project-item";
+    item.dataset.project = project;
+    item.setAttribute("aria-pressed", String(shown));
+    item.innerHTML = `<span class="project-dot"></span><span class="project-name"></span>`;
+    (item.querySelector(".project-name") as HTMLElement).textContent = project;
+    list.append(item);
+  }
 }
 
 let span: Span = "4h";
@@ -223,6 +256,16 @@ async function jump(id: string) {
     console.error(error);
     toast("Focus failed");
   }
+}
+
+/** A settings mutation: fire-and-forget, then re-poll so the change shows at once. */
+async function set(command: string, args: Record<string, unknown>) {
+  try {
+    await invoke(command, args);
+  } catch (error) {
+    console.error(error);
+  }
+  poll();
 }
 
 let inflight = false;
@@ -253,8 +296,20 @@ window.addEventListener("DOMContentLoaded", () => {
   });
 
   const activate = (event: Event) => {
-    const row = (event.target as HTMLElement).closest<HTMLElement>(".row[data-id]");
-    if (row?.dataset.id) jump(row.dataset.id);
+    const target = event.target as HTMLElement;
+    const action = target.closest<HTMLElement>("[data-act]");
+    const row = target.closest<HTMLElement>(".row[data-id]");
+    const id = row?.dataset.id;
+    if (!id) return;
+
+    // A pin/dismiss control acts on the session without jumping to it.
+    if (action?.dataset.act === "pin") {
+      set("set_pinned", { id, pinned: action.getAttribute("aria-pressed") !== "true" });
+    } else if (action?.dataset.act === "dismiss") {
+      set("dismiss", { id });
+    } else {
+      jump(id);
+    }
   };
   el("sessions").addEventListener("click", activate);
   el("sessions").addEventListener("keydown", (event) => {
@@ -262,6 +317,27 @@ window.addEventListener("DOMContentLoaded", () => {
       event.preventDefault();
       activate(event);
     }
+  });
+
+  el("settings-toggle").addEventListener("click", () => {
+    const sheet = el("settings");
+    sheet.hidden = !sheet.hidden;
+    el("settings-toggle").setAttribute("aria-expanded", String(!sheet.hidden));
+    if (!sheet.hidden) poll();
+  });
+
+  el("notifications-switch").addEventListener("click", (event) => {
+    const on = (event.currentTarget as HTMLElement).getAttribute("aria-checked") !== "true";
+    set("set_notifications", { on });
+  });
+
+  el("project-list").addEventListener("click", (event) => {
+    const item = (event.target as HTMLElement).closest<HTMLElement>("[data-project]");
+    if (!item?.dataset.project) return;
+    set("set_project_hidden", {
+      project: item.dataset.project,
+      hidden: item.getAttribute("aria-pressed") === "true",
+    });
   });
 
   // ponytail: polling, not a filesystem watcher — the panel is ~10 rows and the

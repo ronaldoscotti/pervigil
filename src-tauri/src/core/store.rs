@@ -103,6 +103,30 @@ pub fn sort(sessions: &mut [Session], prefs: &ViewPrefs) {
     });
 }
 
+/// Sessions that *entered* `WaitingOnYou` since `previous` — the only honest trigger
+/// for a notification (spec item 8). A session already waiting last tick is not
+/// returned, so a still-blocked session never re-notifies; one unseen in `previous`
+/// but waiting now is (a fresh block), which the caller silences only on the very
+/// first observation.
+pub fn newly_waiting<'a>(
+    previous: &HashMap<SessionId, SessionState>,
+    current: &'a [Session],
+) -> Vec<&'a Session> {
+    current
+        .iter()
+        .filter(|session| session.state == SessionState::WaitingOnYou)
+        .filter(|session| previous.get(&session.id) != Some(&SessionState::WaitingOnYou))
+        .collect()
+}
+
+/// Every current session's state, to carry into the next tick's [`newly_waiting`].
+pub fn states(sessions: &[Session]) -> HashMap<SessionId, SessionState> {
+    sessions
+        .iter()
+        .map(|session| (session.id.clone(), session.state))
+        .collect()
+}
+
 fn tier(session: &Session, prefs: &ViewPrefs) -> u8 {
     if session.state == SessionState::WaitingOnYou {
         0
@@ -154,13 +178,19 @@ pub fn fold(events: &[Event], _now: Timestamp, prefs: &ViewPrefs) -> Vec<Session
         }
     }
 
+    drop_dismissed(&mut sessions, prefs);
+    sort(&mut sessions, prefs);
+    sessions
+}
+
+/// Hide dismissed sessions until they act again. Applied after [`merge`] too, so it
+/// also covers transcript-only sessions — which never pass through [`fold`] and would
+/// otherwise ignore a dismiss.
+pub fn drop_dismissed(sessions: &mut Vec<Session>, prefs: &ViewPrefs) {
     sessions.retain(|session| match prefs.dismissed.get(&session.id) {
         Some(dismissed_at) => session.last_active > *dismissed_at,
         None => true,
     });
-
-    sort(&mut sessions, prefs);
-    sessions
 }
 
 #[cfg(test)]
@@ -422,6 +452,62 @@ mod tests {
                 .and_then(|t| t.tmux_pane.as_deref()),
             Some("%3")
         );
+    }
+
+    fn waiting(id: &str) -> Session {
+        session(id, SessionState::WaitingOnYou, None, None)
+    }
+
+    #[test]
+    fn dismiss_hides_a_transcript_only_session_too() {
+        // Transcript sessions are added by merge, after fold's own dismiss pass, so
+        // the filter has to run again on the merged list.
+        let mut sessions = vec![session("t1", SessionState::Idle, Some("done"), None)];
+        let prefs = ViewPrefs {
+            dismissed: HashMap::from([("t1".to_string(), 200)]),
+            ..Default::default()
+        };
+
+        drop_dismissed(&mut sessions, &prefs);
+
+        assert!(
+            sessions.is_empty(),
+            "a dismissed transcript session must hide"
+        );
+    }
+
+    #[test]
+    fn a_session_entering_waiting_is_a_notification() {
+        let previous = HashMap::from([("s1".to_string(), SessionState::Working)]);
+        let current = vec![waiting("s1")];
+
+        let fire = newly_waiting(&previous, &current);
+
+        assert_eq!(fire.len(), 1);
+        assert_eq!(fire[0].id, "s1");
+    }
+
+    #[test]
+    fn a_session_already_waiting_does_not_re_notify() {
+        let previous = HashMap::from([("s1".to_string(), SessionState::WaitingOnYou)]);
+        let current = vec![waiting("s1")];
+
+        assert!(newly_waiting(&previous, &current).is_empty());
+    }
+
+    #[test]
+    fn a_session_leaving_waiting_is_not_a_notification() {
+        let previous = HashMap::from([("s1".to_string(), SessionState::WaitingOnYou)]);
+        let current = vec![session("s1", SessionState::Working, None, None)];
+
+        assert!(newly_waiting(&previous, &current).is_empty());
+    }
+
+    #[test]
+    fn a_freshly_appeared_waiting_session_notifies() {
+        let current = vec![waiting("new")];
+
+        assert_eq!(newly_waiting(&HashMap::new(), &current).len(), 1);
     }
 
     #[test]

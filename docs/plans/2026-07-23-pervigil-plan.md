@@ -475,15 +475,35 @@ Never raise a guessed window.
 
 ---
 
-## M8 — Notifications + config + pin/dismiss + project visibility
+## M8 — Notifications + config + pin/dismiss + project visibility  ✅ done (banner display unverified)
 
-**Files:** `src-tauri/src/config.rs`, notification glue
+**Files:** `src-tauri/src/config.rs` (persistence), `store::{newly_waiting, states, drop_dismissed}`,
+`app.rs` (commands + notice priming + visibility), `index.html` + `src/main.ts` + `src/styles.css`
+(settings sheet, pin/dismiss row controls).
 
-- [ ] TDD: notification fires on transition **into** `WaitingOnYou` only; never on
-  `Idle`/`Working` (dedupe on repeated states).
-- [ ] TDD: config load/save round-trip; sane defaults when file absent.
-- [ ] Config surface stays short & opinionated: notifications, project visibility,
-  terminal/focus prefs (per spec §2). Pin/dismiss persist in config.
+- [x] TDD: notification fires on the transition **into** `WaitingOnYou` only — never on
+  `Idle`/`Working`, and dedupe means a still-blocked session never re-fires (`newly_waiting`,
+  4 tests). The first snapshot **primes silently**; disabling notifications fires nothing but
+  still advances the baseline, so re-enabling doesn't replay a backlog (`notices`, 3 tests).
+- [x] TDD: config load/save round-trips; a missing / corrupt / partial file degrades to defaults,
+  never panicking — settings must not be able to stop the panel opening (7 tests).
+- [x] Config surface stays short & opinionated (spec §2): a notifications switch and a
+  project-visibility list — nothing else exposed. Fires via `tauri-plugin-notification`, gated on
+  the toggle, computed in the pure pipeline and shown by the command wrapper so `snapshot` stays
+  Tauri-free.
+- [x] Pin/dismiss persist in config and thread into `fold` as `ViewPrefs`; pin keeps a project on
+  top, dismiss hides a session until it next acts. Project visibility filters the **list only** —
+  the lane and totals still aggregate every session (spec item 4).
+- [x] **Self-review fix:** dismiss was applied only inside `fold`, so a **transcript-only** session
+  (added by `merge` afterward) ignored it. Extracted `store::drop_dismissed` and applied it to the
+  merged list too. Test covers the transcript case.
+- [ ] The native banner **appearing on screen** — wired and unit-tested up to the OS call, but
+  confirming the banner needs a granted-permission desktop session this environment can't capture
+  (same posture as the tray badge and on-screen raise). `docs/qa/2026-07-24-m8.md`.
+
+**Deferred from spec §2:** terminal/focus preferences. The focuser (M7) auto-detects the tier and
+degrades honestly; there is no disagreement for a setting to resolve yet, so exposing one would be a
+checkbox without a decision behind it. Add it only if a real need to override the auto-tier appears.
 
 ---
 
