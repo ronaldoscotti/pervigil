@@ -55,7 +55,7 @@ pervigil/
 │   │   ├── core/
 │   │   │   ├── mod.rs
 │   │   │   ├── event.rs         # Event enum + serde (the log's line schema)
-│   │   │   ├── store.rs         # fold(events, now, prefs) + timeline(events, window)  ← PURE, the heart
+│   │   │   ├── store.rs         # fold(events, now, prefs) + timeline(events, from, to) + merge()  ← PURE, the heart
 │   │   │   ├── session.rs       # Session, SessionState types
 │   │   │   ├── pricing.rs       # tokens × price table -> cost
 │   │   │   └── prune.rs         # drop events older than 30d
@@ -177,9 +177,13 @@ Expected: FAIL (types/fn undefined).
 - [ ] **Step 3: Minimal types + fold**
 
 `event.rs`: `enum Event { SessionStart{...}, Notification{...}, Stop{...}, UserPromptSubmit{...} }` with `#[serde(tag="type")]`.
-`session.rs`: `enum SessionState { Working, WaitingOnYou, Idle }`, `struct Session { id, cwd, pid, state, since, last_active }`.
+`session.rs`: `type SessionId = String; type Timestamp = u64;`
+`enum SessionState { Working, WaitingOnYou, Idle }`,
+`struct Session { id: SessionId, cwd: String, pid: Option<u32>, state, since: Timestamp, last_active: Timestamp }`.
+**`pid` is optional** — transcript-derived sessions (M3) carry no pid, and M5 must not treat a
+missing pid as evidence of death.
 `store.rs`: `fn fold(events: &[Event], now: u64, prefs: &ViewPrefs) -> Vec<Session>` — group by id, apply last-writer state transition, set `since`/`last_active`, then sort.
-`ViewPrefs { pinned: HashSet<SessionId>, dismissed: HashMap<SessionId, Timestamp> }` — pin and dismiss live in config (M8), not in the event log, so they enter `fold` as **data**. This keeps `fold` pure while letting it own the whole sort order.
+`#[derive(Default)] struct ViewPrefs { pinned: HashSet<SessionId>, dismissed: HashMap<SessionId, Timestamp> }` — pin and dismiss live in config (M8), not in the event log, so they enter `fold` as **data**. This keeps `fold` pure while letting it own the whole sort order.
 
 - [ ] **Step 4: Run — PASS**
 
@@ -219,6 +223,10 @@ Precedence at any instant: `WaitingOnYou` > `Working` > `Idle`.
 - [ ] TDD: `waiting_share(&segs)` → the "35% waiting on you" stat in the mock.
 - [ ] TDD: an empty event slice yields one `Idle` segment spanning the window.
 
+The lane and `waiting_share()` aggregate **every** session — including dismissed, dead, and
+projects hidden by project visibility (item 10). The lane is a record of your day, not a filtered
+view; visibility filters the *list* only. `timeline()` therefore takes no `ViewPrefs`.
+
 - [ ] **Step N: Fixture regression test**
 
 Add `tests/fixtures/full_day.jsonl` (a realistic multi-project day: killed
@@ -235,16 +243,20 @@ screenshot is the deliverable, so design is de-risked *now*, not at QA.
 
 **Sub-skill:** `frontend-design:frontend-design`.
 
-**Files:**
-- Create: `ui/mock/index.html` (self-contained), `ui/mock/fixture.json` (session data shaped exactly like `fold`'s output from M1)
+**Status: done** — ran ahead of M0/M1, deliberately, to de-risk the look before any plumbing.
+
+**Files:** `ui/mock/index.html` (self-contained; sample data is inlined rather than loaded from a
+`fixture.json`), `ui/mock/README.md` (direction, source project, decisions settled).
 
 **Tasks (not TDD — this is design):**
-- [ ] Export a realistic `fold` output from the M1 fixture into `ui/mock/fixture.json` (real data shapes, so the mock isn't lying about density).
-- [ ] Use `frontend-design` to produce a static, self-contained mockup rendering that data: session list (waiting-on-you pinned top), the timeline band (`4h · Today · Week`), elapsed timers, per-day cost. Light + dark.
-- [ ] Capture the screenshot. **Gate: does it read as staff-level?** If not, iterate here — cheaply — before any UI plumbing exists.
+- [x] Produce a static, self-contained mockup with `frontend-design`: session list (waiting-on-you first), the activity lane, elapsed timers, cost footer.
+- [x] **Gate: does it read as staff-level?** Iterated four rounds; passed.
+- [ ] Add the session name row (spec item 13) — the mock is one revision behind the spec.
+- [ ] Re-check the lane against the real `Segment` shape once M1 Step 7 lands, so the mock isn't asserting a shape the core can't produce.
 
-**Verification:** a screenshot exists and clears the bar. This milestone's output
-is also the first thing worth showing anyone.
+**Verification:** a screenshot exists and clears the bar. Two decisions this milestone
+settled — per-row timelines cut, branch chips only when they disambiguate — are recorded in
+`ui/mock/README.md` so they aren't re-litigated.
 
 ---
 
@@ -253,7 +265,9 @@ is also the first thing worth showing anyone.
 **Goal:** Get real events into the log and into the core, without ever blocking a
 Claude Code turn.
 
-**Files:** `src-tauri/bin/record.rs`, `src-tauri/src/io/watcher.rs`, `transcript.rs`
+**Files:** `src-tauri/bin/record.rs`, `src-tauri/src/io/watcher.rs`, `src-tauri/src/io/transcript.rs`,
+and `merge()` in `src-tauri/src/core/store.rs` (it's a pure function over two `Vec<Session>` — it
+belongs beside `fold`, never in `io/`).
 
 **Interfaces & rules:**
 - `record`: reads hook JSON on stdin/args, appends one atomic line to
@@ -311,6 +325,8 @@ whole feature is off unless enabled.
 - [ ] `liveness`: `sysinfo` — is pid alive? Dead session → hidden from list, cost
   still counted. TDD the *filter* logic with an injected `is_alive` fn (keep the
   syscall behind a trait so the rule is testable without real processes).
+- [ ] TDD: **`pid: None` is not evidence of death — keep the session.** Transcript-derived
+  sessions (M3) have no pid; hiding them would silently re-break the hooks-not-installed path.
 
 ---
 
@@ -322,9 +338,9 @@ whole feature is off unless enabled.
 **Verification:** `agent-browser` QA — screenshot the running app against the same
 scenarios as the M2 mock; diff intent. This is where QA-as-user happens. Not TDD.
 
-**Tasks (expanded when reached):** Tauri commands exposing `sessions()` +
-`cost(window)`; frontend subscribes to watcher events; tray icon + badge; timeline
-filter; pin/dismiss wired to config.
+**Tasks (expanded when reached):** Tauri commands exposing `sessions()`, `cost(window)` and
+`timeline(from, to)`; frontend subscribes to watcher events; tray icon + badge; timeline filter;
+pin/dismiss wired to config; the settings panel surface (spec item 11).
 
 ---
 

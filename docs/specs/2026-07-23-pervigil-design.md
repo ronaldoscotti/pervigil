@@ -137,7 +137,7 @@ state degrades to `idle` rather than breaking.
 |------------|--------------------------------------------------|------------|
 | `record`   | append hook event, atomically                    | —          |
 | `watcher`  | tail events.jsonl + transcript dir               | fs notify  |
-| `store`    | `fold(Vec<Event>) -> Vec<Session>` — **pure**    | —          |
+| `store`    | `fold(events, now, prefs)`, `timeline(events, from, to)`, `merge()` — **pure** | — |
 | `pricing`  | tokens × table → cost                            | price JSON |
 | `focuser`  | `trait WindowFocuser` + per-OS impls             | OS APIs    |
 | `liveness` | is this session's process alive?                 | OS APIs    |
