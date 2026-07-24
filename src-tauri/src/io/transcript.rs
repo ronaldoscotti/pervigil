@@ -123,6 +123,7 @@ impl Transcript {
             since: self.last_active,
             last_active: self.last_active,
             git_branch: self.git_branch.clone(),
+            terminal: None,
         })
     }
 

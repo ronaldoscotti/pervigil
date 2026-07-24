@@ -127,7 +127,13 @@ pub fn fold(events: &[Event], _now: Timestamp, prefs: &ViewPrefs) -> Vec<Session
 
     for event in events {
         match event {
-            Event::SessionStart { id, cwd, pid, at } => sessions.push(Session {
+            Event::SessionStart {
+                id,
+                cwd,
+                pid,
+                at,
+                term,
+            } => sessions.push(Session {
                 id: id.clone(),
                 cwd: cwd.clone(),
                 pid: *pid,
@@ -136,6 +142,7 @@ pub fn fold(events: &[Event], _now: Timestamp, prefs: &ViewPrefs) -> Vec<Session
                 last_active: *at,
                 title: None,
                 git_branch: None,
+                terminal: term.clone(),
             }),
             Event::Notification { id, at } => {
                 transition(&mut sessions, id, SessionState::WaitingOnYou, *at)
@@ -168,6 +175,7 @@ mod tests {
             cwd: format!("/{id}"),
             pid: Some(10),
             at,
+            term: None,
         }
     }
 
@@ -358,6 +366,7 @@ mod tests {
             last_active: 100,
             title: title.map(str::to_string),
             git_branch: None,
+            terminal: None,
         }
     }
 
@@ -392,6 +401,30 @@ mod tests {
     }
 
     #[test]
+    fn fold_carries_the_terminal_hint_from_session_start() {
+        let events = vec![Event::SessionStart {
+            id: "s1".into(),
+            cwd: "/p".into(),
+            pid: Some(10),
+            at: 100,
+            term: Some(crate::core::terminal::Terminal {
+                tmux_pane: Some("%3".into()),
+                ..Default::default()
+            }),
+        }];
+
+        let sessions = fold_default(&events, 200);
+
+        assert_eq!(
+            sessions[0]
+                .terminal
+                .as_ref()
+                .and_then(|t| t.tmux_pane.as_deref()),
+            Some("%3")
+        );
+    }
+
+    #[test]
     fn same_cwd_different_ids_are_distinct_sessions() {
         let events = vec![
             start("s1", 100),
@@ -400,6 +433,7 @@ mod tests {
                 cwd: "/s1".into(),
                 pid: Some(11),
                 at: 110,
+                term: None,
             },
         ];
 

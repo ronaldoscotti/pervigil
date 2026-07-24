@@ -12,7 +12,7 @@ pub(crate) const TRAY_ID: &str = "pervigil";
 pub fn run() {
     tauri::Builder::default()
         .manage(app::App::new())
-        .invoke_handler(tauri::generate_handler![app::snapshot])
+        .invoke_handler(tauri::generate_handler![app::snapshot, app::focus])
         .setup(|app| {
             let mut tray = TrayIconBuilder::with_id(TRAY_ID).on_tray_icon_event(|tray, event| {
                 if let TrayIconEvent::Click {

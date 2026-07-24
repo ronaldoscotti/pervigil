@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
@@ -9,8 +10,10 @@ use crate::core::pricing::{self, PriceTable, UsageEntry};
 use crate::core::prune::prune;
 use crate::core::session::{Session, SessionState, ViewPrefs};
 use crate::core::store::{self, Segment};
+use crate::core::terminal::Terminal;
 use crate::io;
 use crate::io::scan::Scanner;
+use crate::platform::focuser::{self, Caps, Reach, Strategy, WindowFocuser};
 use crate::platform::liveness::{retain_live, SystemProcesses};
 
 const LOG: &str = ".pervigil/events.jsonl";
@@ -70,6 +73,9 @@ pub struct SessionView {
     pub siblings: usize,
     /// `None` when nothing in this session can be priced; the row shows `—`.
     pub cost: Option<f64>,
+    /// What a click will do — "Jump to pane", "Copy resume command", … — so the row's
+    /// tooltip is honest before it's clicked.
+    pub focus: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -87,11 +93,33 @@ pub struct Snapshot {
     pub hooks: bool,
 }
 
+/// What a click needs to reach a session — kept from the last snapshot so a click is
+/// an O(1) lookup, never a re-scan of the log and the transcript tree.
+#[derive(Clone)]
+struct Target {
+    cwd: String,
+    terminal: Option<Terminal>,
+}
+
+/// The result of a click, for the UI's toast. `resume` is present whenever the user
+/// may need to paste the command themselves — after a copy, or after a raise failed.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FocusOutcome {
+    pub raised: bool,
+    pub label: String,
+    pub resume: Option<String>,
+    pub error: Option<String>,
+}
+
 pub struct App {
     home: PathBuf,
     prices: PriceTable,
     scanner: Mutex<Scanner>,
     prefs: ViewPrefs,
+    caps: Caps,
+    focuser: Box<dyn WindowFocuser + Send + Sync>,
+    targets: Mutex<HashMap<String, Target>>,
 }
 
 impl App {
@@ -104,7 +132,26 @@ impl App {
             scanner: Mutex::new(Scanner::default()),
             // ponytail: pin/dismiss land in M8 with the config file that persists them.
             prefs: ViewPrefs::default(),
+            caps: Caps::detect(),
+            focuser: focuser::platform(),
+            targets: Mutex::new(HashMap::new()),
         }
+    }
+
+    /// Jump to a session's window, tab, or pane — or, at the floor, copy its resume
+    /// command. Reads the target the last snapshot recorded; an id the panel never
+    /// showed still degrades to a copyable resume command rather than erroring.
+    pub fn focus(&self, id: &str) -> FocusOutcome {
+        let target = self.targets.lock().expect("targets lock").get(id).cloned();
+        let cwd = target.as_ref().map(|t| t.cwd.as_str()).unwrap_or("");
+        let terminal = target.as_ref().and_then(|t| t.terminal.as_ref());
+
+        let strategy = focuser::select(terminal, cwd, id, self.caps);
+        let resume = match &strategy {
+            Strategy::Clipboard { resume } => resume.clone(),
+            _ => format!("claude --resume {id}"),
+        };
+        outcome(self.focuser.focus(&strategy), resume, strategy.label())
     }
 
     /// Both inputs, folded into one view. Hooks give state, transcripts give cost,
@@ -126,6 +173,19 @@ impl App {
         retain_live(&mut sessions, &SystemProcesses);
         store::sort(&mut sessions, &self.prefs);
 
+        *self.targets.lock().expect("targets lock") = sessions
+            .iter()
+            .map(|s| {
+                (
+                    s.id.clone(),
+                    Target {
+                        cwd: s.cwd.clone(),
+                        terminal: s.terminal.clone(),
+                    },
+                )
+            })
+            .collect();
+
         let projects: Vec<String> = sessions.iter().map(|s| project(&s.cwd)).collect();
         let sessions: Vec<SessionView> = sessions
             .iter()
@@ -141,6 +201,14 @@ impl App {
                     .usage
                     .get(&session.id)
                     .and_then(|entries| pricing::total(&self.prices, entries)),
+                focus: focuser::select(
+                    session.terminal.as_ref(),
+                    &session.cwd,
+                    &session.id,
+                    self.caps,
+                )
+                .label()
+                .to_string(),
                 project: project.clone(),
             })
             .collect();
@@ -211,11 +279,41 @@ fn project(cwd: &str) -> String {
         .to_string()
 }
 
+/// Shape a focus attempt for the UI. A raise needs no follow-up; a copy or a failure
+/// both hand back the resume command so the user is never stranded.
+fn outcome(result: std::io::Result<Reach>, resume: String, label: &str) -> FocusOutcome {
+    match result {
+        Ok(Reach::Raised) => FocusOutcome {
+            raised: true,
+            label: label.into(),
+            resume: None,
+            error: None,
+        },
+        Ok(Reach::Copied) => FocusOutcome {
+            raised: false,
+            label: label.into(),
+            resume: Some(resume),
+            error: None,
+        },
+        Err(error) => FocusOutcome {
+            raised: false,
+            label: label.into(),
+            resume: Some(resume),
+            error: Some(error.to_string()),
+        },
+    }
+}
+
 #[tauri::command]
 pub fn snapshot(span: Span, app: tauri::State<'_, App>, handle: tauri::AppHandle) -> Snapshot {
     let snapshot = app.snapshot(span, Local::now());
     badge(&handle, snapshot.waiting);
     snapshot
+}
+
+#[tauri::command]
+pub fn focus(id: String, app: tauri::State<'_, App>) -> FocusOutcome {
+    app.focus(&id)
 }
 
 /// The tray title is the count of sessions blocked on you — the product thesis, at
@@ -270,6 +368,45 @@ mod tests {
     }
 
     #[test]
+    fn a_raised_window_reports_no_resume_to_copy() {
+        let result = outcome(
+            Ok(Reach::Raised),
+            "claude --resume s1".into(),
+            "Jump to pane",
+        );
+
+        assert!(result.raised);
+        assert_eq!(result.resume, None);
+        assert_eq!(result.error, None);
+    }
+
+    #[test]
+    fn a_copied_fallback_hands_back_the_resume_command() {
+        let result = outcome(
+            Ok(Reach::Copied),
+            "claude --resume s1".into(),
+            "Copy resume command",
+        );
+
+        assert!(!result.raised);
+        assert_eq!(result.resume.as_deref(), Some("claude --resume s1"));
+        assert_eq!(result.error, None);
+    }
+
+    #[test]
+    fn a_failed_focus_still_offers_the_resume_command_and_the_reason() {
+        let result = outcome(
+            Err(std::io::Error::other("boom")),
+            "claude --resume s1".into(),
+            "Focus tab",
+        );
+
+        assert!(!result.raised);
+        assert_eq!(result.resume.as_deref(), Some("claude --resume s1"));
+        assert_eq!(result.error.as_deref(), Some("boom"));
+    }
+
+    #[test]
     fn a_session_no_transcript_names_falls_back_to_a_short_id() {
         let session = Session {
             id: "abcdef1234-5678".into(),
@@ -280,6 +417,7 @@ mod tests {
             last_active: 0,
             title: None,
             git_branch: None,
+            terminal: None,
         };
 
         assert_eq!(name(&session), "abcdef12");

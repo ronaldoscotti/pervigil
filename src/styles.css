@@ -337,6 +337,38 @@ body.mac .topbar {
   box-shadow: inset 0 0 0 1.5px rgba(244, 184, 96, 0.7);
 }
 
+.row:hover {
+  background: rgba(234, 231, 222, 0.03);
+}
+
+.toast {
+  position: absolute;
+  left: 50%;
+  bottom: 62px;
+  transform: translate(-50%, 8px);
+  max-width: 84%;
+  padding: 8px 13px;
+  border-radius: 8px;
+  background: #20242e;
+  border: 1px solid var(--edge);
+  box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.7);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--ink-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
 .row.waiting::before {
   content: "";
   position: absolute;

@@ -63,6 +63,7 @@ mod tests {
             last_active: 0,
             title: None,
             git_branch: None,
+            terminal: None,
         }
     }
 

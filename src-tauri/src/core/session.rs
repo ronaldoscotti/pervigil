@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 
 use super::event::{SessionId, Timestamp};
+use super::terminal::Terminal;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SessionState {
@@ -24,6 +25,9 @@ pub struct Session {
     pub title: Option<String>,
     /// `HEAD` and empty are normalised to `None` — neither names a branch.
     pub git_branch: Option<String>,
+    /// Where it runs, for click-to-focus. `None` for transcript-derived sessions and
+    /// sessions started before the shim captured it.
+    pub terminal: Option<Terminal>,
 }
 
 /// Lives in config, not the event log, so it enters `fold` as data and keeps it pure.

@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use super::terminal::Terminal;
+
 pub type SessionId = String;
 pub type Timestamp = u64;
 
@@ -14,6 +16,10 @@ pub enum Event {
         #[serde(default)]
         pid: Option<u32>,
         at: Timestamp,
+        /// Where the session runs, for click-to-focus. Absent on older log lines and
+        /// when the shim captured no signal.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        term: Option<Terminal>,
     },
     Notification {
         id: SessionId,
@@ -76,6 +82,7 @@ mod tests {
                 cwd: "/p".into(),
                 pid: Some(1),
                 at: 10,
+                term: None,
             },
             Event::Notification {
                 id: "s1".into(),
@@ -106,6 +113,7 @@ mod tests {
                 cwd: "/p".into(),
                 pid: None,
                 at: 10,
+                term: None,
             }]
         );
     }

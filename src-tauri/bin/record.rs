@@ -1,6 +1,7 @@
 use std::io::Read;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use pervigil_lib::core::terminal::Terminal;
 use pervigil_lib::io::record::{append_line, build_event};
 
 /// Always exits 0. A monitor that can fail the turn it monitors is worse than none,
@@ -16,7 +17,7 @@ fn record() -> Option<()> {
     std::io::stdin().read_to_string(&mut payload).ok()?;
 
     let at = SystemTime::now().duration_since(UNIX_EPOCH).ok()?.as_secs();
-    let event = build_event(&kind, &payload, at, parent_pid())?;
+    let event = build_event(&kind, &payload, at, parent_pid(), terminal())?;
     let line = serde_json::to_string(&event).ok()?;
 
     let path = std::env::var_os("HOME")
@@ -25,6 +26,17 @@ fn record() -> Option<()> {
         .join("events.jsonl");
 
     append_line(&path, &line).ok()
+}
+
+/// Read the terminal context from the shim's own environment — the hook runs inside
+/// the session's process tree, so these vars are the session's.
+fn terminal() -> Terminal {
+    let var = |name: &str| std::env::var(name).ok().filter(|v| !v.is_empty());
+    Terminal {
+        program: var("TERM_PROGRAM"),
+        tmux_pane: var("TMUX_PANE"),
+        iterm_session: var("ITERM_SESSION_ID"),
+    }
 }
 
 #[cfg(unix)]

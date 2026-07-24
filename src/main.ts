@@ -16,6 +16,14 @@ interface SessionView {
   since: number;
   siblings: number;
   cost: number | null;
+  focus: string;
+}
+
+interface FocusOutcome {
+  raised: boolean;
+  label: string;
+  resume: string | null;
+  error: string | null;
 }
 
 interface Segment {
@@ -78,6 +86,8 @@ function row(session: SessionView, now: number): HTMLElement {
   node.className = `row ${TONE[session.state]}`;
   node.tabIndex = 0;
   node.dataset.id = session.id;
+  node.setAttribute("role", "button");
+  node.title = session.focus;
 
   // A branch and a count only earn their space where a project runs more than one
   // session — otherwise they label everything and say nothing.
@@ -192,6 +202,29 @@ function render(snapshot: Snapshot, span: Span) {
 }
 
 let span: Span = "4h";
+let toastTimer: number | undefined;
+
+/** A brief line at the foot of the panel — what a click just did. */
+function toast(message: string) {
+  const node = el("toast");
+  node.textContent = message;
+  node.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => node.classList.remove("show"), 3200);
+}
+
+async function jump(id: string) {
+  try {
+    const result = await invoke<FocusOutcome>("focus", { id });
+    if (result.raised) toast(result.label);
+    else if (result.error) toast(`Couldn't focus — ${result.resume} copied instead`);
+    else toast(`${result.label} — paste to resume`);
+  } catch (error) {
+    console.error(error);
+    toast("Focus failed");
+  }
+}
+
 let inflight = false;
 
 async function poll() {
@@ -217,6 +250,18 @@ window.addEventListener("DOMContentLoaded", () => {
       other.classList.toggle("on", other === button);
     }
     poll();
+  });
+
+  const activate = (event: Event) => {
+    const row = (event.target as HTMLElement).closest<HTMLElement>(".row[data-id]");
+    if (row?.dataset.id) jump(row.dataset.id);
+  };
+  el("sessions").addEventListener("click", activate);
+  el("sessions").addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      activate(event);
+    }
   });
 
   // ponytail: polling, not a filesystem watcher — the panel is ~10 rows and the

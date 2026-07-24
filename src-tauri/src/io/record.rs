@@ -5,6 +5,7 @@ use std::path::Path;
 use serde::Deserialize;
 
 use crate::core::event::{Event, Timestamp};
+use crate::core::terminal::Terminal;
 
 #[derive(Deserialize)]
 struct Hook {
@@ -13,8 +14,15 @@ struct Hook {
 }
 
 /// Turn a hook payload into an event. The kind comes from the argv the hook snippet
-/// supplies, so we never depend on the payload naming itself.
-pub fn build_event(kind: &str, payload: &str, at: Timestamp, pid: Option<u32>) -> Option<Event> {
+/// supplies, so we never depend on the payload naming itself. `term` is captured from
+/// the shim's environment and only rides on `SessionStart`.
+pub fn build_event(
+    kind: &str,
+    payload: &str,
+    at: Timestamp,
+    pid: Option<u32>,
+    term: Terminal,
+) -> Option<Event> {
     let hook: Hook = serde_json::from_str(payload).ok()?;
     let id = hook.session_id?;
 
@@ -24,6 +32,7 @@ pub fn build_event(kind: &str, payload: &str, at: Timestamp, pid: Option<u32>) -
             cwd: hook.cwd.unwrap_or_default(),
             pid,
             at,
+            term: term.some(),
         }),
         "Notification" => Some(Event::Notification { id, at }),
         "Stop" => Some(Event::Stop { id, at }),
@@ -51,8 +60,13 @@ mod tests {
     const PAYLOAD: &str = r#"{"session_id":"s1","cwd":"/p","transcript_path":"/t.jsonl"}"#;
 
     #[test]
-    fn builds_a_session_start_carrying_cwd_and_pid() {
-        let event = build_event("SessionStart", PAYLOAD, 1_000, Some(42)).unwrap();
+    fn builds_a_session_start_carrying_cwd_pid_and_terminal() {
+        let term = Terminal {
+            tmux_pane: Some("%3".into()),
+            ..Default::default()
+        };
+
+        let event = build_event("SessionStart", PAYLOAD, 1_000, Some(42), term.clone()).unwrap();
 
         assert_eq!(
             event,
@@ -61,14 +75,38 @@ mod tests {
                 cwd: "/p".into(),
                 pid: Some(42),
                 at: 1_000,
+                term: Some(term),
             }
         );
     }
 
     #[test]
+    fn an_empty_terminal_hint_is_stored_as_none() {
+        let event = build_event(
+            "SessionStart",
+            PAYLOAD,
+            1_000,
+            Some(42),
+            Terminal::default(),
+        );
+
+        assert!(matches!(
+            event,
+            Some(Event::SessionStart { term: None, .. })
+        ));
+    }
+
+    #[test]
     fn builds_the_stateless_kinds() {
-        let notification = build_event("Notification", PAYLOAD, 2_000, Some(42)).unwrap();
-        let stop = build_event("Stop", PAYLOAD, 3_000, Some(42)).unwrap();
+        let notification = build_event(
+            "Notification",
+            PAYLOAD,
+            2_000,
+            Some(42),
+            Terminal::default(),
+        )
+        .unwrap();
+        let stop = build_event("Stop", PAYLOAD, 3_000, Some(42), Terminal::default()).unwrap();
 
         assert_eq!(
             notification,
@@ -88,17 +126,17 @@ mod tests {
 
     #[test]
     fn an_unknown_kind_is_ignored_rather_than_fatal() {
-        assert!(build_event("Nonsense", PAYLOAD, 1, Some(1)).is_none());
+        assert!(build_event("Nonsense", PAYLOAD, 1, Some(1), Terminal::default()).is_none());
     }
 
     #[test]
     fn a_payload_without_a_session_id_is_ignored() {
-        assert!(build_event("Stop", r#"{"cwd":"/p"}"#, 1, Some(1)).is_none());
+        assert!(build_event("Stop", r#"{"cwd":"/p"}"#, 1, Some(1), Terminal::default()).is_none());
     }
 
     #[test]
     fn a_payload_that_is_not_json_is_ignored() {
-        assert!(build_event("Stop", "not json at all", 1, Some(1)).is_none());
+        assert!(build_event("Stop", "not json at all", 1, Some(1), Terminal::default()).is_none());
     }
 
     #[test]

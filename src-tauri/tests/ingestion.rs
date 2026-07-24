@@ -6,6 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use pervigil_lib::core::event::parse_log;
 use pervigil_lib::core::session::{SessionState, ViewPrefs};
 use pervigil_lib::core::store::fold;
+use pervigil_lib::core::terminal::Terminal;
 use pervigil_lib::io::record::{append_line, build_event};
 
 const PAYLOAD: &str = r#"{"session_id":"s1","cwd":"/p"}"#;
@@ -26,7 +27,8 @@ impl TempLog {
     }
 
     fn record(&self, kind: &str, at: u64) {
-        let event = build_event(kind, PAYLOAD, at, Some(7)).expect("payload should build");
+        let event = build_event(kind, PAYLOAD, at, Some(7), Terminal::default())
+            .expect("payload should build");
         let line = serde_json::to_string(&event).expect("event should serialize");
         append_line(&self.path(), &line).expect("append should succeed");
     }

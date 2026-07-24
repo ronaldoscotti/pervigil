@@ -435,16 +435,40 @@ confirmation is outstanding and is *not* claimed.
 
 ---
 
-## M7 — Focuser: trait + tiers + honest capability detection
+## M7 — Focuser: trait + tiers + honest capability detection  ✅ done (on-screen raise unverified)
 
-**Files:** `src-tauri/src/platform/focuser.rs`, `focuser_macos.rs`
+**Files:** `src-tauri/src/core/terminal.rs` (the captured hint), `src-tauri/src/platform/focuser.rs`
+(types, pure `select`, `Caps`, the `Runner`/`WindowFocuser` traits), `src-tauri/src/platform/focuser_macos.rs`
+(the executors); capture wired through `io/record.rs` + `bin/record.rs`, `core/event.rs`,
+`core/session.rs`, `core/store.rs`; the click wired through `app.rs` + `src/main.ts`.
 
-- [ ] TDD (pure): given a session's terminal kind, tier **selection** picks the
-  right strategy (tmux → iTerm2 → VS Code `code <path>` → clipboard fallback).
-- [ ] TDD (pure): capability detection → when focus is unavailable, `focus()`
-  returns a `Degraded(reason)` the UI can render (disabled row + tooltip).
-- [ ] Manual: verify each tier actually raises the right window on a real Mac
-  (tmux pane, iTerm2 tab, VS Code folder window). Record which tiers pass.
+- [x] TDD (pure): tier **selection** picks the right strategy — tmux ≻ iTerm2 ≻ VS Code ≻
+  clipboard. tmux wins because it's the innermost context; a tier whose binary is missing is
+  **skipped, never guessed** (7 tests).
+- [x] TDD (pure): capability detection maps `PATH` + platform to `Caps`; `Caps` feeds `select`
+  so tier choice is testable without shelling out.
+- [x] **Capture terminal context at record time.** Transcripts don't carry it (verified against
+  1.3 GB of real ones) and it can't be recovered later, so `SessionStart` gained an optional
+  `term` — `program`/`tmux_pane`/`iterm_session`, read from the shim's own environment, which
+  *is* the session's. Rides the event log; `fold` carries it onto `Session`. Old log lines and
+  no-signal captures serialize to nothing.
+- [x] TDD: the executor's argv per tier, behind a `Runner` seam (recording fake) — the same
+  injected-boundary pattern liveness uses. `SystemRunner` proven **live** by a real
+  `pbcopy`→`pbpaste` round-trip.
+- [x] TDD: outcome shaping — a raise needs no follow-up; a copy or a failure both hand back the
+  resume command so the user is never stranded.
+- [x] **UI**: rows are keyboard-operable buttons (`role`, `tabindex`, Enter/Space) with a tooltip
+  naming what a click will do; a toast reports what it did. `agent-browser` QA in
+  `docs/qa/2026-07-24-m7.md`.
+- [x] **`Degraded(reason)` / disabled row → dropped, deliberately.** The resume command needs only
+  the session id, which every row has, so the clipboard tier is a universal floor and every row is
+  actionable. Inventing a disabled state that can't occur would be dishonest; instead the tooltip
+  states *how precise* the action is. Meets the spec's "tooltip explains" intent more honestly.
+- [ ] Manual: each tier actually **raising** the right window on a real Mac. VS Code + clipboard
+  verified end-to-end on the dev box; tmux + iTerm2 aren't installed here and the on-screen raise
+  needs Screen Recording permission this environment lacks — the argv is unit-tested, the raise is
+  real code, manually unverified (same posture as M6's tray badge). Known limit noted in code:
+  selecting a tmux pane / iTerm2 tab does not itself foreground a background host terminal.
 
 **Note:** correct-but-coarse (VS Code folder-level) beats precise-but-wrong.
 Never raise a guessed window.

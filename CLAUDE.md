@@ -78,8 +78,11 @@ review.
 
 ## Current position
 
-Spec and plan **approved**. Implementation through **M6** (UI wired to the live
-core): 70 tests green, panel renders real sessions, cost, and the activity lane.
-Next is **M7 — the focuser** (trait + tiers + honest capability detection); no row
-is clickable until it lands. See `docs/plans/2026-07-23-pervigil-plan.md` for the
-milestone map and `docs/method/README.md` for live status.
+Spec and plan **approved**. Implementation through **M7** (click-to-focus): 81
+tests green; rows jump to the session's tmux pane / iTerm2 tab / VS Code folder,
+or copy the resume command at the floor. Selection, capture, and the pbcopy path
+are verified; the on-screen raise for tmux/iTerm2 is real code but manually
+unverified (no such terminals on the dev box; no Screen Recording permission).
+Next is **M8 — notifications + config + pin/dismiss + project visibility**, which
+brings the config file the deferred pin/dismiss state needs. See
+`docs/plans/2026-07-23-pervigil-plan.md` and `docs/method/README.md`.
