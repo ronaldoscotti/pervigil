@@ -14,7 +14,7 @@
   --working: #6fb2c4;
   --working-soft: #9fcbd6;
   --idle: #565c6a;
-  --sans: "Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif;
+  --sans: "Fraunces Variable", "Fraunces", Georgia, serif;
   --mono: "IBM Plex Mono", ui-monospace, monospace;
 }
 
@@ -29,6 +29,7 @@ body {
   flex-direction: column;
   overflow: hidden;
   font-family: var(--sans);
+  font-optical-sizing: auto;
   color: var(--ink);
   background: linear-gradient(180deg, var(--ground) 0%, var(--ground-deep) 100%);
   -webkit-user-select: none;
