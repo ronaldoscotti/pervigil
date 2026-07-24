@@ -15,17 +15,16 @@ pub enum SessionState {
 pub struct Session {
     pub id: SessionId,
     pub cwd: String,
-    /// `None` for sessions discovered from transcripts, which carry no pid. A missing
-    /// pid is not evidence the process died.
+    /// `None` for transcript-derived sessions. A missing pid is not evidence of death.
     pub pid: Option<u32>,
     pub state: SessionState,
-    /// When the current state began — drives the elapsed timer.
     pub since: Timestamp,
     pub last_active: Timestamp,
+    /// Only transcripts carry one; hook-derived sessions start `None`.
+    pub title: Option<String>,
 }
 
-/// View-layer preferences that `fold` needs to sort and filter. They live in config,
-/// not the event log, so they enter as data to keep `fold` pure.
+/// Lives in config, not the event log, so it enters `fold` as data and keeps it pure.
 #[derive(Debug, Clone, Default)]
 pub struct ViewPrefs {
     pub pinned: HashSet<SessionId>,

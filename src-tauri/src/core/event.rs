@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 pub type SessionId = String;
 pub type Timestamp = u64;
 
-/// One line of the append-only event log, written by the `record` hook shim.
+/// One line of the append-only event log, written by the `record` shim.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum Event {
@@ -27,10 +27,8 @@ pub enum Event {
     },
 }
 
-/// Parse an event log, returning the valid events and how many lines were unreadable.
-///
-/// A corrupt line is skipped, never fatal: a half-written line from a crashed shim
-/// must not blind the whole panel.
+/// Returns the valid events and the count of unreadable lines. A half-written line
+/// from a crashed shim must never blind the panel, so corrupt lines are skipped.
 pub fn parse_log(contents: &str) -> (Vec<Event>, usize) {
     let mut events = Vec::new();
     let mut skipped = 0;

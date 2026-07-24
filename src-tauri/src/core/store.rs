@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 use super::event::{Event, SessionId, Timestamp};
 use super::session::{Session, SessionState, ViewPrefs};
 
-/// A stretch of wall-clock during which the aggregate state held steady.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Segment {
     pub state: SessionState,
@@ -13,10 +12,8 @@ pub struct Segment {
     pub to: Timestamp,
 }
 
-/// Aggregate state across all sessions over `[from, to]`, for the activity lane.
-///
-/// Deliberately takes no [`ViewPrefs`]: the lane is a record of the day, so dismissed,
-/// dead and hidden sessions all still count. Visibility filters the list, not history.
+/// Takes no [`ViewPrefs`] on purpose: the lane is a record of the day, so dismissed,
+/// dead and hidden sessions all still count.
 pub fn timeline(events: &[Event], from: Timestamp, to: Timestamp) -> Vec<Segment> {
     let mut states: HashMap<&SessionId, SessionState> = HashMap::new();
     let mut segments: Vec<Segment> = Vec::new();
@@ -34,7 +31,7 @@ pub fn timeline(events: &[Event], from: Timestamp, to: Timestamp) -> Vec<Segment
     segments
 }
 
-/// Share of the window spent with at least one session waiting on you, in `0.0..=1.0`.
+/// Fraction of the window spent waiting on you, in `0.0..=1.0`.
 pub fn waiting_share(segments: &[Segment]) -> f64 {
     let span = |segment: &Segment| segment.to - segment.from;
     let total: Timestamp = segments.iter().map(span).sum();
@@ -57,8 +54,6 @@ fn state_after(event: &Event) -> SessionState {
     }
 }
 
-/// Waiting outranks working, which outranks idle: the lane shows the most urgent
-/// thing true at that moment.
 fn aggregate(states: &HashMap<&SessionId, SessionState>) -> SessionState {
     if states.values().any(|s| *s == SessionState::WaitingOnYou) {
         SessionState::WaitingOnYou
@@ -82,7 +77,18 @@ fn extend(segments: &mut Vec<Segment>, state: SessionState, from: Timestamp, to:
     segments.push(Segment { state, from, to });
 }
 
-/// Sort tier: waiting on you, then user-pinned, then everything else.
+/// Union both discovery sources by session id. Hooks win on state and pid;
+/// transcripts add the title and any session hooks never saw. Does not sort.
+pub fn merge(mut hooks: Vec<Session>, transcripts: Vec<Session>) -> Vec<Session> {
+    for transcript in transcripts {
+        match hooks.iter_mut().find(|hook| hook.id == transcript.id) {
+            Some(hook) => hook.title = hook.title.take().or(transcript.title),
+            None => hooks.push(transcript),
+        }
+    }
+    hooks
+}
+
 fn tier(session: &Session, prefs: &ViewPrefs) -> u8 {
     if session.state == SessionState::WaitingOnYou {
         0
@@ -101,9 +107,7 @@ fn transition(sessions: &mut [Session], id: &SessionId, state: SessionState, at:
     }
 }
 
-/// Replay the event log into the current set of sessions.
-///
-/// Pure: no clock, no filesystem. `now` is supplied by the caller.
+/// Replay the event log into the current sessions. Pure: no clock, no filesystem.
 pub fn fold(events: &[Event], _now: Timestamp, prefs: &ViewPrefs) -> Vec<Session> {
     let mut sessions: Vec<Session> = Vec::new();
 
@@ -116,6 +120,7 @@ pub fn fold(events: &[Event], _now: Timestamp, prefs: &ViewPrefs) -> Vec<Session
                 state: SessionState::Working,
                 since: *at,
                 last_active: *at,
+                title: None,
             }),
             Event::Notification { id, at } => {
                 transition(&mut sessions, id, SessionState::WaitingOnYou, *at)
@@ -281,8 +286,6 @@ mod tests {
         assert_eq!(fold(&events, 600, &prefs).len(), 1);
     }
 
-    /// s1 works from 0; s2 starts at 100 and blocks at 300. Waiting outranks working,
-    /// so the window reads Working then WaitingOnYou.
     fn two_session_window() -> Vec<Event> {
         vec![
             start("s1", 0),
@@ -333,6 +336,48 @@ mod tests {
         let segments = timeline(&two_session_window(), 0, 600);
 
         assert!((waiting_share(&segments) - 0.5).abs() < f64::EPSILON);
+    }
+
+    fn session(id: &str, state: SessionState, title: Option<&str>, pid: Option<u32>) -> Session {
+        Session {
+            id: id.into(),
+            cwd: format!("/{id}"),
+            pid,
+            state,
+            since: 100,
+            last_active: 100,
+            title: title.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn a_transcript_only_session_survives_the_merge() {
+        let transcripts = vec![session("t1", SessionState::Idle, Some("Fix login"), None)];
+
+        let merged = merge(Vec::new(), transcripts);
+
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].state, SessionState::Idle);
+        assert_eq!(merged[0].pid, None);
+        assert_eq!(merged[0].title.as_deref(), Some("Fix login"));
+    }
+
+    #[test]
+    fn hook_state_wins_but_the_transcript_supplies_the_title() {
+        let hooks = vec![session("s1", SessionState::WaitingOnYou, None, Some(10))];
+        let transcripts = vec![session(
+            "s1",
+            SessionState::Idle,
+            Some("Design panel"),
+            None,
+        )];
+
+        let merged = merge(hooks, transcripts);
+
+        assert_eq!(merged.len(), 1, "same id must not duplicate");
+        assert_eq!(merged[0].state, SessionState::WaitingOnYou);
+        assert_eq!(merged[0].pid, Some(10));
+        assert_eq!(merged[0].title.as_deref(), Some("Design panel"));
     }
 
     #[test]

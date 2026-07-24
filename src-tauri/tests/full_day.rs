@@ -1,12 +1,10 @@
-//! Regression suite: one realistic day of parallel sessions, including the ugly cases —
-//! a terminal killed without a Stop event, a session resumed after hours, and two
-//! sessions live in the same project.
+//! One realistic day: a terminal killed without a Stop event, a session resumed after
+//! hours, and two sessions live in the same project.
 
 use pervigil_lib::core::event::Event;
 use pervigil_lib::core::session::{SessionState, ViewPrefs};
 use pervigil_lib::core::store::{fold, timeline, waiting_share};
 
-/// 19:00, seconds since midnight — the moment the day is read at.
 const NOW: u64 = 68_400;
 const DAY_START: u64 = 28_800;
 
