@@ -298,10 +298,16 @@ impl App {
                 state: session.state,
                 since: session.since,
                 siblings: projects.iter().filter(|other| *other == project).count(),
-                cost: scan
-                    .usage
-                    .get(&session.id)
-                    .and_then(|entries| pricing::total(&self.prices, entries)),
+                // Scoped to the same window as the footer — a row must not show a
+                // session's whole lifetime cost against a "last 4 hours" filter.
+                cost: scan.usage.get(&session.id).and_then(|entries| {
+                    let windowed: Vec<UsageEntry> = entries
+                        .iter()
+                        .filter(|entry| entry.at >= from && entry.at <= to)
+                        .cloned()
+                        .collect();
+                    pricing::total(&self.prices, &windowed)
+                }),
                 focus: focuser::select(
                     terminal_of(session).as_ref(),
                     &session.cwd,

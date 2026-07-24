@@ -151,7 +151,7 @@ body.mac .topbar {
 .chip-button,
 .chip-toggle {
   background: none;
-  cursor: default;
+  cursor: pointer;
 }
 
 .chip-button:hover,
@@ -224,7 +224,7 @@ body.mac .topbar {
   border: 1px solid transparent;
   border-radius: 5px;
   padding: 3px 9px;
-  cursor: default;
+  cursor: pointer;
 }
 
 .lang-select button:hover {
@@ -249,7 +249,7 @@ body.mac .topbar {
   border: 1px solid var(--edge);
   background: var(--sunken);
   padding: 0;
-  cursor: default;
+  cursor: pointer;
   transition: background 0.16s ease, border-color 0.16s ease;
 }
 
@@ -293,7 +293,7 @@ body.mac .topbar {
   border: none;
   border-radius: 6px;
   text-align: left;
-  cursor: default;
+  cursor: pointer;
 }
 
 .project-item:hover {
@@ -530,6 +530,7 @@ body.mac .topbar {
   padding: 13px 18px;
   border-top: 1px solid var(--edge-soft);
   outline: none;
+  cursor: pointer;
 }
 
 .row:first-child {
@@ -701,24 +702,44 @@ body.mac .topbar {
 
 .name {
   min-width: 0;
-  color: var(--faint);
+  color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+/* Overlaid on the right on hover, not laid out inline — so at rest the full row
+   width goes to the project and session name instead of reserving empty space. */
 .row-actions {
-  flex: none;
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
   gap: 4px;
+  padding: 4px 8px 4px 14px;
+  background: linear-gradient(90deg, transparent, var(--ground) 22%);
   opacity: 0;
+  pointer-events: none;
   transition: opacity 0.12s ease;
 }
 
 .row:hover .row-actions,
-.row:focus-within .row-actions,
-.row.is-pinned .row-actions {
+.row:focus-within .row-actions {
   opacity: 1;
+  pointer-events: auto;
+}
+
+/* A quiet amber rail marks a pinned row at rest, without the actions covering cost. */
+.row.is-pinned::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--your-turn);
+  opacity: 0.7;
 }
 
 .row-action {
@@ -731,7 +752,7 @@ body.mac .topbar {
   border: 1px solid var(--edge);
   border-radius: 5px;
   padding: 3px 6px;
-  cursor: default;
+  cursor: pointer;
 }
 
 .row-action:hover {
@@ -904,7 +925,7 @@ body.mac .topbar {
   border: none;
   border-radius: 6px;
   padding: 7px 13px;
-  cursor: default;
+  cursor: pointer;
   font-weight: 600;
 }
 
@@ -955,7 +976,7 @@ body.mac .topbar {
   border: 1px solid transparent;
   border-radius: 5px;
   padding: 3px 7px;
-  cursor: default;
+  cursor: pointer;
 }
 
 .spans button:hover {
