@@ -74,12 +74,17 @@ pervigil/
 │   │   └── fixtures/           # recorded event sequences (*.jsonl) + expected states
 │   ├── Cargo.toml
 │   └── tauri.conf.json
-├── ui/                         # web frontend (framework picked in M0)
-│   ├── index.html
-│   ├── src/
-│   └── mock/                   # M2 static mockup + fixture data (screenshotable)
+├── index.html                  # Vite entry — Tauri's default layout, not fought
+├── src/                        # web frontend (vanilla-ts)
+├── design/                     # M2 mockup — the locked visual direction
+├── .github/workflows/ci.yml
 └── assets/pricing.json         # shipped price table
 ```
+
+*(Frontend paths corrected during M0: `create-tauri-app` puts the entry at the repo
+root with the frontend in `src/`. The plan originally assumed a `ui/` directory;
+fighting the framework default bought nothing, so the design mock moved to
+`design/` and the tree above reflects what exists.)*
 
 **Boundary rule:** `core/` never imports `io/`, `platform/`, or Tauri. It is pure.
 That import boundary is what keeps `store` fixture-testable and is enforced by
@@ -87,12 +92,12 @@ review.
 
 ---
 
-## M0 — Scaffold, CI, test harness
+## M0 — Scaffold, CI, test harness  ✅ done
 
 **Files:**
-- Create: `src-tauri/Cargo.toml`, `src-tauri/src/main.rs`, `src-tauri/tauri.conf.json`, `ui/` (Tauri v2 init), `.github/workflows/ci.yml`
+- Create: `src-tauri/` (Cargo.toml, src/main.rs, src/lib.rs, src/core/mod.rs, tauri.conf.json, capabilities/), `index.html`, `src/`, `.github/workflows/ci.yml`
 
-- [ ] **Step 0: Verify the toolchain**
+- [x] **Step 0: Verify the toolchain**
 
 Run: `node -v && npm -v && cargo -V && rustc -V && xcode-select -p`
 Expected: all five print a version/path. Tauri needs a Rust toolchain and, on macOS,
@@ -103,24 +108,22 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source "$HOME/.cargo/env"
 ```
 
-- [ ] **Step 1: Scaffold Tauri v2 app**
+- [x] **Step 1: Scaffold Tauri v2 app**
 
-Run: `npm create tauri-app@latest pervigil -- --template vanilla-ts` (or chosen
-frontend) **into a temp directory**, then move pieces into the repo layout above.
-Scaffolding in place would overwrite the existing `ui/` — `ui/mock/` (the M2 design
-artifact) must survive. Confirm `npm run tauri dev` opens a window on macOS.
-Expected: a window launches, `ui/mock/index.html` still present.
+Run **into a temp directory**, then move the pieces in — scaffolding in place would
+overwrite the M2 design artifact:
 
-Add to `src-tauri/Cargo.toml` — `bin/record.rs` sits outside `src/`, so Cargo won't
-discover it automatically:
-
-```toml
-[[bin]]
-name = "record"
-path = "bin/record.rs"
+```bash
+npm create tauri-app@latest pervigil -- --manager npm --template vanilla-ts \
+  --identifier dev.pervigil.app --tauri-version 2 --yes
 ```
 
-- [ ] **Step 2: Add a trivial pure-core module + failing test**
+Then strip the template demo: the `greet` command, its frontend caller, the Vite/Tauri
+logo assets, and the `tauri-plugin-opener` dependency (unused — add it back if a later
+milestone needs it, and remember `capabilities/default.json` grants its permission).
+Expected: `design/index.html` still present.
+
+- [x] **Step 2: Add a trivial pure-core module + failing test**
 
 `src-tauri/src/core/mod.rs`:
 ```rust
@@ -135,18 +138,18 @@ mod tests {
 }
 ```
 
-- [ ] **Step 3: Run test**
+- [x] **Step 3: Run test**
 
 Run: `cd src-tauri && cargo test`
 Expected: PASS.
 
-- [ ] **Step 4: CI runs build + test on macOS**
+- [x] **Step 4: CI runs build + test on macOS**
 
 `.github/workflows/ci.yml`: on push/PR, `cargo test` + `cargo clippy -- -D warnings`
 + `cargo fmt --check` on `macos-latest`. (Windows/Linux jobs added in M10 as
 allowed-to-fail until tested.)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A && git commit -m "chore: scaffold Tauri v2 app, CI, and pure-core test harness"
@@ -228,7 +231,7 @@ fn timeline_collapses_to_aggregate_segments() {
 ```
 
 `fn timeline(events: &[Event], from: u64, to: u64) -> Vec<Segment>` — aggregate across **all**
-sessions (the design settled on one combined lane, not per-row strips; see `ui/mock/README.md`).
+sessions (the design settled on one combined lane, not per-row strips; see `design/README.md`).
 Precedence at any instant: `WaitingOnYou` > `Working` > `Idle`.
 - [ ] TDD: segments are contiguous and cover `[from, to]` with no gaps or overlaps.
 - [ ] TDD: `waiting_share(&segs)` → the "35% waiting on you" stat in the mock.
@@ -256,8 +259,8 @@ screenshot is the deliverable, so design is de-risked *now*, not at QA.
 
 **Status: done** — ran ahead of M0/M1, deliberately, to de-risk the look before any plumbing.
 
-**Files:** `ui/mock/index.html` (self-contained; sample data is inlined rather than loaded from a
-`fixture.json`), `ui/mock/README.md` (direction, source project, decisions settled).
+**Files:** `design/index.html` (self-contained; sample data is inlined rather than loaded from a
+`fixture.json`), `design/README.md` (direction, source project, decisions settled).
 
 **Tasks (not TDD — this is design):**
 - [x] Produce a static, self-contained mockup with `frontend-design`: session list (waiting-on-you first), the activity lane, elapsed timers, cost footer.
@@ -267,7 +270,7 @@ screenshot is the deliverable, so design is de-risked *now*, not at QA.
 
 **Verification:** a screenshot exists and clears the bar. Two decisions this milestone
 settled — per-row timelines cut, branch chips only when they disambiguate — are recorded in
-`ui/mock/README.md` so they aren't re-litigated.
+`design/README.md` so they aren't re-litigated.
 
 ---
 
@@ -281,6 +284,14 @@ and `merge()` in `src-tauri/src/core/store.rs` (it's a pure function over two `V
 belongs beside `fold`, never in `io/`).
 
 **Interfaces & rules:**
+- `record` needs an explicit Cargo target — `bin/record.rs` sits outside `src/`, so add to
+  `src-tauri/Cargo.toml` (deferred from M0: the stanza fails to build until the file exists):
+
+  ```toml
+  [[bin]]
+  name = "record"
+  path = "bin/record.rs"
+  ```
 - `record`: reads hook JSON on stdin/args, appends one atomic line to
   `~/.pervigil/events.jsonl`. **Hard timeout, always `exit(0)`, never panics** —
   a failure here must not fail the host turn.

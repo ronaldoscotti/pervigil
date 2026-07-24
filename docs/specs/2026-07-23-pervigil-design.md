@@ -42,7 +42,7 @@ up in a screenshot). The video still has to win on craft and the timeline.
 4. **Activity lane** — one *combined* band across all sessions (working / waiting / idle), with a
    `% waiting on you` stat. The visual centerpiece. Filter: `4h · Today · Week`; the same filter
    scopes the cost readout. *(Revised after M2: per-row timelines were cut — a ~380px panel can't
-   legibly carry 6h of multi-state history per row. Rationale in `ui/mock/README.md`.)*
+   legibly carry 6h of multi-state history per row. Rationale in `design/README.md`.)*
 5. **Elapsed timer** on the current state ("Blocked for 22m" is the line that makes you act).
 6. **Click to focus** — jump to the session's window/tab/pane. 4-tier best-available (see §5).
 7. **Cost (default footer)** — per session and per day/week. Token counts × a shipped price
