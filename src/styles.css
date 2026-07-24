@@ -227,34 +227,55 @@ body.mac .topbar {
 }
 
 .lang-select {
-  display: flex;
-  gap: 2px;
-}
-
-.lang-select button {
   font-family: var(--mono);
   font-size: 9.5px;
-  letter-spacing: 0.06em;
-  color: var(--faint);
-  background: none;
-  border: 1px solid transparent;
-  border-radius: 5px;
-  padding: 3px 9px;
-  cursor: pointer;
-}
-
-.lang-select button:hover {
-  color: var(--muted);
-}
-
-.lang-select button.on {
+  letter-spacing: 0.04em;
   color: var(--ink-dim);
-  border-color: var(--edge);
-  background: rgba(234, 231, 222, 0.04);
+  background-color: var(--sunken);
+  border: 1px solid var(--edge);
+  border-radius: 5px;
+  padding: 3px 22px 3px 9px;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 24 24' fill='none' stroke='%23878d9a' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 7px center;
 }
 
-.lang-select button:focus-visible {
+.lang-select:hover {
+  color: var(--ink);
+}
+
+.lang-select:focus-visible {
   outline: 1px solid rgba(244, 184, 96, 0.7);
+}
+
+.lang-select option {
+  color: var(--ink);
+  background: var(--ground);
+}
+
+[dir="rtl"] .lang-select {
+  padding: 3px 9px 3px 22px;
+  background-position: left 7px center;
+}
+
+/* Right-anchored controls and text must mirror in RTL. */
+[dir="rtl"] .row-actions {
+  right: auto;
+  left: 12px;
+  padding: 5px 28px 5px 7px;
+  background: linear-gradient(270deg, transparent, var(--row-lift) 40%);
+}
+
+[dir="rtl"] .row-right {
+  text-align: left;
+}
+
+/* The activity lane reads past → now regardless of the UI's direction. */
+.lane-segments,
+.lane-axis {
+  direction: ltr;
 }
 
 .switch {
