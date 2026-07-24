@@ -348,6 +348,17 @@ whole feature is off unless enabled.
 - [ ] TDD: endpoint failure → degrade to $ cost + a quiet notice (never a blank/wrong gauge).
 - [ ] Manual: with a real token, gauges match `claude.ai/settings/usage`.
 
+**Investigated 2026-07-24, decision: skip (not deferred — blocked).** On a real machine the
+design's assumptions don't hold: there is **no `~/.claude/.credentials.json`** (macOS keeps the
+token in the Keychain, behind a permission prompt), and nothing under `~/.claude` caches the 5h/
+weekly limit or reset values. The only source is an **undocumented, unstable OAuth endpoint** whose
+contract we don't know — building against it means hitting a private Anthropic endpoint with the
+user's token on a guessed shape, untestable, exactly the fragility the spec warned of. Not worth it.
+`~/.claude/stats-cache.json` *does* hold real historical usage (tokens by model, daily activity),
+but that's cumulative spend, not "how much of the rolling limit is left," so it doesn't answer the
+question this feature exists for. Left as the $ cost footer. Revisit only if Claude Code exposes the
+limits locally or the endpoint becomes known/stable.
+
 ---
 
 ## M5 — Liveness + prune  ✅ done
