@@ -157,7 +157,7 @@ git add -A && git commit -m "chore: scaffold Tauri v2 app, CI, and pure-core tes
 
 ---
 
-## M1 — The pure core: `store::fold` (crown jewel, full TDD)
+## M1 — The pure core: `store::fold` (crown jewel, full TDD)  ✅ done
 
 The whole product's correctness lives here. `fold` takes a chronological slice of
 events and returns the current sessions. No clock, no fs — "now" is passed in.
@@ -166,7 +166,7 @@ events and returns the current sessions. No clock, no fs — "now" is passed in.
 - Create: `src-tauri/src/core/event.rs`, `session.rs`, `store.rs`
 - Test: inline `#[cfg(test)]` + `src-tauri/tests/fixtures/`
 
-- [ ] **Step 1: Define the event + session types (failing test first)**
+- [x] **Step 1: Define the event + session types (failing test first)**
 
 Test in `store.rs`:
 ```rust
@@ -183,12 +183,12 @@ fn session_start_then_notification_is_waiting() {
 }
 ```
 
-- [ ] **Step 2: Run — verify it fails to compile/pass**
+- [x] **Step 2: Run — verify it fails to compile/pass**
 
 Run: `cargo test session_start_then_notification_is_waiting`
 Expected: FAIL (types/fn undefined).
 
-- [ ] **Step 3: Minimal types + fold**
+- [x] **Step 3: Minimal types + fold**
 
 `event.rs`: `enum Event { SessionStart{...}, Notification{...}, Stop{...}, UserPromptSubmit{...} }` with `#[serde(tag="type")]`.
 `session.rs`: `type SessionId = String; type Timestamp = u64;`
@@ -199,11 +199,11 @@ missing pid as evidence of death.
 `store.rs`: `fn fold(events: &[Event], now: u64, prefs: &ViewPrefs) -> Vec<Session>` — group by id, apply last-writer state transition, set `since`/`last_active`, then sort.
 `#[derive(Default)] struct ViewPrefs { pinned: HashSet<SessionId>, dismissed: HashMap<SessionId, Timestamp> }` — pin and dismiss live in config (M8), not in the event log, so they enter `fold` as **data**. This keeps `fold` pure while letting it own the whole sort order.
 
-- [ ] **Step 4: Run — PASS**
+- [x] **Step 4: Run — PASS**
 
-- [ ] **Step 5: Commit** — `feat(core): event/session types + fold happy path`
+- [x] **Step 5: Commit** — `feat(core): event/session types + fold happy path`
 
-- [ ] **Step 6+: Add one failing test per rule, then satisfy it, then commit.** One rule per cycle:
+- [x] **Step 6+: Add one failing test per rule, then satisfy it, then commit.** One rule per cycle:
   - `Stop` → `Idle`; `since` = Stop time.
   - `UserPromptSubmit` after waiting → `Working`.
   - Ordering, three tiers (spec item 3): `waiting-on-you` → `prefs.pinned` → the rest by `last_active` desc.
@@ -212,7 +212,7 @@ missing pid as evidence of death.
   - Dismissed (`prefs.dismissed[id] = t`): the session is hidden until an event for its id arrives *after* `t`.
   - `now` drives elapsed only; `fold` output is otherwise pure of wall-clock.
 
-- [ ] **Step 7: `timeline()` — the data behind the activity lane (spec item 4).**
+- [x] **Step 7: `timeline()` — the data behind the activity lane (spec item 4).**
 
 `fold` answers *what is true now*; the lane needs *what was true, when*. Separate pure function:
 
@@ -233,15 +233,15 @@ fn timeline_collapses_to_aggregate_segments() {
 `fn timeline(events: &[Event], from: u64, to: u64) -> Vec<Segment>` — aggregate across **all**
 sessions (the design settled on one combined lane, not per-row strips; see `design/README.md`).
 Precedence at any instant: `WaitingOnYou` > `Working` > `Idle`.
-- [ ] TDD: segments are contiguous and cover `[from, to]` with no gaps or overlaps.
-- [ ] TDD: `waiting_share(&segs)` → the "35% waiting on you" stat in the mock.
-- [ ] TDD: an empty event slice yields one `Idle` segment spanning the window.
+- [x] TDD: segments are contiguous and cover `[from, to]` with no gaps or overlaps.
+- [x] TDD: `waiting_share(&segs)` → the "35% waiting on you" stat in the mock.
+- [x] TDD: an empty event slice yields one `Idle` segment spanning the window.
 
 The lane and `waiting_share()` aggregate **every** session — including dismissed, dead, and
 projects hidden by project visibility (item 10). The lane is a record of your day, not a filtered
 view; visibility filters the *list* only. `timeline()` therefore takes no `ViewPrefs`.
 
-- [ ] **Step N: Fixture regression test**
+- [x] **Step N: Fixture regression test**
 
 Add `tests/fixtures/full_day.jsonl` (a realistic multi-project day: killed
 terminal, session resumed after hours, two sessions one project) + expected JSON.
