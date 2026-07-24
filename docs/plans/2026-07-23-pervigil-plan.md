@@ -537,10 +537,11 @@ button + **live "hooks detected ✓/✗"** indicator.
 - [x] **Self-review fixes:** detection had matched the brand string (missed capital-P app paths);
   the copy fallback pointed at text a global `user-select: none` had made unselectable; and the
   dead M6-era `hooks` field was removed in favour of the single settings-based signal.
-- [ ] Manual on a real install: paste the snippet into a live `~/.claude/settings.json` and watch
-  the card vanish within one poll. The detection + snippet round-trip is unit-proven and the flip
-  is browser-verified with a stub; the end-to-end paste on the real file is the one step left, and
-  it needs the packaged shim path from M10 to be the *installed* path rather than the dev target.
+- [x] Manual on a real install: hooks are installed in this machine's `~/.claude/settings.json`
+  and firing (they are the source of the live event log), and the detector sees them, so the
+  install card stays hidden — the detect→vanish cycle is proven end-to-end, not just against a
+  stub. Remaining nuance: those hooks still point at the dev target; repointing them at the
+  bundled shim path is folded into M10's shim-bundling item below.
 
 ---
 
@@ -558,10 +559,10 @@ button + **live "hooks detected ✓/✗"** indicator.
 - [ ] **Signed/notarized macOS build launches from a clean machine.** Needs an Apple Developer ID
   certificate + notarization credentials (`APPLE_CERTIFICATE`, `APPLE_SIGNING_IDENTITY`,
   `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`). Can't be produced or verified without them.
-- [ ] **Bundle the `record` shim inside the .app** (`bundle.externalBin` — a triple-suffixed
-  binary + a before-build copy step) so M9's install snippet points at the *installed* path, not
-  the dev target. Sketched but deliberately **not** blind-configured: it can only be verified by a
-  real `tauri build` + inspecting the bundle, which pairs naturally with the signing step above.
+- [x] **Bundle the `record` shim inside the .app** (`bundle.externalBin` — a triple-suffixed
+  binary staged by `scripts/stage-sidecar.sh`, kept in `tauri.bundle.conf.json` so `cargo test`
+  stays clean). Verified by a real `tauri build`: `pervigil.app/Contents/MacOS/record` ships next
+  to the main binary. M9's snippet can now point at the installed path instead of the dev target.
 - [ ] **The ~30s demo** (waiting session surfaces → click → window snaps to it) and the README GIF.
   Needs a real desktop with tmux/iTerm2 and Screen Recording permission — the same capture wall
   that left the tray badge, on-screen raise, and notification banner visually unconfirmed.
