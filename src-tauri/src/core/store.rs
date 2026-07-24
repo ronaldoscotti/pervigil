@@ -1,5 +1,86 @@
+use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
+
 use super::event::{Event, SessionId, Timestamp};
 use super::session::{Session, SessionState, ViewPrefs};
+
+/// A stretch of wall-clock during which the aggregate state held steady.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Segment {
+    pub state: SessionState,
+    pub from: Timestamp,
+    pub to: Timestamp,
+}
+
+/// Aggregate state across all sessions over `[from, to]`, for the activity lane.
+///
+/// Deliberately takes no [`ViewPrefs`]: the lane is a record of the day, so dismissed,
+/// dead and hidden sessions all still count. Visibility filters the list, not history.
+pub fn timeline(events: &[Event], from: Timestamp, to: Timestamp) -> Vec<Segment> {
+    let mut states: HashMap<&SessionId, SessionState> = HashMap::new();
+    let mut segments: Vec<Segment> = Vec::new();
+    let mut cursor = from;
+
+    for event in events.iter().filter(|event| event.at() <= to) {
+        if event.at() > cursor {
+            extend(&mut segments, aggregate(&states), cursor, event.at());
+            cursor = event.at();
+        }
+        states.insert(event.id(), state_after(event));
+    }
+
+    extend(&mut segments, aggregate(&states), cursor, to);
+    segments
+}
+
+/// Share of the window spent with at least one session waiting on you, in `0.0..=1.0`.
+pub fn waiting_share(segments: &[Segment]) -> f64 {
+    let span = |segment: &Segment| segment.to - segment.from;
+    let total: Timestamp = segments.iter().map(span).sum();
+    if total == 0 {
+        return 0.0;
+    }
+    let waiting: Timestamp = segments
+        .iter()
+        .filter(|segment| segment.state == SessionState::WaitingOnYou)
+        .map(span)
+        .sum();
+    waiting as f64 / total as f64
+}
+
+fn state_after(event: &Event) -> SessionState {
+    match event {
+        Event::Notification { .. } => SessionState::WaitingOnYou,
+        Event::Stop { .. } => SessionState::Idle,
+        Event::SessionStart { .. } | Event::UserPromptSubmit { .. } => SessionState::Working,
+    }
+}
+
+/// Waiting outranks working, which outranks idle: the lane shows the most urgent
+/// thing true at that moment.
+fn aggregate(states: &HashMap<&SessionId, SessionState>) -> SessionState {
+    if states.values().any(|s| *s == SessionState::WaitingOnYou) {
+        SessionState::WaitingOnYou
+    } else if states.values().any(|s| *s == SessionState::Working) {
+        SessionState::Working
+    } else {
+        SessionState::Idle
+    }
+}
+
+fn extend(segments: &mut Vec<Segment>, state: SessionState, from: Timestamp, to: Timestamp) {
+    if from >= to {
+        return;
+    }
+    if let Some(last) = segments.last_mut() {
+        if last.state == state {
+            last.to = to;
+            return;
+        }
+    }
+    segments.push(Segment { state, from, to });
+}
 
 /// Sort tier: waiting on you, then user-pinned, then everything else.
 fn tier(session: &Session, prefs: &ViewPrefs) -> u8 {
@@ -198,6 +279,60 @@ mod tests {
         };
 
         assert_eq!(fold(&events, 600, &prefs).len(), 1);
+    }
+
+    /// s1 works from 0; s2 starts at 100 and blocks at 300. Waiting outranks working,
+    /// so the window reads Working then WaitingOnYou.
+    fn two_session_window() -> Vec<Event> {
+        vec![
+            start("s1", 0),
+            start("s2", 100),
+            Event::Notification {
+                id: "s2".into(),
+                at: 300,
+            },
+        ]
+    }
+
+    #[test]
+    fn timeline_collapses_to_aggregate_segments() {
+        let segments = timeline(&two_session_window(), 0, 600);
+
+        assert_eq!(segments.first().unwrap().state, SessionState::Working);
+        assert_eq!(segments.last().unwrap().state, SessionState::WaitingOnYou);
+        assert_eq!(segments.last().unwrap().to, 600);
+    }
+
+    #[test]
+    fn timeline_segments_are_contiguous_and_cover_the_window() {
+        let segments = timeline(&two_session_window(), 0, 600);
+
+        assert_eq!(segments.first().unwrap().from, 0);
+        assert_eq!(segments.last().unwrap().to, 600);
+        for pair in segments.windows(2) {
+            assert_eq!(pair[0].to, pair[1].from);
+        }
+    }
+
+    #[test]
+    fn empty_log_is_one_idle_segment() {
+        let segments = timeline(&[], 0, 600);
+
+        assert_eq!(
+            segments,
+            vec![Segment {
+                state: SessionState::Idle,
+                from: 0,
+                to: 600
+            }]
+        );
+    }
+
+    #[test]
+    fn waiting_share_is_the_waiting_fraction_of_the_window() {
+        let segments = timeline(&two_session_window(), 0, 600);
+
+        assert!((waiting_share(&segments) - 0.5).abs() < f64::EPSILON);
     }
 
     #[test]
