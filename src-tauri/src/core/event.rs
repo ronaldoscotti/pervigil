@@ -27,6 +27,24 @@ pub enum Event {
     },
 }
 
+/// Parse an event log, returning the valid events and how many lines were unreadable.
+///
+/// A corrupt line is skipped, never fatal: a half-written line from a crashed shim
+/// must not blind the whole panel.
+pub fn parse_log(contents: &str) -> (Vec<Event>, usize) {
+    let mut events = Vec::new();
+    let mut skipped = 0;
+
+    for line in contents.lines().filter(|line| !line.trim().is_empty()) {
+        match serde_json::from_str(line) {
+            Ok(event) => events.push(event),
+            Err(_) => skipped += 1,
+        }
+    }
+
+    (events, skipped)
+}
+
 impl Event {
     pub fn id(&self) -> &SessionId {
         match self {
@@ -44,5 +62,58 @@ impl Event {
             | Event::Stop { at, .. }
             | Event::UserPromptSubmit { at, .. } => *at,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn every_variant() -> Vec<Event> {
+        vec![
+            Event::SessionStart {
+                id: "s1".into(),
+                cwd: "/p".into(),
+                pid: 1,
+                at: 10,
+            },
+            Event::Notification {
+                id: "s1".into(),
+                at: 20,
+            },
+            Event::Stop {
+                id: "s1".into(),
+                at: 30,
+            },
+            Event::UserPromptSubmit {
+                id: "s1".into(),
+                at: 40,
+            },
+        ]
+    }
+
+    #[test]
+    fn every_variant_round_trips_through_the_log_format() {
+        for event in every_variant() {
+            let line = serde_json::to_string(&event).expect("event should serialize");
+
+            let (parsed, skipped) = parse_log(&line);
+
+            assert_eq!(skipped, 0);
+            assert_eq!(parsed, vec![event]);
+        }
+    }
+
+    #[test]
+    fn corrupt_and_blank_lines_are_skipped_not_fatal() {
+        let log = "{\"type\":\"Notification\",\"id\":\"s1\",\"at\":20}\n\
+                   half-written garbage\n\
+                   \n\
+                   {\"type\":\"Stop\",\"id\":\"s1\",\"at\":30}\n";
+
+        let (parsed, skipped) = parse_log(log);
+
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(skipped, 1);
     }
 }
