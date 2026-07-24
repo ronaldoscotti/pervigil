@@ -323,16 +323,18 @@ transcript_sessions)` unions by session id, hook state winning where present.
 
 ---
 
-## M4 — Cost: `pricing` + shipped price table
+## M4 — Cost: `pricing` + shipped price table  ✅ done (opt-in usage limits deferred to M8)
 
 **Files:** `src-tauri/src/core/pricing.rs`, `assets/pricing.json`
 
-- [ ] TDD: known model → `tokens × rate` correct to the cent.
-- [ ] TDD: **unknown model → cost `None`**, rendered as `—`, never a wrong number
+- [x] TDD: known model → `tokens × rate` correct to the cent.
+- [x] TDD: **unknown model → cost `None`**, rendered as `—`, never a wrong number
   (the spec's honesty rule).
-- [ ] TDD: cost aggregates per session and per time-window (`4h/Today/Week`).
+- [x] TDD: cost aggregates per session and per time-window (`4h/Today/Week`).
 
-**Opt-in usage limits (spec item 14) — separate module, gated by config.** Default footer is $
+**Opt-in usage limits (spec item 14) — deferred to M8**, where the settings toggle that
+gates it actually exists. Building the OAuth reader before its config switch means an
+unreachable code path. Design unchanged: Default footer is $
 cost (above). A settings toggle enables `io::usage::limits()`, which reads
 `~/.claude/.credentials.json` and calls the OAuth usage endpoint for the 5h + weekly bars. It lives
 in `io/` (network + fs), never `core/`, and sits behind a trait so the endpoint is mockable and the
