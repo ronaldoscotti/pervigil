@@ -26,13 +26,20 @@
     <div class="content">
       <section class="settings" id="settings" hidden>
         <div class="settings-row">
-          <span class="settings-label">Notifications</span>
+          <span class="settings-label" data-i18n="notifications">Notifications</span>
           <button type="button" class="switch" id="notifications-switch" role="switch" aria-checked="true">
             <span class="switch-knob"></span>
           </button>
         </div>
+        <div class="settings-row">
+          <span class="settings-label" data-i18n="language">Language</span>
+          <div class="lang-select" id="lang-select">
+            <button type="button" data-lang="en">EN</button>
+            <button type="button" data-lang="pt">PT</button>
+          </div>
+        </div>
         <div class="settings-group">
-          <span class="label">Projects shown</span>
+          <span class="label" data-i18n="projectsShown">Projects shown</span>
           <div class="project-list" id="project-list"></div>
         </div>
       </section>
@@ -40,7 +47,7 @@
       <section class="headline">
         <span class="headline-count" id="waiting">—</span>
         <div class="headline-text">
-          <span class="headline-label">waiting on you</span>
+          <span class="headline-label" data-i18n="waitingOnYou">waiting on you</span>
           <span class="headline-sub" id="tally"></span>
         </div>
       </section>
@@ -59,7 +66,7 @@
         <div class="lane-axis" id="axis"></div>
       </section>
 
-      <div class="section-label">Sessions</div>
+      <div class="section-label" data-i18n="sectionSessions">Sessions</div>
       <main class="sessions" id="sessions"></main>
 
       <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -70,9 +77,9 @@
           <span class="spend-value" id="cost">—</span>
         </div>
         <div class="spans" id="spans">
-          <button type="button" data-span="4h" class="on">4h</button>
-          <button type="button" data-span="today">Today</button>
-          <button type="button" data-span="week">Week</button>
+          <button type="button" data-span="4h" class="on" data-i18n="span4h">4h</button>
+          <button type="button" data-span="today" data-i18n="spanToday">Today</button>
+          <button type="button" data-span="week" data-i18n="spanWeek">Week</button>
         </div>
       </footer>
     </div>

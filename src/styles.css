@@ -206,6 +206,41 @@ body.mac .topbar {
   gap: 9px;
 }
 
+.settings-row + .settings-row {
+  margin-top: 12px;
+}
+
+.lang-select {
+  display: flex;
+  gap: 2px;
+}
+
+.lang-select button {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  color: var(--faint);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  padding: 3px 9px;
+  cursor: default;
+}
+
+.lang-select button:hover {
+  color: var(--muted);
+}
+
+.lang-select button.on {
+  color: var(--ink-dim);
+  border-color: var(--edge);
+  background: rgba(234, 231, 222, 0.04);
+}
+
+.lang-select button:focus-visible {
+  outline: 1px solid rgba(244, 184, 96, 0.7);
+}
+
 .switch {
   position: relative;
   width: 38px;

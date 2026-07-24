@@ -54,18 +54,142 @@ const TONE: Record<SessionState, string> = {
   Idle: "idle",
 };
 
-const STATE_LABEL: Record<SessionState, string> = {
-  Working: "Working",
-  WaitingOnYou: "Waiting on you",
-  YourTurn: "Your turn",
-  Idle: "Idle",
+type Lang = "en" | "pt";
+
+const STRINGS: Record<Lang, Record<string, string>> = {
+  en: {
+    working: "Working",
+    waiting: "Waiting on you",
+    yourTurn: "Your turn",
+    idle: "Idle",
+    last4h: "Last 4 hours",
+    today: "Today",
+    thisWeek: "This week",
+    span4h: "4h",
+    spanToday: "Today",
+    spanWeek: "Week",
+    pinned: "Pinned",
+    unpinned: "Unpinned",
+    settings: "Settings",
+    back: "‹ Back",
+    waitingOnYou: "waiting on you",
+    sessionsOne: "{n} session",
+    sessionsMany: "{n} sessions",
+    quiet: "{n} quiet",
+    yourTurnCount: "{n} your turn",
+    waitingShare: "{p}% waiting on you",
+    now: "now",
+    sectionSessions: "Sessions",
+    pin: "Pin",
+    pinTitle: "Pin to top",
+    unpinTitle: "Unpin",
+    dismiss: "Dismiss",
+    dismissTitle: "Dismiss until it acts again",
+    keepAbove: "Keep the panel above other windows",
+    emptyTitle: "No sessions in this window.",
+    emptyBody: "Start Claude Code in a project, or widen the window below.",
+    notifications: "Notifications",
+    projectsShown: "Projects shown",
+    language: "Language",
+    notDetected: "Not detected",
+    installTitle: "Install hooks to track live state",
+    installNote:
+      "States read <em>idle</em> until these run. Names and cost are already live. Paste into {path} — pervigil never edits it for you.",
+    copySnippet: "Copy snippet",
+    jumpToPane: "Jump to pane",
+    focusTab: "Focus tab",
+    openVsCode: "Open in VS Code",
+    copyResume: "Copy resume command",
+    pasteToResume: "{label} — paste to resume",
+    focusUnavailable: "Focus unavailable — resume with: {resume}",
+    focusFailed: "Focus failed",
+    snippetCopied: "Snippet copied — paste into settings.json",
+    copyFailed: "Copy failed — select the snippet manually",
+    hooksDetected: "Hooks detected ✓",
+  },
+  pt: {
+    working: "Trabalhando",
+    waiting: "Esperando você",
+    yourTurn: "Sua vez",
+    idle: "Parado",
+    last4h: "Últimas 4 horas",
+    today: "Hoje",
+    thisWeek: "Esta semana",
+    span4h: "4h",
+    spanToday: "Hoje",
+    spanWeek: "Semana",
+    pinned: "Fixado",
+    unpinned: "Solto",
+    settings: "Ajustes",
+    back: "‹ Voltar",
+    waitingOnYou: "esperando você",
+    sessionsOne: "{n} sessão",
+    sessionsMany: "{n} sessões",
+    quiet: "{n} quietas",
+    yourTurnCount: "{n} na sua vez",
+    waitingShare: "{p}% esperando você",
+    now: "agora",
+    sectionSessions: "Sessões",
+    pin: "Fixar",
+    pinTitle: "Fixar no topo",
+    unpinTitle: "Soltar",
+    dismiss: "Dispensar",
+    dismissTitle: "Dispensar até agir de novo",
+    keepAbove: "Manter o painel acima das outras janelas",
+    emptyTitle: "Nenhuma sessão nesta janela.",
+    emptyBody: "Inicie o Claude Code em um projeto, ou amplie a janela abaixo.",
+    notifications: "Notificações",
+    projectsShown: "Projetos exibidos",
+    language: "Idioma",
+    notDetected: "Não detectado",
+    installTitle: "Instale os hooks para acompanhar o estado ao vivo",
+    installNote:
+      "Os estados aparecem como <em>parados</em> até os hooks rodarem. Nomes e custo já estão ao vivo. Cole em {path} — o pervigil nunca edita o arquivo por você.",
+    copySnippet: "Copiar trecho",
+    jumpToPane: "Ir para o painel",
+    focusTab: "Focar a aba",
+    openVsCode: "Abrir no VS Code",
+    copyResume: "Copiar comando de retomada",
+    pasteToResume: "{label} — cole para retomar",
+    focusUnavailable: "Foco indisponível — retome com: {resume}",
+    focusFailed: "Falha ao focar",
+    snippetCopied: "Trecho copiado — cole no settings.json",
+    copyFailed: "Falha ao copiar — selecione o trecho manualmente",
+    hooksDetected: "Hooks detectados ✓",
+  },
 };
 
-const SPAN_LABEL: Record<Span, string> = {
-  "4h": "Last 4 hours",
-  today: "Today",
-  week: "This week",
+let lang: Lang =
+  (localStorage.getItem("lang") as Lang | null) ??
+  (navigator.language.toLowerCase().startsWith("pt") ? "pt" : "en");
+
+function t(key: string, params?: Record<string, string | number>): string {
+  let value = STRINGS[lang][key] ?? STRINGS.en[key] ?? key;
+  if (params) {
+    for (const [name, sub] of Object.entries(params)) {
+      value = value.replace(`{${name}}`, String(sub));
+    }
+  }
+  return value;
+}
+
+const STATE_KEY: Record<SessionState, string> = {
+  Working: "working",
+  WaitingOnYou: "waiting",
+  YourTurn: "yourTurn",
+  Idle: "idle",
 };
+
+const SPAN_KEY: Record<Span, string> = { "4h": "last4h", today: "today", week: "thisWeek" };
+
+/** Backend focus labels arrive in English; map them to a translatable key. */
+const FOCUS_KEY: Record<string, string> = {
+  "Jump to pane": "jumpToPane",
+  "Focus tab": "focusTab",
+  "Open in VS Code": "openVsCode",
+  "Copy resume command": "copyResume",
+};
+const focusLabel = (english: string) => t(FOCUS_KEY[english] ?? "copyResume");
 
 const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -93,7 +217,7 @@ function row(session: SessionView, now: number): HTMLElement {
   node.tabIndex = 0;
   node.dataset.id = session.id;
   node.setAttribute("role", "button");
-  node.title = session.focus;
+  node.title = focusLabel(session.focus);
 
   // A branch and a count only earn their space where a project runs more than one
   // session — otherwise they label everything and say nothing.
@@ -113,8 +237,8 @@ function row(session: SessionView, now: number): HTMLElement {
     </div>
     <div class="row-actions">
       <button type="button" class="row-action pin" data-act="pin" aria-pressed="${session.pinned}"
-        title="${session.pinned ? "Unpin" : "Pin to top"}">${session.pinned ? "Pinned" : "Pin"}</button>
-      <button type="button" class="row-action" data-act="dismiss" title="Dismiss until it acts again">Dismiss</button>
+        title="${session.pinned ? t("unpinTitle") : t("pinTitle")}">${session.pinned ? t("pinned") : t("pin")}</button>
+      <button type="button" class="row-action" data-act="dismiss" title="${t("dismissTitle")}">${t("dismiss")}</button>
     </div>
     <div class="row-right">
       <div class="elapsed"></div>
@@ -129,7 +253,7 @@ function row(session: SessionView, now: number): HTMLElement {
   text(".project", session.project);
   text(".siblings", `×${session.siblings}`);
   text(".branch", session.branch ?? "");
-  text(".state", STATE_LABEL[session.state]);
+  text(".state", t(STATE_KEY[session.state]));
   text(".name", session.name);
   text(".elapsed", elapsed(now - session.since));
   text(".row-cost", money(session.cost));
@@ -164,8 +288,9 @@ function renderSessions(snapshot: Snapshot) {
     if (!list.querySelector(".empty")) {
       const empty = document.createElement("div");
       empty.className = "empty";
-      empty.innerHTML =
-        "<strong>No sessions in this window.</strong>Start Claude Code in a project, or widen the window below.";
+      empty.innerHTML = `<strong></strong><span></span>`;
+      (empty.querySelector("strong") as HTMLElement).textContent = t("emptyTitle");
+      (empty.querySelector("span") as HTMLElement).textContent = t("emptyBody");
       list.replaceChildren(empty);
     }
     sessionSig = "";
@@ -211,10 +336,10 @@ function renderLane(snapshot: Snapshot, span: Span) {
     axis.append(tick);
   }
   const now = document.createElement("span");
-  now.textContent = "now";
+  now.textContent = t("now");
   axis.append(now);
 
-  el("share").textContent = `${Math.round(snapshot.waitingShare * 100)}% waiting on you`;
+  el("share").textContent = t("waitingShare", { p: Math.round(snapshot.waitingShare * 100) });
 }
 
 let hooksWere: boolean | undefined;
@@ -224,7 +349,7 @@ let hooksWere: boolean | undefined;
  * the live "detected" signal. Pervigil never writes settings.json — the user pastes.
  */
 function renderHooks(snapshot: Snapshot) {
-  if (hooksWere === false && snapshot.hooksInstalled) toast("Hooks detected ✓");
+  if (hooksWere === false && snapshot.hooksInstalled) toast(t("hooksDetected"));
   hooksWere = snapshot.hooksInstalled;
 
   const existing = document.querySelector<HTMLElement>(".hook-card");
@@ -234,16 +359,17 @@ function renderHooks(snapshot: Snapshot) {
   }
   if (existing) return; // already showing; don't clobber a scroll position mid-poll
 
+  const path = `<button type="button" class="hook-path">~/.claude/settings.json</button>`;
   const card = document.createElement("section");
   card.className = "hook-card";
   card.innerHTML = `
     <div class="hook-head">
-      <span class="hook-mark">Not detected</span>
-      <span class="hook-title">Install hooks to track live state</span>
+      <span class="hook-mark">${t("notDetected")}</span>
+      <span class="hook-title">${t("installTitle")}</span>
     </div>
-    <p class="hook-note">States read <em>idle</em> until these run. Names and cost are already live. Paste into <button type="button" class="hook-path">~/.claude/settings.json</button> — pervigil never edits it for you.</p>
+    <p class="hook-note">${t("installNote", { path })}</p>
     <pre class="hook-snippet"></pre>
-    <button type="button" class="hook-copy">Copy snippet</button>`;
+    <button type="button" class="hook-copy">${t("copySnippet")}</button>`;
   (card.querySelector(".hook-snippet") as HTMLElement).textContent = snapshot.hookSnippet;
   card.querySelector(".hook-path")?.addEventListener("click", () => {
     invoke("open_settings").catch(console.error);
@@ -251,9 +377,9 @@ function renderHooks(snapshot: Snapshot) {
   card.querySelector(".hook-copy")?.addEventListener("click", async () => {
     try {
       await navigator.clipboard.writeText(snapshot.hookSnippet);
-      toast("Snippet copied — paste into settings.json");
+      toast(t("snippetCopied"));
     } catch {
-      toast("Copy failed — select the snippet manually");
+      toast(t("copyFailed"));
     }
   });
   el("sessions").after(card);
@@ -266,11 +392,13 @@ function render(snapshot: Snapshot, span: Span) {
 
   const total = snapshot.sessions.length;
   const yourTurn = snapshot.sessions.filter((s) => s.state === "YourTurn").length;
-  const tail = yourTurn > 0 ? `${yourTurn} your turn` : `${total - snapshot.waiting} quiet`;
-  el("tally").textContent = `${total} session${total === 1 ? "" : "s"} · ${tail}`;
+  const count = t(total === 1 ? "sessionsOne" : "sessionsMany", { n: total });
+  const tail =
+    yourTurn > 0 ? t("yourTurnCount", { n: yourTurn }) : t("quiet", { n: total - snapshot.waiting });
+  el("tally").textContent = `${count} · ${tail}`;
 
-  el("lane-label").textContent = SPAN_LABEL[span];
-  el("cost-label").textContent = SPAN_LABEL[span];
+  el("lane-label").textContent = t(SPAN_KEY[span]);
+  el("cost-label").textContent = t(SPAN_KEY[span]);
   el("cost").textContent = money(snapshot.cost);
 
   renderLane(snapshot, span);
@@ -310,6 +438,22 @@ function renderProjects(snapshot: Snapshot) {
   }
 }
 
+/** Set every static string in the chrome for the current language. */
+function applyStaticStrings() {
+  for (const node of document.querySelectorAll<HTMLElement>("[data-i18n]")) {
+    node.textContent = t(node.dataset.i18n as string);
+  }
+  const pin = el("pin-toggle");
+  pin.textContent = pin.getAttribute("aria-pressed") === "true" ? t("pinned") : t("unpinned");
+  pin.title = t("keepAbove");
+  const settings = el("settings-toggle");
+  settings.textContent = settings.getAttribute("aria-expanded") === "true" ? t("back") : t("settings");
+  for (const button of document.querySelectorAll<HTMLElement>("#lang-select [data-lang]")) {
+    button.classList.toggle("on", button.dataset.lang === lang);
+  }
+  document.documentElement.lang = lang;
+}
+
 let span: Span = "4h";
 let toastTimer: number | undefined;
 
@@ -325,12 +469,13 @@ function toast(message: string) {
 async function jump(id: string) {
   try {
     const result = await invoke<FocusOutcome>("focus", { id });
-    if (result.raised) toast(result.label);
-    else if (result.error) toast(`Focus unavailable — resume with: ${result.resume}`);
-    else toast(`${result.label} — paste to resume`);
+    const label = focusLabel(result.label);
+    if (result.raised) toast(label);
+    else if (result.error) toast(t("focusUnavailable", { resume: result.resume ?? "" }));
+    else toast(t("pasteToResume", { label }));
   } catch (error) {
     console.error(error);
-    toast("Focus failed");
+    toast(t("focusFailed"));
   }
 }
 
@@ -362,6 +507,7 @@ async function poll() {
 
 window.addEventListener("DOMContentLoaded", () => {
   if (navigator.userAgent.includes("Mac")) document.body.classList.add("mac");
+  applyStaticStrings();
 
   el("spans").addEventListener("click", (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-span]");
@@ -403,7 +549,7 @@ window.addEventListener("DOMContentLoaded", () => {
     sheet.hidden = !opening;
     const button = el("settings-toggle");
     button.setAttribute("aria-expanded", String(opening));
-    button.textContent = opening ? "‹ Back" : "Settings";
+    button.textContent = opening ? t("back") : t("settings");
     if (opening && lastSnapshot) renderProjects(lastSnapshot);
   });
 
@@ -411,8 +557,19 @@ window.addEventListener("DOMContentLoaded", () => {
     const button = event.currentTarget as HTMLElement;
     const pinned = button.getAttribute("aria-pressed") !== "true";
     button.setAttribute("aria-pressed", String(pinned));
-    button.textContent = pinned ? "Pinned" : "Unpinned";
+    button.textContent = pinned ? t("pinned") : t("unpinned");
     invoke("set_window_pinned", { pinned }).catch(console.error);
+  });
+
+  el("lang-select").addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLElement>("[data-lang]");
+    if (!button?.dataset.lang || button.dataset.lang === lang) return;
+    lang = button.dataset.lang as Lang;
+    localStorage.setItem("lang", lang);
+    projectSig = "";
+    sessionSig = "";
+    applyStaticStrings();
+    if (lastSnapshot) render(lastSnapshot, span);
   });
 
   el("notifications-switch").addEventListener("click", (event) => {
