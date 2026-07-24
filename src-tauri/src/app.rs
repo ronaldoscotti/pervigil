@@ -222,7 +222,7 @@ impl App {
         let strategy = focuser::select(terminal, cwd, id, self.caps);
         let resume = match &strategy {
             Strategy::Clipboard { resume } => resume.clone(),
-            _ => format!("claude --resume {id}"),
+            _ => focuser::resume_command(cwd, id),
         };
         focus_with(self.focuser.as_ref(), strategy, resume)
     }

@@ -169,7 +169,18 @@ pub fn select(term: Option<&Terminal>, cwd: &str, id: &str, caps: Caps) -> Strat
     }
 
     Strategy::Clipboard {
-        resume: format!("claude --resume {id}"),
+        resume: resume_command(cwd, id),
+    }
+}
+
+/// The command copied at the clipboard floor: `cd` into the project first, so it
+/// pastes-and-runs in any terminal, then resume the session. cwd is double-quoted for
+/// spaces; when it's unknown the `cd` is dropped rather than guessed.
+pub fn resume_command(cwd: &str, id: &str) -> String {
+    if cwd.is_empty() {
+        format!("claude --resume {id}")
+    } else {
+        format!("cd \"{cwd}\" && claude --resume {id}")
     }
 }
 
@@ -242,21 +253,22 @@ mod tests {
         assert_eq!(
             strategy,
             Strategy::Clipboard {
-                resume: "claude --resume s1".into()
+                resume: "cd \"/p\" && claude --resume s1".into()
             }
         );
     }
 
     #[test]
-    fn no_hint_at_all_is_the_clipboard_floor() {
-        let strategy = select(None, "/p", "abc", all());
-
+    fn the_clipboard_command_cds_into_the_project_then_resumes() {
         assert_eq!(
-            strategy,
-            Strategy::Clipboard {
-                resume: "claude --resume abc".into()
-            }
+            resume_command("/Users/x/proj", "abc"),
+            "cd \"/Users/x/proj\" && claude --resume abc"
         );
+    }
+
+    #[test]
+    fn an_unknown_cwd_drops_the_cd_rather_than_guessing() {
+        assert_eq!(resume_command("", "abc"), "claude --resume abc");
     }
 
     #[test]

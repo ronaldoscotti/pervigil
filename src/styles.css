@@ -686,6 +686,13 @@ body.mac .topbar {
 .state {
   flex: none;
   color: var(--muted);
+  opacity: 0.85;
+}
+
+/* Idle's state shares the name's muted grey — dim it so the two lines read apart. */
+.row.idle .state {
+  color: var(--faint);
+  opacity: 1;
 }
 
 .row.working .state {
@@ -712,16 +719,20 @@ body.mac .topbar {
    width goes to the project and session name instead of reserving empty space. */
 .row-actions {
   position: absolute;
-  right: 14px;
+  right: 12px;
   top: 50%;
   transform: translateY(-50%);
   display: flex;
-  gap: 4px;
-  padding: 4px 8px 4px 14px;
-  background: linear-gradient(90deg, transparent, var(--ground) 22%);
+  gap: 5px;
+  padding: 5px 7px 5px 24px;
+  background: linear-gradient(90deg, transparent, var(--ground-deep) 30%);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.12s ease;
+}
+
+.row:focus-within {
+  background: rgba(234, 231, 222, 0.03);
 }
 
 .row:hover .row-actions,
@@ -747,11 +758,11 @@ body.mac .topbar {
   font-size: 8.5px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--faint);
-  background: none;
+  color: var(--muted);
+  background: var(--sunken);
   border: 1px solid var(--edge);
   border-radius: 5px;
-  padding: 3px 6px;
+  padding: 4px 7px;
   cursor: pointer;
 }
 
@@ -796,16 +807,19 @@ body.mac .topbar {
   color: var(--muted);
 }
 
+/* Cost is secondary — most users are on a plan, so the dollar figure is notional.
+   Kept small and quiet under the elapsed timer, which is the metric that matters. */
 .row-cost {
   font-family: var(--mono);
-  font-size: 10.5px;
-  color: var(--muted);
-  margin-top: 5px;
+  font-size: 9px;
+  color: var(--faint);
+  margin-top: 6px;
   font-variant-numeric: tabular-nums;
 }
 
 .row.idle .row-cost {
   color: var(--faint);
+  opacity: 0.8;
 }
 
 .empty {
