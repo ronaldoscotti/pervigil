@@ -93,9 +93,13 @@ pub struct Snapshot {
     pub segments: Vec<Segment>,
     pub waiting_share: f64,
     pub cost: f64,
+    /// Total tokens processed in the window — input, output, and cache.
+    pub tokens: u64,
     /// Current settings the panel renders: the notifications toggle, and the projects
     /// the user hid (so they can be restored even with no live session).
     pub notifications: bool,
+    /// When true, dismiss marks a session read (demoted to idle) instead of hiding it.
+    pub dismiss_read: bool,
     pub hidden: Vec<String>,
     /// True once all four hooks are wired in `~/.claude/settings.json`. When false the
     /// panel shows the install card; pervigil never writes the file itself (spec item 12).
@@ -178,6 +182,10 @@ impl App {
         self.update(|config| config.notifications = on);
     }
 
+    pub fn set_dismiss_read(&self, on: bool) {
+        self.update(|config| config.dismiss_read = on);
+    }
+
     pub fn set_pinned(&self, id: &str, pinned: bool) {
         self.update(|config| {
             if pinned {
@@ -258,7 +266,10 @@ impl App {
 
         let mut sessions = store::merge(store::fold(&events, to, &prefs), scan.sessions);
         retain_live(&mut sessions, &SystemProcesses);
-        store::drop_dismissed(&mut sessions, &prefs);
+        store::apply_dismissed(&mut sessions, &prefs);
+        // Drop context-less ghosts: a hook fired (a Notification) but no cwd ever
+        // arrived and no transcript backfilled one, so the row would be nameless.
+        sessions.retain(|session| !session.cwd.is_empty());
         sessions.retain(|session| config.shows(&project(&session.cwd)));
         store::sort(&mut sessions, &prefs);
 
@@ -337,7 +348,16 @@ impl App {
                 .filter(|entry| entry.at >= from && entry.at <= to)
                 .filter_map(|entry| pricing::cost(&self.prices, &entry.model, &entry.usage))
                 .sum(),
+            tokens: spent
+                .iter()
+                .filter(|entry| entry.at >= from && entry.at <= to)
+                .map(|entry| {
+                    let u = &entry.usage;
+                    u.input + u.output + u.cache_read + u.cache_write_5m + u.cache_write_1h
+                })
+                .sum(),
             notifications: config.notifications,
+            dismiss_read: config.dismiss_read,
             hidden: config.hidden_projects.iter().cloned().collect(),
             hooks_installed: io::hooks::detect(
                 &std::fs::read_to_string(self.home.join(SETTINGS)).unwrap_or_default(),
@@ -493,6 +513,11 @@ pub fn set_notifications(on: bool, app: tauri::State<'_, App>) {
 }
 
 #[tauri::command]
+pub fn set_dismiss_read(on: bool, app: tauri::State<'_, App>) {
+    app.set_dismiss_read(on);
+}
+
+#[tauri::command]
 pub fn set_pinned(id: String, pinned: bool, app: tauri::State<'_, App>) {
     app.set_pinned(&id, pinned);
 }
@@ -538,6 +563,22 @@ pub fn open_url(url: String) {
         "xdg-open"
     };
     let _ = std::process::Command::new(program).arg(url).spawn();
+}
+
+/// Save the shared day card to Downloads and reveal it — the reliable path when the
+/// webview can't write an image to the clipboard. Returns the saved path.
+#[tauri::command]
+pub fn save_day_card(bytes: Vec<u8>, app: tauri::State<'_, App>) -> Result<String, String> {
+    let dir = app.home.join("Downloads");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join("pervigil-day.png");
+    std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+    #[cfg(target_os = "macos")]
+    let _ = std::process::Command::new("open")
+        .arg("-R")
+        .arg(&path)
+        .spawn();
+    Ok(path.to_string_lossy().into_owned())
 }
 
 fn allowed_url(url: &str) -> bool {

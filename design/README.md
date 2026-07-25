@@ -7,11 +7,9 @@ Open [`index.html`](index.html) in a browser. It is standalone — no build step
 
 ## Source of truth
 
-Editable source lives in Claude Design:
-**`Pervigil macOS panel design`** — project `bac27250-4751-4d8f-9b1a-2f74e82b3cdb`, file `Pervigil.dc.html`.
-
-`index.html` here is that file with the `<x-dc>` / `support.js` harness stripped so it
-renders in a plain browser, plus a real `:focus-visible` rule replacing the harness's
+The editable source is a design-tool document (`Pervigil.dc.html`). `index.html` here
+is that file with the tool's `<x-dc>` / `support.js` harness stripped so it renders in
+a plain browser, plus a real `:focus-visible` rule replacing the harness's
 `style-focus` attribute. Content is otherwise unchanged.
 
 ## The direction

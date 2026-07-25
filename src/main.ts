@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import "@fontsource/lora/400.css";
 import "@fontsource/lora/500.css";
 import "@fontsource/lora/600.css";
@@ -47,7 +48,9 @@ interface Snapshot {
   segments: Segment[];
   waitingShare: number;
   cost: number;
+  tokens: number;
   notifications: boolean;
+  dismissRead: boolean;
   hidden: string[];
   hooksInstalled: boolean;
   hookSnippet: string;
@@ -124,6 +127,17 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "Update to v{version}",
     updateInstalling: "Downloading update…",
     updateFailed: "Update failed",
+    launchAtLogin: "Launch at login",
+    general: "General",
+    starOnGithub: "Star on GitHub",
+    dismissReadLabel: "Dismiss marks read",
+    shareMyDay: "Share my day",
+    dayCopied: "Day card copied — paste it anywhere",
+    dayCopyFailed: "Couldn't copy the card",
+    daySaved: "Day card saved to Downloads",
+    shareNudge: "Good run today — share your day? Tap ↗ above",
+    download: "Download",
+    tokens: "tokens",
   },
   pt: {
     working: "Trabalhando",
@@ -179,6 +193,17 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "Atualizar para v{version}",
     updateInstalling: "Baixando atualização…",
     updateFailed: "Falha na atualização",
+    launchAtLogin: "Abrir ao iniciar sessão",
+    general: "Geral",
+    starOnGithub: "Estrela no GitHub",
+    dismissReadLabel: "Dispensar marca lida",
+    shareMyDay: "Compartilhar meu dia",
+    dayCopied: "Cartão do dia copiado — cole onde quiser",
+    dayCopyFailed: "Não foi possível copiar o cartão",
+    daySaved: "Cartão do dia salvo em Downloads",
+    shareNudge: "Belo dia — compartilhe? Toque em ↗ acima",
+    download: "Baixar",
+    tokens: "tokens",
   },
   es: {
     working: "Trabajando",
@@ -234,6 +259,17 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "Actualizar a v{version}",
     updateInstalling: "Descargando actualización…",
     updateFailed: "Falló la actualización",
+    launchAtLogin: "Abrir al iniciar sesión",
+    general: "General",
+    starOnGithub: "Estrella en GitHub",
+    dismissReadLabel: "Descartar marca leído",
+    shareMyDay: "Compartir mi día",
+    dayCopied: "Tarjeta del día copiada — pégala donde quieras",
+    dayCopyFailed: "No se pudo copiar la tarjeta",
+    daySaved: "Tarjeta del día guardada en Descargas",
+    shareNudge: "Buen día — ¿compartirlo? Toca ↗ arriba",
+    download: "Descargar",
+    tokens: "tokens",
   },
   fr: {
     working: "En cours",
@@ -289,6 +325,17 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "Mettre à jour vers v{version}",
     updateInstalling: "Téléchargement de la mise à jour…",
     updateFailed: "Échec de la mise à jour",
+    launchAtLogin: "Lancer à la connexion",
+    general: "Général",
+    starOnGithub: "Étoile sur GitHub",
+    dismissReadLabel: "Ignorer marque lu",
+    shareMyDay: "Partager ma journée",
+    dayCopied: "Carte du jour copiée — collez-la où vous voulez",
+    dayCopyFailed: "Impossible de copier la carte",
+    daySaved: "Carte du jour enregistrée dans Téléchargements",
+    shareNudge: "Belle journée — la partager ? Touchez ↗ en haut",
+    download: "Télécharger",
+    tokens: "tokens",
   },
   de: {
     working: "Arbeitet",
@@ -344,6 +391,17 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "Auf v{version} aktualisieren",
     updateInstalling: "Update wird heruntergeladen…",
     updateFailed: "Update fehlgeschlagen",
+    launchAtLogin: "Beim Anmelden starten",
+    general: "Allgemein",
+    starOnGithub: "Stern auf GitHub",
+    dismissReadLabel: "Ausblenden als gelesen",
+    shareMyDay: "Meinen Tag teilen",
+    dayCopied: "Tageskarte kopiert — überall einfügen",
+    dayCopyFailed: "Karte konnte nicht kopiert werden",
+    daySaved: "Tageskarte in Downloads gespeichert",
+    shareNudge: "Guter Tag — teilen? Tippe oben auf ↗",
+    download: "Herunterladen",
+    tokens: "Tokens",
   },
   ru: {
     working: "Работает",
@@ -399,6 +457,17 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "Обновить до v{version}",
     updateInstalling: "Загрузка обновления…",
     updateFailed: "Не удалось обновить",
+    launchAtLogin: "Запускать при входе",
+    general: "Общие",
+    starOnGithub: "Звезда на GitHub",
+    dismissReadLabel: "Скрыть как прочитано",
+    shareMyDay: "Поделиться днём",
+    dayCopied: "Карточка дня скопирована — вставьте куда угодно",
+    dayCopyFailed: "Не удалось скопировать карточку",
+    daySaved: "Карточка дня сохранена в Загрузки",
+    shareNudge: "Хороший день — поделиться? Нажмите ↗ вверху",
+    download: "Скачать",
+    tokens: "токены",
   },
   zh: {
     working: "运行中",
@@ -454,6 +523,17 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "更新到 v{version}",
     updateInstalling: "正在下载更新…",
     updateFailed: "更新失败",
+    launchAtLogin: "登录时启动",
+    general: "常规",
+    starOnGithub: "在 GitHub 加星",
+    dismissReadLabel: "忽略即已读",
+    shareMyDay: "分享我的一天",
+    dayCopied: "今日卡片已复制 — 随处粘贴",
+    dayCopyFailed: "无法复制卡片",
+    daySaved: "今日卡片已保存到下载",
+    shareNudge: "今天不错 — 分享一下？点击上方 ↗",
+    download: "下载",
+    tokens: "tokens",
   },
   ja: {
     working: "実行中",
@@ -509,6 +589,17 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "v{version} に更新",
     updateInstalling: "アップデートをダウンロード中…",
     updateFailed: "アップデート失敗",
+    launchAtLogin: "ログイン時に起動",
+    general: "一般",
+    starOnGithub: "GitHub でスター",
+    dismissReadLabel: "非表示で既読",
+    shareMyDay: "今日をシェア",
+    dayCopied: "今日のカードをコピーしました — どこにでも貼り付け",
+    dayCopyFailed: "カードをコピーできませんでした",
+    daySaved: "今日のカードをダウンロードに保存しました",
+    shareNudge: "良い一日 — シェアする？上の ↗ をタップ",
+    download: "ダウンロード",
+    tokens: "トークン",
   },
   hi: {
     working: "काम कर रहा है",
@@ -564,6 +655,17 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "v{version} में अपडेट करें",
     updateInstalling: "अपडेट डाउनलोड हो रहा है…",
     updateFailed: "अपडेट विफल",
+    launchAtLogin: "लॉगिन पर लॉन्च करें",
+    general: "सामान्य",
+    starOnGithub: "GitHub पर स्टार",
+    dismissReadLabel: "खारिज = पढ़ा हुआ",
+    shareMyDay: "मेरा दिन साझा करें",
+    dayCopied: "दिन का कार्ड कॉपी हुआ — कहीं भी पेस्ट करें",
+    dayCopyFailed: "कार्ड कॉपी नहीं हो सका",
+    daySaved: "दिन का कार्ड Downloads में सहेजा गया",
+    shareNudge: "अच्छा दिन — साझा करें? ऊपर ↗ टैप करें",
+    download: "डाउनलोड",
+    tokens: "टोकन",
   },
   ar: {
     working: "قيد العمل",
@@ -619,6 +721,17 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "التحديث إلى v{version}",
     updateInstalling: "جارٍ تنزيل التحديث…",
     updateFailed: "فشل التحديث",
+    launchAtLogin: "التشغيل عند تسجيل الدخول",
+    general: "عام",
+    starOnGithub: "نجمة على GitHub",
+    dismissReadLabel: "التجاهل كمقروء",
+    shareMyDay: "شارك يومي",
+    dayCopied: "تم نسخ بطاقة اليوم — الصقها أينما شئت",
+    dayCopyFailed: "تعذّر نسخ البطاقة",
+    daySaved: "تم حفظ بطاقة اليوم في التنزيلات",
+    shareNudge: "يوم جيد — شاركه؟ اضغط ↗ في الأعلى",
+    download: "تنزيل",
+    tokens: "رموز",
   },
 };
 
@@ -882,6 +995,7 @@ let projectSig = "";
 /** The notifications switch tracks the server every poll — cheap, no flicker. */
 function renderSettings(snapshot: Snapshot) {
   el("notifications-switch").setAttribute("aria-checked", String(snapshot.notifications));
+  el("dismiss-read-switch").setAttribute("aria-checked", String(snapshot.dismissRead));
   if (!el("settings").hidden) renderProjects(snapshot);
 }
 
@@ -914,8 +1028,11 @@ function applyStaticStrings() {
     node.textContent = t(node.dataset.i18n as string);
   }
   const pin = el("pin-toggle");
-  pin.textContent = pin.getAttribute("aria-pressed") === "true" ? t("pinned") : t("unpinned");
   pin.title = t("keepAbove");
+  pin.setAttribute(
+    "aria-label",
+    pin.getAttribute("aria-pressed") === "true" ? t("pinned") : t("unpinned"),
+  );
   const settings = el("settings-toggle");
   settings.textContent = settings.getAttribute("aria-expanded") === "true" ? t("back") : t("settings");
   const select = el<HTMLSelectElement>("lang-select");
@@ -923,6 +1040,9 @@ function applyStaticStrings() {
   select.setAttribute("aria-label", t("language"));
   document.documentElement.lang = lang;
   document.documentElement.dir = RTL.has(lang) ? "rtl" : "ltr";
+  const share = el("share-day");
+  share.title = t("shareMyDay");
+  share.setAttribute("aria-label", t("shareMyDay"));
   el("about-version").textContent = `v${__APP_VERSION__}`;
 }
 
@@ -959,6 +1079,181 @@ async function set(command: string, args: Record<string, unknown>) {
     console.error(error);
   }
   poll();
+}
+
+/** A privacy-safe day card — aggregate stats only, never a project name — to copy
+ *  and post. Rendered at social-card size in the brand's own colors. */
+let shareCanvas: HTMLCanvasElement | null = null;
+let shareSnap: Snapshot | null = null;
+
+const LANE_COLORS: Record<SessionState, string> = {
+  Idle: "#3b4048",
+  Working: "#6fb2c4",
+  WaitingOnYou: "#f4b860",
+  YourTurn: "#c89a58",
+};
+
+function formatTokens(n: number): string {
+  if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1).replace(/\.0$/, "") + "M";
+  if (n >= 1e3) return (n / 1e3).toFixed(n >= 1e5 ? 0 : 1).replace(/\.0$/, "") + "K";
+  return String(n);
+}
+
+/** The message for X/WhatsApp — the same numbers the card shows, so the link isn't bare. */
+function shareText(snap: Snapshot): string {
+  const stats = `${snap.sessions.length} ${t("sectionSessions").toLowerCase()} · ${formatTokens(snap.tokens)} ${t("tokens")} · ${t("waitingShare", { p: Math.round(snap.waitingShare * 100) })}`;
+  return `Claude Code 🦉\n${stats}\n\nvia Pervigil — github.com/ronaldoscotti/pervigil`;
+}
+
+function roundRectPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+/** The day as a branded card: the owl wordmark, the activity graph, sessions and tokens.
+ *  Privacy-safe — aggregate numbers only, never a project name. */
+async function renderDayCanvas(snap: Snapshot): Promise<HTMLCanvasElement> {
+  await document.fonts.ready;
+  const W = 1200;
+  const H = 630;
+  const PAD = 76;
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext("2d")!;
+
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, "#181a22");
+  bg.addColorStop(1, "#141620");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = "#262a34";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(1, 1, W - 2, H - 2);
+
+  const logo = new Image();
+  logo.src = "/logo.png";
+  try {
+    await logo.decode();
+    const lh = 54;
+    ctx.drawImage(logo, PAD, 62, (logo.width / logo.height) * lh, lh);
+  } catch {
+    ctx.fillStyle = "#eae7de";
+    ctx.font = "600 46px Lora, serif";
+    ctx.fillText("Pervigil", PAD, 106);
+  }
+
+  const date = new Date(snap.now * 1000).toLocaleDateString(lang, {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+  ctx.fillStyle = "#878d9a";
+  ctx.font = "400 24px 'Space Mono', monospace";
+  ctx.textAlign = "right";
+  ctx.fillText(date, W - PAD, 100);
+  ctx.textAlign = "left";
+
+  const laneY = 210;
+  const laneH = 52;
+  const laneW = W - PAD * 2;
+  const span = Math.max(snap.now - snap.from, 1);
+  ctx.fillStyle = "#878d9a";
+  ctx.font = "500 20px 'Space Mono', monospace";
+  ctx.fillText(t("today").toUpperCase(), PAD, laneY - 18);
+  ctx.fillStyle = "#e7c08a";
+  ctx.textAlign = "right";
+  ctx.fillText(t("waitingShare", { p: Math.round(snap.waitingShare * 100) }), W - PAD, laneY - 18);
+  ctx.textAlign = "left";
+  roundRectPath(ctx, PAD, laneY, laneW, laneH, 9);
+  ctx.fillStyle = "#20242e";
+  ctx.fill();
+  ctx.save();
+  roundRectPath(ctx, PAD, laneY, laneW, laneH, 9);
+  ctx.clip();
+  for (const s of snap.segments) {
+    const x = PAD + ((s.from - snap.from) / span) * laneW;
+    const w = ((s.to - s.from) / span) * laneW;
+    ctx.fillStyle = LANE_COLORS[s.state] ?? "#3b4048";
+    ctx.fillRect(x, laneY, Math.max(w, 1), laneH);
+  }
+  ctx.restore();
+  ctx.fillStyle = "#565c6a";
+  ctx.font = "400 18px 'Space Mono', monospace";
+  ctx.textAlign = "right";
+  ctx.fillText(t("now"), W - PAD, laneY + laneH + 30);
+  ctx.textAlign = "left";
+
+  const stats: [string, string][] = [
+    [String(snap.sessions.length), t("sectionSessions").toLowerCase()],
+    [formatTokens(snap.tokens), t("tokens")],
+  ];
+  stats.forEach(([value, label], i) => {
+    const x = PAD + i * (laneW / 2);
+    ctx.fillStyle = "#f4b860";
+    ctx.font = "700 90px 'Space Mono', monospace";
+    ctx.fillText(value, x, 440);
+    ctx.fillStyle = "#b8bec9";
+    ctx.font = "400 28px Lora, serif";
+    ctx.fillText(label, x, 486);
+  });
+
+  ctx.fillStyle = "#565c6a";
+  ctx.font = "400 22px 'Space Mono', monospace";
+  ctx.fillText("github.com/ronaldoscotti/pervigil", PAD, H - 46);
+
+  return canvas;
+}
+
+async function shareDay() {
+  const snap = await invoke<Snapshot>("snapshot", { span: "today" }).catch(() => lastSnapshot);
+  if (!snap) return;
+  shareSnap = snap;
+  shareCanvas = await renderDayCanvas(snap);
+  el<HTMLImageElement>("share-preview").src = shareCanvas.toDataURL("image/png");
+  const sheet = el("share-sheet");
+  sheet.hidden = false;
+  requestAnimationFrame(() => sheet.classList.add("open"));
+}
+
+function closeShareSheet() {
+  const sheet = el("share-sheet");
+  sheet.classList.remove("open");
+  setTimeout(() => (sheet.hidden = true), 200);
+}
+
+async function downloadCard() {
+  if (!shareCanvas) return;
+  const blob = await new Promise<Blob | null>((r) => shareCanvas!.toBlob(r, "image/png"));
+  if (!blob) return;
+  try {
+    const bytes = Array.from(new Uint8Array(await blob.arrayBuffer()));
+    await invoke("save_day_card", { bytes });
+    const button = el("share-download");
+    button.classList.add("done");
+    toast(t("daySaved"));
+    setTimeout(() => button.classList.remove("done"), 1800);
+  } catch (error) {
+    console.error(error);
+    toast(t("dayCopyFailed"));
+  }
+}
+
+function shareTo(base: string) {
+  if (!shareSnap) return;
+  invoke("open_url", { url: base + encodeURIComponent(shareText(shareSnap)) }).catch(console.error);
 }
 
 let pendingUpdate: Update | null = null;
@@ -1058,9 +1353,15 @@ window.addEventListener("DOMContentLoaded", () => {
     const button = event.currentTarget as HTMLElement;
     const pinned = button.getAttribute("aria-pressed") !== "true";
     button.setAttribute("aria-pressed", String(pinned));
-    button.textContent = pinned ? t("pinned") : t("unpinned");
+    button.setAttribute("aria-label", pinned ? t("pinned") : t("unpinned"));
     invoke("set_window_pinned", { pinned }).catch(console.error);
   });
+
+  el("share-day").addEventListener("click", shareDay);
+  el("share-close").addEventListener("click", closeShareSheet);
+  el("share-download").addEventListener("click", downloadCard);
+  el("share-x").addEventListener("click", () => shareTo("https://x.com/intent/tweet?text="));
+  el("share-whatsapp").addEventListener("click", () => shareTo("https://wa.me/?text="));
 
   el("lang-select").addEventListener("change", (event) => {
     const value = (event.target as HTMLSelectElement).value as Lang;
@@ -1077,11 +1378,31 @@ window.addEventListener("DOMContentLoaded", () => {
     invoke("open_url", { url: "https://ronaldoscotti.com" }).catch(console.error);
   });
 
+  el("about-star").addEventListener("click", () => {
+    invoke("open_url", { url: "https://github.com/ronaldoscotti/pervigil" }).catch(console.error);
+  });
+
   el("about-update").addEventListener("click", installUpdate);
 
   el("notifications-switch").addEventListener("click", (event) => {
     const on = (event.currentTarget as HTMLElement).getAttribute("aria-checked") !== "true";
     set("set_notifications", { on });
+  });
+
+  el("autostart-switch").addEventListener("click", async (event) => {
+    const button = event.currentTarget as HTMLElement;
+    const on = button.getAttribute("aria-checked") !== "true";
+    try {
+      await (on ? enable() : disable());
+      button.setAttribute("aria-checked", String(on));
+    } catch (error) {
+      console.error(error);
+    }
+  });
+
+  el("dismiss-read-switch").addEventListener("click", (event) => {
+    const on = (event.currentTarget as HTMLElement).getAttribute("aria-checked") !== "true";
+    set("set_dismiss_read", { on });
   });
 
   el("project-list").addEventListener("click", (event) => {
@@ -1098,4 +1419,20 @@ window.addEventListener("DOMContentLoaded", () => {
   setInterval(poll, 1000);
   poll();
   checkForUpdates();
+  isEnabled()
+    .then((on) => el("autostart-switch").setAttribute("aria-checked", String(on)))
+    .catch(console.error);
+
+  // Referral loop: a single, dismissible nudge to share the day — only after the
+  // tool has proven itself over a few launches, and only on a day with real activity.
+  const launches = Number(localStorage.getItem("pervigil.launches") ?? "0") + 1;
+  localStorage.setItem("pervigil.launches", String(launches));
+  if (launches >= 3 && localStorage.getItem("pervigil.shareNudged") !== "1") {
+    setTimeout(() => {
+      if ((lastSnapshot?.sessions.length ?? 0) > 0) {
+        localStorage.setItem("pervigil.shareNudged", "1");
+        toast(t("shareNudge"));
+      }
+    }, 2500);
+  }
 });

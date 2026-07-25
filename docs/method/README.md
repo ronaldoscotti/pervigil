@@ -20,7 +20,7 @@ docs, and reproduce it.
 | 2 | Brainstorm | `superpowers:brainstorming` | dialogue → spec | — |
 | 3 | Spec | `superpowers:brainstorming` | [`../specs/2026-07-23-pervigil-design.md`](../specs/2026-07-23-pervigil-design.md) | **human + AI review** |
 | 4 | Plan | `superpowers:writing-plans` | [`../plans/2026-07-23-pervigil-plan.md`](../plans/2026-07-23-pervigil-plan.md) | **human + AI review** |
-| 5 | Implement | `superpowers:test-driven-development` | `src-tauri/` + 103 tests *(M0–M9 done)* | tests green |
+| 5 | Implement | `superpowers:test-driven-development` | `src-tauri/` + 120 tests *(M0–M10 + post-launch)* | tests green |
 | 6 | QA | manual + `agent-browser` | screenshots / notes *(M6–M9 pass done)* | works as a user |
 | 7 | Code review | `code-review` skill + self | review notes *(not started)* | issues resolved |
 | 8 | PR | git | pull request *(not started)* | **colleague review** |
@@ -35,11 +35,16 @@ docs, and reproduce it.
 [x] 3  Spec APPROVED   — human review gate passed (2026-07-23)
 [x] 4  Plan written    — docs/plans/2026-07-23-pervigil-plan.md
 [x] 4  Plan APPROVED   — human approval gate passed
-[~] 5  TDD implementation — M0–M9 done (103 tests). M10 partial: README + CI done;
-                            signing, bundling, and the demo are blocked on the user.
-[~] 6  QA              — M6–M9 pass done; on-screen raise, tray badge, notif banner unverified
-[ ] 7  Code review
-[ ] 8  PR + colleague review
+[x] 5  TDD implementation — M0–M10 done (120 tests): signed + notarized build,
+                            auto-updating CI releases, ten languages, and the
+                            settings/dismiss/share features added after launch in a
+                            faster TDD + PR loop (spec only where earned).
+[x] 6  QA              — the panel and every feature via agent-browser; the on-screen
+                         raise, tray badge, and notification banner stay visually
+                         unverified on this box (no tmux/iTerm2, no capture perms).
+[~] 7  Code review     — self + AI review on each pull request.
+[~] 8  PR review       — features shipped as reviewed PRs; a final consolidation is
+                         pending.
 ```
 
 **Nothing below the current line has been faked.** The checklist advances only

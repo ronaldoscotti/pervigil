@@ -34,9 +34,20 @@ pub struct Session {
     pub terminal: Option<Terminal>,
 }
 
+/// What the dismiss (check) action does to a session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DismissMode {
+    /// Hide it until it acts again.
+    #[default]
+    Hide,
+    /// Keep it in the list but demote it to idle — a "mark as read".
+    Read,
+}
+
 /// Lives in config, not the event log, so it enters `fold` as data and keeps it pure.
 #[derive(Debug, Clone, Default)]
 pub struct ViewPrefs {
     pub pinned: HashSet<SessionId>,
     pub dismissed: HashMap<SessionId, Timestamp>,
+    pub dismiss_mode: DismissMode,
 }

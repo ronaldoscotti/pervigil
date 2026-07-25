@@ -14,8 +14,13 @@
         <img class="brand-logo" src="/logo.png" alt="Pervigil" />
       </div>
       <div class="topbar-actions">
-        <button type="button" class="chip chip-toggle" id="pin-toggle" aria-pressed="true"
-          title="Keep the panel above other windows">Pinned</button>
+        <button type="button" class="chip chip-icon" id="share-day" aria-label="Share my day" title="Share my day">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+        </button>
+        <button type="button" class="chip chip-icon chip-toggle" id="pin-toggle" aria-pressed="true"
+          title="Keep the panel above other windows">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>
+        </button>
         <button type="button" class="chip chip-button" id="settings-toggle" aria-expanded="false">
           Settings
         </button>
@@ -24,26 +29,41 @@
 
     <div class="content">
       <section class="settings" id="settings" hidden>
-        <div class="settings-row">
-          <span class="settings-label" data-i18n="notifications">Notifications</span>
-          <button type="button" class="switch" id="notifications-switch" role="switch" aria-checked="true">
-            <span class="switch-knob"></span>
-          </button>
-        </div>
-        <div class="settings-row">
-          <span class="settings-label" data-i18n="language">Language</span>
-          <select class="lang-select" id="lang-select" aria-label="Language">
-            <option value="en">English</option>
-            <option value="zh">中文</option>
-            <option value="hi">हिन्दी</option>
-            <option value="es">Español</option>
-            <option value="ar">العربية</option>
-            <option value="pt">Português</option>
-            <option value="fr">Français</option>
-            <option value="ru">Русский</option>
-            <option value="ja">日本語</option>
-            <option value="de">Deutsch</option>
-          </select>
+        <div class="settings-group">
+          <span class="label" data-i18n="general">General</span>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="notifications">Notifications</span>
+            <button type="button" class="switch" id="notifications-switch" role="switch" aria-checked="true">
+              <span class="switch-knob"></span>
+            </button>
+          </div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="launchAtLogin">Launch at login</span>
+            <button type="button" class="switch" id="autostart-switch" role="switch" aria-checked="false">
+              <span class="switch-knob"></span>
+            </button>
+          </div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="dismissReadLabel">Dismiss marks read</span>
+            <button type="button" class="switch" id="dismiss-read-switch" role="switch" aria-checked="false">
+              <span class="switch-knob"></span>
+            </button>
+          </div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="language">Language</span>
+            <select class="lang-select" id="lang-select" aria-label="Language">
+              <option value="en">English</option>
+              <option value="zh">中文</option>
+              <option value="hi">हिन्दी</option>
+              <option value="es">Español</option>
+              <option value="ar">العربية</option>
+              <option value="pt">Português</option>
+              <option value="fr">Français</option>
+              <option value="ru">Русский</option>
+              <option value="ja">日本語</option>
+              <option value="de">Deutsch</option>
+            </select>
+          </div>
         </div>
         <div class="settings-group">
           <span class="label" data-i18n="projectsShown">Projects shown</span>
@@ -58,6 +78,10 @@
               <span class="about-license">MIT · Ronaldo Scotti</span>
               <button type="button" class="about-link" id="about-link">ronaldoscotti.com</button>
             </div>
+            <button type="button" class="about-star" id="about-star">
+              <span class="about-star-icon">★</span>
+              <span data-i18n="starOnGithub">Star on GitHub</span>
+            </button>
             <button type="button" class="about-update" id="about-update" hidden></button>
           </div>
         </div>
@@ -101,6 +125,33 @@
           <button type="button" data-span="week" data-i18n="spanWeek">Week</button>
         </div>
       </footer>
+
+      <div class="share-sheet" id="share-sheet" hidden>
+        <div class="share-panel">
+          <div class="share-head">
+            <span class="label" data-i18n="shareMyDay">Share my day</span>
+            <button type="button" class="share-close" id="share-close" aria-label="Close">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <img class="share-preview" id="share-preview" alt="" />
+          <button type="button" class="share-download" id="share-download">
+            <span class="share-dl-icons">
+              <svg class="i-dl" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+              <svg class="i-ok" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            </span>
+            <span data-i18n="download">Download</span>
+          </button>
+          <div class="share-socials">
+            <button type="button" class="share-social sx" id="share-x" aria-label="X">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+            </button>
+            <button type="button" class="share-social wa" id="share-whatsapp" aria-label="WhatsApp">
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.71.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   </body>
 </html>

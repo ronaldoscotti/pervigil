@@ -78,13 +78,13 @@ review.
 
 ## Current position
 
-Spec and plan **approved**. Implementation through **M9**: 103 tests green.
-Click-to-focus (M7), notifications + config + pin/dismiss + project visibility
-(M8), and the hook-install card with live detection (M9) are all built and QA'd.
-Pure logic and verifiable side effects (pbcopy, config round-trip, snippet
-round-trip) are tested; three OS-surface effects stay manually unverified on this
-box — the on-screen window raise for tmux/iTerm2, the tray badge, and the
-notification banner (no such terminals / no Screen Recording permission). Next is
-**M10 — packaging + README + demo**, which needs signing credentials and screen
-capture (a real blocker for the autonomous pass). See
-`docs/plans/2026-07-23-pervigil-plan.md` and `docs/method/README.md`.
+Implementation through **M10 and beyond**: **120 tests green**. Signed + notarized
+macOS build; **auto-updating, signed releases from CI** (tag → mac/Windows/Linux
+bundles + updater manifest, proven end-to-end); ten UI languages with RTL;
+launch-at-login; single-instance; a dismiss "read" mode; and a share-your-day card.
+The core (M0–M10) followed the full spec→plan→TDD→review pipeline; the post-launch
+features used a faster TDD + agent-browser QA + reviewed-PR loop (a written spec only
+for the release/auto-update work — no back-dated specs). Three OS-surface effects
+stay visually unverified on this box (tmux/iTerm2 raise, tray badge, notification
+banner). See `docs/plans/2026-07-23-pervigil-plan.md`,
+`docs/specs/2026-07-24-auto-update-releases.md`, and `docs/method/README.md`.
