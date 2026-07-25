@@ -11,11 +11,15 @@ like — at a glance.
 
 > *pervigil* (Latin) — ever-watchful; keeping watch through the whole night.
 
-> 🚧 **Work in progress.** The macOS MVP is built, tested, and signed; the demo
-> capture and a couple of OS-surface confirmations are still open. Not yet released.
+> 🚧 **Work in progress.** The macOS MVP is built, tested, signed, and public;
+> a few native-surface confirmations and auto-update are still open. Not yet released.
 
 <p align="center">
   <img src="assets/demos/pervigil-demo.jpg" alt="The Pervigil panel: a session waiting on you sorts to the top, a combined activity lane, per-session cost." width="360">
+</p>
+
+<p align="center">
+  <img src="assets/demos/pervigil.gif" alt="Pervigil in action — sessions across projects, the one waiting on you pinned to the top, with live cost and a daily activity lane." width="760">
 </p>
 
 ---
@@ -108,15 +112,16 @@ install card disappears the moment the hooks are detected.
 
 Built through **M10** of the plan — click-to-focus (confirmed raising the window
 under a real GUI launch), notifications, config, pin/dismiss, project visibility,
-the hook-install card, and a **signed + notarized macOS build** — on a pure core
-with **118 tests**. Remaining: the **demo capture**.
+the hook-install card, **ten UI languages** (with RTL), and a **signed + notarized
+macOS build** — on a pure core with **117 tests**. A short demo is at the top.
 
 Verified honestly. The pure logic and the checkable side effects (clipboard copy,
 config and snippet round-trips, tier selection) are tested; three OS-surface effects
 are real code but **not yet visually confirmed** on the dev machine — the on-screen
 window raise for tmux/iTerm2, the macOS tray badge, and the notification banner (that
 box has neither tmux nor iTerm2, and the CI/dev environment can't capture the native
-surfaces). See [`docs/qa/`](docs/qa/) for what each milestone did and did not prove.
+surfaces). Next up: auto-updating signed releases from CI. See [`docs/qa/`](docs/qa/)
+for what each milestone did and did not prove.
 
 ## Built in the open, by an explicit method
 
@@ -126,10 +131,10 @@ a description. Every stage deposits a real artifact; the git history records the
 order; nothing is claimed ahead of where the work actually is. Read
 [`docs/method/`](docs/method/) to follow it, or the git log to verify it.
 
-<p align="center">
-  <img src="assets/demos/pervigil.gif" alt="Pervigil watching its own build — sessions across projects, one waiting on you, sorted to the top." width="760">
-</p>
-
 ## License
 
 [MIT](LICENSE) © 2026 Ronaldo Scotti
+
+---
+
+Built by **Ronaldo Scotti** — [ronaldoscotti.com](https://ronaldoscotti.com)
