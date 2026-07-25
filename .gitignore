@@ -21,3 +21,6 @@ dist-ssr
 
 # Staged sidecar binary (regenerated from `cargo build --bin record`)
 /src-tauri/binaries/
+
+# Icon generation source (regenerate with: tauri icon <src>)
+/app-icon.png
