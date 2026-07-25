@@ -265,6 +265,9 @@ impl App {
         let mut sessions = store::merge(store::fold(&events, to, &prefs), scan.sessions);
         retain_live(&mut sessions, &SystemProcesses);
         store::apply_dismissed(&mut sessions, &prefs);
+        // Drop context-less ghosts: a hook fired (a Notification) but no cwd ever
+        // arrived and no transcript backfilled one, so the row would be nameless.
+        sessions.retain(|session| !session.cwd.is_empty());
         sessions.retain(|session| config.shows(&project(&session.cwd)));
         store::sort(&mut sessions, &prefs);
 
@@ -550,6 +553,22 @@ pub fn open_url(url: String) {
         "xdg-open"
     };
     let _ = std::process::Command::new(program).arg(url).spawn();
+}
+
+/// Save the shared day card to Downloads and reveal it — the reliable path when the
+/// webview can't write an image to the clipboard. Returns the saved path.
+#[tauri::command]
+pub fn save_day_card(bytes: Vec<u8>, app: tauri::State<'_, App>) -> Result<String, String> {
+    let dir = app.home.join("Downloads");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join("pervigil-day.png");
+    std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+    #[cfg(target_os = "macos")]
+    let _ = std::process::Command::new("open")
+        .arg("-R")
+        .arg(&path)
+        .spawn();
+    Ok(path.to_string_lossy().into_owned())
 }
 
 fn allowed_url(url: &str) -> bool {

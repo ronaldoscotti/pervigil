@@ -133,6 +133,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     shareMyDay: "Share my day",
     dayCopied: "Day card copied — paste it anywhere",
     dayCopyFailed: "Couldn't copy the card",
+    daySaved: "Day card saved to Downloads",
+    shareNudge: "Good run today — share your day? Tap ↗ above",
   },
   pt: {
     working: "Trabalhando",
@@ -195,6 +197,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     shareMyDay: "Compartilhar meu dia",
     dayCopied: "Cartão do dia copiado — cole onde quiser",
     dayCopyFailed: "Não foi possível copiar o cartão",
+    daySaved: "Cartão do dia salvo em Downloads",
+    shareNudge: "Belo dia — compartilhe? Toque em ↗ acima",
   },
   es: {
     working: "Trabajando",
@@ -257,6 +261,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     shareMyDay: "Compartir mi día",
     dayCopied: "Tarjeta del día copiada — pégala donde quieras",
     dayCopyFailed: "No se pudo copiar la tarjeta",
+    daySaved: "Tarjeta del día guardada en Descargas",
+    shareNudge: "Buen día — ¿compartirlo? Toca ↗ arriba",
   },
   fr: {
     working: "En cours",
@@ -319,6 +325,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     shareMyDay: "Partager ma journée",
     dayCopied: "Carte du jour copiée — collez-la où vous voulez",
     dayCopyFailed: "Impossible de copier la carte",
+    daySaved: "Carte du jour enregistrée dans Téléchargements",
+    shareNudge: "Belle journée — la partager ? Touchez ↗ en haut",
   },
   de: {
     working: "Arbeitet",
@@ -381,6 +389,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     shareMyDay: "Meinen Tag teilen",
     dayCopied: "Tageskarte kopiert — überall einfügen",
     dayCopyFailed: "Karte konnte nicht kopiert werden",
+    daySaved: "Tageskarte in Downloads gespeichert",
+    shareNudge: "Guter Tag — teilen? Tippe oben auf ↗",
   },
   ru: {
     working: "Работает",
@@ -443,6 +453,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     shareMyDay: "Поделиться днём",
     dayCopied: "Карточка дня скопирована — вставьте куда угодно",
     dayCopyFailed: "Не удалось скопировать карточку",
+    daySaved: "Карточка дня сохранена в Загрузки",
+    shareNudge: "Хороший день — поделиться? Нажмите ↗ вверху",
   },
   zh: {
     working: "运行中",
@@ -505,6 +517,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     shareMyDay: "分享我的一天",
     dayCopied: "今日卡片已复制 — 随处粘贴",
     dayCopyFailed: "无法复制卡片",
+    daySaved: "今日卡片已保存到下载",
+    shareNudge: "今天不错 — 分享一下？点击上方 ↗",
   },
   ja: {
     working: "実行中",
@@ -567,6 +581,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     shareMyDay: "今日をシェア",
     dayCopied: "今日のカードをコピーしました — どこにでも貼り付け",
     dayCopyFailed: "カードをコピーできませんでした",
+    daySaved: "今日のカードをダウンロードに保存しました",
+    shareNudge: "良い一日 — シェアする？上の ↗ をタップ",
   },
   hi: {
     working: "काम कर रहा है",
@@ -629,6 +645,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     shareMyDay: "मेरा दिन साझा करें",
     dayCopied: "दिन का कार्ड कॉपी हुआ — कहीं भी पेस्ट करें",
     dayCopyFailed: "कार्ड कॉपी नहीं हो सका",
+    daySaved: "दिन का कार्ड Downloads में सहेजा गया",
+    shareNudge: "अच्छा दिन — साझा करें? ऊपर ↗ टैप करें",
   },
   ar: {
     working: "قيد العمل",
@@ -691,6 +709,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     shareMyDay: "شارك يومي",
     dayCopied: "تم نسخ بطاقة اليوم — الصقها أينما شئت",
     dayCopyFailed: "تعذّر نسخ البطاقة",
+    daySaved: "تم حفظ بطاقة اليوم في التنزيلات",
+    shareNudge: "يوم جيد — شاركه؟ اضغط ↗ في الأعلى",
   },
 };
 
@@ -987,8 +1007,11 @@ function applyStaticStrings() {
     node.textContent = t(node.dataset.i18n as string);
   }
   const pin = el("pin-toggle");
-  pin.textContent = pin.getAttribute("aria-pressed") === "true" ? t("pinned") : t("unpinned");
   pin.title = t("keepAbove");
+  pin.setAttribute(
+    "aria-label",
+    pin.getAttribute("aria-pressed") === "true" ? t("pinned") : t("unpinned"),
+  );
   const settings = el("settings-toggle");
   settings.textContent = settings.getAttribute("aria-expanded") === "true" ? t("back") : t("settings");
   const select = el<HTMLSelectElement>("lang-select");
@@ -1103,13 +1126,28 @@ async function renderDayCard(snap: Snapshot): Promise<Blob> {
 async function shareDay() {
   const snap = await invoke<Snapshot>("snapshot", { span: "today" }).catch(() => lastSnapshot);
   if (!snap) return;
+  let ready = false;
   try {
     const blob = await renderDayCard(snap);
-    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-    toast(t("dayCopied"));
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      toast(t("dayCopied"));
+    } catch {
+      // The packaged webview can't put an image on the clipboard — save a file instead.
+      const bytes = Array.from(new Uint8Array(await blob.arrayBuffer()));
+      await invoke("save_day_card", { bytes });
+      toast(t("daySaved"));
+    }
+    ready = true;
   } catch (error) {
     console.error(error);
     toast(t("dayCopyFailed"));
+  }
+  if (ready) {
+    const text = encodeURIComponent(
+      "My day with Claude Code, watched by Pervigil 🦉\ngithub.com/ronaldoscotti/pervigil",
+    );
+    invoke("open_url", { url: `https://x.com/intent/tweet?text=${text}` }).catch(console.error);
   }
 }
 
@@ -1210,7 +1248,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const button = event.currentTarget as HTMLElement;
     const pinned = button.getAttribute("aria-pressed") !== "true";
     button.setAttribute("aria-pressed", String(pinned));
-    button.textContent = pinned ? t("pinned") : t("unpinned");
+    button.setAttribute("aria-label", pinned ? t("pinned") : t("unpinned"));
     invoke("set_window_pinned", { pinned }).catch(console.error);
   });
 
@@ -1275,4 +1313,17 @@ window.addEventListener("DOMContentLoaded", () => {
   isEnabled()
     .then((on) => el("autostart-switch").setAttribute("aria-checked", String(on)))
     .catch(console.error);
+
+  // Referral loop: a single, dismissible nudge to share the day — only after the
+  // tool has proven itself over a few launches, and only on a day with real activity.
+  const launches = Number(localStorage.getItem("pervigil.launches") ?? "0") + 1;
+  localStorage.setItem("pervigil.launches", String(launches));
+  if (launches >= 3 && localStorage.getItem("pervigil.shareNudged") !== "1") {
+    setTimeout(() => {
+      if ((lastSnapshot?.sessions.length ?? 0) > 0) {
+        localStorage.setItem("pervigil.shareNudged", "1");
+        toast(t("shareNudge"));
+      }
+    }, 2500);
+  }
 });

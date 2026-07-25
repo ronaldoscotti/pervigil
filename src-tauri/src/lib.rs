@@ -41,6 +41,7 @@ pub fn run() {
             app::dismiss,
             app::open_settings,
             app::open_url,
+            app::save_day_card,
             app::set_window_pinned
         ])
         .setup(|app| {
