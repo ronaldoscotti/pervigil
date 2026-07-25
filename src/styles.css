@@ -278,6 +278,64 @@ body.mac .topbar {
   direction: ltr;
 }
 
+.about-body {
+  margin-top: 6px;
+}
+
+.about-title {
+  font-family: var(--heading);
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.about-version {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--faint);
+  letter-spacing: 0.04em;
+}
+
+.about-tagline {
+  margin: 4px 0 9px;
+  font-size: 10.5px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.about-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.about-license {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--faint);
+  letter-spacing: 0.03em;
+}
+
+.about-link {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.03em;
+  color: var(--your-turn);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.about-link:hover {
+  text-decoration: underline;
+}
+
+.about-link:focus-visible {
+  outline: 1px solid rgba(244, 184, 96, 0.7);
+  border-radius: 3px;
+}
+
 .switch {
   position: relative;
   width: 38px;
