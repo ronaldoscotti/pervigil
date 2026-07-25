@@ -93,6 +93,8 @@ pub struct Snapshot {
     pub segments: Vec<Segment>,
     pub waiting_share: f64,
     pub cost: f64,
+    /// Total tokens processed in the window — input, output, and cache.
+    pub tokens: u64,
     /// Current settings the panel renders: the notifications toggle, and the projects
     /// the user hid (so they can be restored even with no live session).
     pub notifications: bool,
@@ -345,6 +347,14 @@ impl App {
                 .iter()
                 .filter(|entry| entry.at >= from && entry.at <= to)
                 .filter_map(|entry| pricing::cost(&self.prices, &entry.model, &entry.usage))
+                .sum(),
+            tokens: spent
+                .iter()
+                .filter(|entry| entry.at >= from && entry.at <= to)
+                .map(|entry| {
+                    let u = &entry.usage;
+                    u.input + u.output + u.cache_read + u.cache_write_5m + u.cache_write_1h
+                })
                 .sum(),
             notifications: config.notifications,
             dismiss_read: config.dismiss_read,

@@ -211,6 +211,172 @@ body.mac .topbar {
   outline: 1px solid rgba(244, 184, 96, 0.7);
 }
 
+/* Share sheet — a preview of the day card with download / X / WhatsApp. */
+.share-sheet {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(10, 11, 15, 0.72);
+  backdrop-filter: blur(6px);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.share-sheet.open {
+  opacity: 1;
+}
+
+.share-panel {
+  width: 100%;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--edge);
+  border-radius: 14px;
+  background: linear-gradient(180deg, var(--ground), var(--ground-deep));
+  opacity: 0;
+  transform: translateY(8px) scale(0.97);
+  transition:
+    transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 0.2s ease;
+}
+
+.share-sheet.open .share-panel {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.share-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.share-close {
+  display: inline-flex;
+  padding: 2px;
+  color: var(--faint);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color 0.12s ease;
+}
+
+.share-close:hover {
+  color: var(--ink);
+}
+
+.share-preview {
+  display: block;
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid var(--edge);
+}
+
+.share-download {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ground-deep);
+  background: var(--waiting);
+  border: none;
+  border-radius: 8px;
+  padding: 9px 0;
+  cursor: pointer;
+  transition:
+    filter 0.12s ease,
+    transform 0.08s ease;
+}
+
+.share-download:hover {
+  filter: brightness(1.07);
+}
+
+.share-download:active {
+  transform: scale(0.98);
+}
+
+.share-dl-icons {
+  display: inline-grid;
+  place-items: center;
+}
+
+.share-dl-icons > svg {
+  grid-area: 1 / 1;
+  transition:
+    opacity 0.15s ease,
+    transform 0.2s ease;
+}
+
+.share-dl-icons .i-ok {
+  opacity: 0;
+  transform: scale(0.5);
+}
+
+.share-download.done .i-dl {
+  opacity: 0;
+}
+
+.share-download.done .i-ok {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.share-socials {
+  display: flex;
+  gap: 10px;
+}
+
+.share-social {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 0;
+  color: var(--ink-dim);
+  background: var(--sunken);
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  cursor: pointer;
+  transition:
+    transform 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease,
+    background 0.12s ease;
+}
+
+.share-social:hover {
+  transform: translateY(-1px);
+}
+
+.share-social.sx:hover {
+  color: #fff;
+  border-color: #55585f;
+  background: #202227;
+}
+
+.share-social.wa:hover {
+  color: #25d366;
+  border-color: rgba(37, 211, 102, 0.4);
+  background: rgba(37, 211, 102, 0.08);
+}
+
+.share-social:active {
+  transform: translateY(0) scale(0.98);
+}
+
 /* Full-window overlay below the title bar; the title bar's button becomes Back. */
 .settings {
   position: absolute;

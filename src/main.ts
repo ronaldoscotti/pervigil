@@ -48,6 +48,7 @@ interface Snapshot {
   segments: Segment[];
   waitingShare: number;
   cost: number;
+  tokens: number;
   notifications: boolean;
   dismissRead: boolean;
   hidden: string[];
@@ -135,6 +136,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     dayCopyFailed: "Couldn't copy the card",
     daySaved: "Day card saved to Downloads",
     shareNudge: "Good run today — share your day? Tap ↗ above",
+    download: "Download",
   },
   pt: {
     working: "Trabalhando",
@@ -199,6 +201,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     dayCopyFailed: "Não foi possível copiar o cartão",
     daySaved: "Cartão do dia salvo em Downloads",
     shareNudge: "Belo dia — compartilhe? Toque em ↗ acima",
+    download: "Baixar",
   },
   es: {
     working: "Trabajando",
@@ -263,6 +266,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     dayCopyFailed: "No se pudo copiar la tarjeta",
     daySaved: "Tarjeta del día guardada en Descargas",
     shareNudge: "Buen día — ¿compartirlo? Toca ↗ arriba",
+    download: "Descargar",
   },
   fr: {
     working: "En cours",
@@ -327,6 +331,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     dayCopyFailed: "Impossible de copier la carte",
     daySaved: "Carte du jour enregistrée dans Téléchargements",
     shareNudge: "Belle journée — la partager ? Touchez ↗ en haut",
+    download: "Télécharger",
   },
   de: {
     working: "Arbeitet",
@@ -391,6 +396,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     dayCopyFailed: "Karte konnte nicht kopiert werden",
     daySaved: "Tageskarte in Downloads gespeichert",
     shareNudge: "Guter Tag — teilen? Tippe oben auf ↗",
+    download: "Herunterladen",
   },
   ru: {
     working: "Работает",
@@ -455,6 +461,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     dayCopyFailed: "Не удалось скопировать карточку",
     daySaved: "Карточка дня сохранена в Загрузки",
     shareNudge: "Хороший день — поделиться? Нажмите ↗ вверху",
+    download: "Скачать",
   },
   zh: {
     working: "运行中",
@@ -519,6 +526,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     dayCopyFailed: "无法复制卡片",
     daySaved: "今日卡片已保存到下载",
     shareNudge: "今天不错 — 分享一下？点击上方 ↗",
+    download: "下载",
   },
   ja: {
     working: "実行中",
@@ -583,6 +591,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     dayCopyFailed: "カードをコピーできませんでした",
     daySaved: "今日のカードをダウンロードに保存しました",
     shareNudge: "良い一日 — シェアする？上の ↗ をタップ",
+    download: "ダウンロード",
   },
   hi: {
     working: "काम कर रहा है",
@@ -647,6 +656,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     dayCopyFailed: "कार्ड कॉपी नहीं हो सका",
     daySaved: "दिन का कार्ड Downloads में सहेजा गया",
     shareNudge: "अच्छा दिन — साझा करें? ऊपर ↗ टैप करें",
+    download: "डाउनलोड",
   },
   ar: {
     working: "قيد العمل",
@@ -711,6 +721,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     dayCopyFailed: "تعذّر نسخ البطاقة",
     daySaved: "تم حفظ بطاقة اليوم في التنزيلات",
     shareNudge: "يوم جيد — شاركه؟ اضغط ↗ في الأعلى",
+    download: "تنزيل",
   },
 };
 
@@ -1062,11 +1073,52 @@ async function set(command: string, args: Record<string, unknown>) {
 
 /** A privacy-safe day card — aggregate stats only, never a project name — to copy
  *  and post. Rendered at social-card size in the brand's own colors. */
-async function renderDayCard(snap: Snapshot): Promise<Blob> {
+let shareCanvas: HTMLCanvasElement | null = null;
+let shareSnap: Snapshot | null = null;
+
+const LANE_COLORS: Record<SessionState, string> = {
+  Idle: "#3b4048",
+  Working: "#6fb2c4",
+  WaitingOnYou: "#f4b860",
+  YourTurn: "#c89a58",
+};
+
+function formatTokens(n: number): string {
+  if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1).replace(/\.0$/, "") + "M";
+  if (n >= 1e3) return (n / 1e3).toFixed(n >= 1e5 ? 0 : 1).replace(/\.0$/, "") + "K";
+  return String(n);
+}
+
+/** The message for X/WhatsApp — the same numbers the card shows, so the link isn't bare. */
+function shareText(snap: Snapshot): string {
+  const pct = Math.round(snap.waitingShare * 100);
+  return `My day with Claude Code 🦉\n${snap.sessions.length} sessions · ${formatTokens(snap.tokens)} tokens · ${pct}% waiting on me\n\nvia Pervigil — github.com/ronaldoscotti/pervigil`;
+}
+
+function roundRectPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+/** The day as a branded card: the owl wordmark, the activity graph, sessions and tokens.
+ *  Privacy-safe — aggregate numbers only, never a project name. */
+async function renderDayCanvas(snap: Snapshot): Promise<HTMLCanvasElement> {
   await document.fonts.ready;
   const W = 1200;
   const H = 630;
-  const PAD = 80;
+  const PAD = 76;
   const canvas = document.createElement("canvas");
   canvas.width = W;
   canvas.height = H;
@@ -1077,78 +1129,121 @@ async function renderDayCard(snap: Snapshot): Promise<Blob> {
   bg.addColorStop(1, "#141620");
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = "#262a34";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(1, 1, W - 2, H - 2);
+
+  const logo = new Image();
+  logo.src = "/logo.png";
+  try {
+    await logo.decode();
+    const lh = 54;
+    ctx.drawImage(logo, PAD, 62, (logo.width / logo.height) * lh, lh);
+  } catch {
+    ctx.fillStyle = "#eae7de";
+    ctx.font = "600 46px Lora, serif";
+    ctx.fillText("Pervigil", PAD, 106);
+  }
 
   const date = new Date(snap.now * 1000).toLocaleDateString("en-US", {
     month: "long",
     day: "numeric",
     year: "numeric",
   });
-
-  ctx.fillStyle = "#f4b860";
-  ctx.beginPath();
-  ctx.arc(PAD + 10, 96, 11, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = "#eae7de";
-  ctx.font = "600 44px Lora, serif";
-  ctx.fillText("Pervigil", PAD + 36, 110);
   ctx.fillStyle = "#878d9a";
   ctx.font = "400 24px 'Space Mono', monospace";
   ctx.textAlign = "right";
-  ctx.fillText(`MY DAY · ${date}`, W - PAD, 104);
+  ctx.fillText(`MY DAY · ${date}`, W - PAD, 100);
+  ctx.textAlign = "left";
+
+  const laneY = 210;
+  const laneH = 52;
+  const laneW = W - PAD * 2;
+  const span = Math.max(snap.now - snap.from, 1);
+  ctx.fillStyle = "#878d9a";
+  ctx.font = "500 20px 'Space Mono', monospace";
+  ctx.fillText("TODAY", PAD, laneY - 18);
+  ctx.fillStyle = "#e7c08a";
+  ctx.textAlign = "right";
+  ctx.fillText(`${Math.round(snap.waitingShare * 100)}% waiting on you`, W - PAD, laneY - 18);
+  ctx.textAlign = "left";
+  roundRectPath(ctx, PAD, laneY, laneW, laneH, 9);
+  ctx.fillStyle = "#20242e";
+  ctx.fill();
+  ctx.save();
+  roundRectPath(ctx, PAD, laneY, laneW, laneH, 9);
+  ctx.clip();
+  for (const s of snap.segments) {
+    const x = PAD + ((s.from - snap.from) / span) * laneW;
+    const w = ((s.to - s.from) / span) * laneW;
+    ctx.fillStyle = LANE_COLORS[s.state] ?? "#3b4048";
+    ctx.fillRect(x, laneY, Math.max(w, 1), laneH);
+  }
+  ctx.restore();
+  ctx.fillStyle = "#565c6a";
+  ctx.font = "400 18px 'Space Mono', monospace";
+  ctx.textAlign = "right";
+  ctx.fillText("now", W - PAD, laneY + laneH + 30);
+  ctx.textAlign = "left";
 
   const stats: [string, string][] = [
     [String(snap.sessions.length), "sessions"],
-    [`${Math.round(snap.waitingShare * 100)}%`, "waiting on me"],
-    [`$${snap.cost.toFixed(2)}`, "spent"],
+    [formatTokens(snap.tokens), "tokens"],
   ];
-  const colW = (W - PAD * 2) / 3;
-  ctx.textAlign = "center";
   stats.forEach(([value, label], i) => {
-    const cx = PAD + colW * i + colW / 2;
+    const x = PAD + i * (laneW / 2);
     ctx.fillStyle = "#f4b860";
-    ctx.font = "700 92px 'Space Mono', monospace";
-    ctx.fillText(value, cx, 370);
+    ctx.font = "700 90px 'Space Mono', monospace";
+    ctx.fillText(value, x, 440);
     ctx.fillStyle = "#b8bec9";
-    ctx.font = "400 30px Lora, serif";
-    ctx.fillText(label, cx, 430);
+    ctx.font = "400 28px Lora, serif";
+    ctx.fillText(label, x, 486);
   });
 
-  ctx.textAlign = "left";
   ctx.fillStyle = "#565c6a";
-  ctx.font = "400 24px 'Space Mono', monospace";
-  ctx.fillText("github.com/ronaldoscotti/pervigil", PAD, H - 58);
+  ctx.font = "400 22px 'Space Mono', monospace";
+  ctx.fillText("github.com/ronaldoscotti/pervigil", PAD, H - 46);
 
-  return new Promise<Blob>((resolve, reject) =>
-    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("no blob"))), "image/png"),
-  );
+  return canvas;
 }
 
 async function shareDay() {
   const snap = await invoke<Snapshot>("snapshot", { span: "today" }).catch(() => lastSnapshot);
   if (!snap) return;
-  let ready = false;
+  shareSnap = snap;
+  shareCanvas = await renderDayCanvas(snap);
+  el<HTMLImageElement>("share-preview").src = shareCanvas.toDataURL("image/png");
+  const sheet = el("share-sheet");
+  sheet.hidden = false;
+  requestAnimationFrame(() => sheet.classList.add("open"));
+}
+
+function closeShareSheet() {
+  const sheet = el("share-sheet");
+  sheet.classList.remove("open");
+  setTimeout(() => (sheet.hidden = true), 200);
+}
+
+async function downloadCard() {
+  if (!shareCanvas) return;
+  const blob = await new Promise<Blob | null>((r) => shareCanvas!.toBlob(r, "image/png"));
+  if (!blob) return;
   try {
-    const blob = await renderDayCard(snap);
-    try {
-      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-      toast(t("dayCopied"));
-    } catch {
-      // The packaged webview can't put an image on the clipboard — save a file instead.
-      const bytes = Array.from(new Uint8Array(await blob.arrayBuffer()));
-      await invoke("save_day_card", { bytes });
-      toast(t("daySaved"));
-    }
-    ready = true;
+    const bytes = Array.from(new Uint8Array(await blob.arrayBuffer()));
+    await invoke("save_day_card", { bytes });
+    const button = el("share-download");
+    button.classList.add("done");
+    toast(t("daySaved"));
+    setTimeout(() => button.classList.remove("done"), 1800);
   } catch (error) {
     console.error(error);
     toast(t("dayCopyFailed"));
   }
-  if (ready) {
-    const text = encodeURIComponent(
-      "My day with Claude Code, watched by Pervigil 🦉\ngithub.com/ronaldoscotti/pervigil",
-    );
-    invoke("open_url", { url: `https://x.com/intent/tweet?text=${text}` }).catch(console.error);
-  }
+}
+
+function shareTo(base: string) {
+  if (!shareSnap) return;
+  invoke("open_url", { url: base + encodeURIComponent(shareText(shareSnap)) }).catch(console.error);
 }
 
 let pendingUpdate: Update | null = null;
@@ -1253,6 +1348,10 @@ window.addEventListener("DOMContentLoaded", () => {
   });
 
   el("share-day").addEventListener("click", shareDay);
+  el("share-close").addEventListener("click", closeShareSheet);
+  el("share-download").addEventListener("click", downloadCard);
+  el("share-x").addEventListener("click", () => shareTo("https://x.com/intent/tweet?text="));
+  el("share-whatsapp").addEventListener("click", () => shareTo("https://wa.me/?text="));
 
   el("lang-select").addEventListener("change", (event) => {
     const value = (event.target as HTMLSelectElement).value as Lang;
