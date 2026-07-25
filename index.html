@@ -24,26 +24,35 @@
 
     <div class="content">
       <section class="settings" id="settings" hidden>
-        <div class="settings-row">
-          <span class="settings-label" data-i18n="notifications">Notifications</span>
-          <button type="button" class="switch" id="notifications-switch" role="switch" aria-checked="true">
-            <span class="switch-knob"></span>
-          </button>
-        </div>
-        <div class="settings-row">
-          <span class="settings-label" data-i18n="language">Language</span>
-          <select class="lang-select" id="lang-select" aria-label="Language">
-            <option value="en">English</option>
-            <option value="zh">中文</option>
-            <option value="hi">हिन्दी</option>
-            <option value="es">Español</option>
-            <option value="ar">العربية</option>
-            <option value="pt">Português</option>
-            <option value="fr">Français</option>
-            <option value="ru">Русский</option>
-            <option value="ja">日本語</option>
-            <option value="de">Deutsch</option>
-          </select>
+        <div class="settings-group">
+          <span class="label" data-i18n="general">General</span>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="notifications">Notifications</span>
+            <button type="button" class="switch" id="notifications-switch" role="switch" aria-checked="true">
+              <span class="switch-knob"></span>
+            </button>
+          </div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="launchAtLogin">Launch at login</span>
+            <button type="button" class="switch" id="autostart-switch" role="switch" aria-checked="false">
+              <span class="switch-knob"></span>
+            </button>
+          </div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="language">Language</span>
+            <select class="lang-select" id="lang-select" aria-label="Language">
+              <option value="en">English</option>
+              <option value="zh">中文</option>
+              <option value="hi">हिन्दी</option>
+              <option value="es">Español</option>
+              <option value="ar">العربية</option>
+              <option value="pt">Português</option>
+              <option value="fr">Français</option>
+              <option value="ru">Русский</option>
+              <option value="ja">日本語</option>
+              <option value="de">Deutsch</option>
+            </select>
+          </div>
         </div>
         <div class="settings-group">
           <span class="label" data-i18n="projectsShown">Projects shown</span>
@@ -58,6 +67,10 @@
               <span class="about-license">MIT · Ronaldo Scotti</span>
               <button type="button" class="about-link" id="about-link">ronaldoscotti.com</button>
             </div>
+            <button type="button" class="about-star" id="about-star">
+              <span class="about-star-icon">★</span>
+              <span data-i18n="starOnGithub">Star on GitHub</span>
+            </button>
             <button type="button" class="about-update" id="about-update" hidden></button>
           </div>
         </div>

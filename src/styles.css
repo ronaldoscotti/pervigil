@@ -211,19 +211,21 @@ body.mac .topbar {
 }
 
 .settings-label {
-  font-size: 13px;
+  font-size: 12.5px;
   color: var(--ink-dim);
 }
 
 .settings-group {
-  margin-top: 14px;
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 10px;
 }
 
-.settings-row + .settings-row {
-  margin-top: 12px;
+/* A divider and room between sections so the sheet breathes. */
+.settings-group + .settings-group {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--edge-soft);
 }
 
 .lang-select {
@@ -356,6 +358,40 @@ body.mac .topbar {
 
 .about-update:focus-visible {
   outline: 1px solid var(--ink);
+}
+
+.about-star {
+  margin-top: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.03em;
+  color: var(--ink-dim);
+  background: none;
+  border: 1px solid var(--edge);
+  border-radius: 6px;
+  padding: 6px 11px;
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.about-star:hover {
+  border-color: var(--waiting);
+  color: var(--ink);
+}
+
+.about-star-icon {
+  color: var(--waiting);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.about-star:focus-visible {
+  outline: 1px solid rgba(244, 184, 96, 0.7);
 }
 
 .switch {

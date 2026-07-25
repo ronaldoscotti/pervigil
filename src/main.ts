@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import "@fontsource/lora/400.css";
 import "@fontsource/lora/500.css";
 import "@fontsource/lora/600.css";
@@ -124,6 +125,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "Update to v{version}",
     updateInstalling: "Downloading update…",
     updateFailed: "Update failed",
+    launchAtLogin: "Launch at login",
+    general: "General",
+    starOnGithub: "Star on GitHub",
   },
   pt: {
     working: "Trabalhando",
@@ -179,6 +183,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "Atualizar para v{version}",
     updateInstalling: "Baixando atualização…",
     updateFailed: "Falha na atualização",
+    launchAtLogin: "Abrir ao iniciar sessão",
+    general: "Geral",
+    starOnGithub: "Estrela no GitHub",
   },
   es: {
     working: "Trabajando",
@@ -234,6 +241,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "Actualizar a v{version}",
     updateInstalling: "Descargando actualización…",
     updateFailed: "Falló la actualización",
+    launchAtLogin: "Abrir al iniciar sesión",
+    general: "General",
+    starOnGithub: "Estrella en GitHub",
   },
   fr: {
     working: "En cours",
@@ -289,6 +299,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "Mettre à jour vers v{version}",
     updateInstalling: "Téléchargement de la mise à jour…",
     updateFailed: "Échec de la mise à jour",
+    launchAtLogin: "Lancer à la connexion",
+    general: "Général",
+    starOnGithub: "Étoile sur GitHub",
   },
   de: {
     working: "Arbeitet",
@@ -344,6 +357,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "Auf v{version} aktualisieren",
     updateInstalling: "Update wird heruntergeladen…",
     updateFailed: "Update fehlgeschlagen",
+    launchAtLogin: "Beim Anmelden starten",
+    general: "Allgemein",
+    starOnGithub: "Stern auf GitHub",
   },
   ru: {
     working: "Работает",
@@ -399,6 +415,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "Обновить до v{version}",
     updateInstalling: "Загрузка обновления…",
     updateFailed: "Не удалось обновить",
+    launchAtLogin: "Запускать при входе",
+    general: "Общие",
+    starOnGithub: "Звезда на GitHub",
   },
   zh: {
     working: "运行中",
@@ -454,6 +473,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "更新到 v{version}",
     updateInstalling: "正在下载更新…",
     updateFailed: "更新失败",
+    launchAtLogin: "登录时启动",
+    general: "常规",
+    starOnGithub: "在 GitHub 加星",
   },
   ja: {
     working: "実行中",
@@ -509,6 +531,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "v{version} に更新",
     updateInstalling: "アップデートをダウンロード中…",
     updateFailed: "アップデート失敗",
+    launchAtLogin: "ログイン時に起動",
+    general: "一般",
+    starOnGithub: "GitHub でスター",
   },
   hi: {
     working: "काम कर रहा है",
@@ -564,6 +589,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "v{version} में अपडेट करें",
     updateInstalling: "अपडेट डाउनलोड हो रहा है…",
     updateFailed: "अपडेट विफल",
+    launchAtLogin: "लॉगिन पर लॉन्च करें",
+    general: "सामान्य",
+    starOnGithub: "GitHub पर स्टार",
   },
   ar: {
     working: "قيد العمل",
@@ -619,6 +647,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "التحديث إلى v{version}",
     updateInstalling: "جارٍ تنزيل التحديث…",
     updateFailed: "فشل التحديث",
+    launchAtLogin: "التشغيل عند تسجيل الدخول",
+    general: "عام",
+    starOnGithub: "نجمة على GitHub",
   },
 };
 
@@ -1077,11 +1108,26 @@ window.addEventListener("DOMContentLoaded", () => {
     invoke("open_url", { url: "https://ronaldoscotti.com" }).catch(console.error);
   });
 
+  el("about-star").addEventListener("click", () => {
+    invoke("open_url", { url: "https://github.com/ronaldoscotti/pervigil" }).catch(console.error);
+  });
+
   el("about-update").addEventListener("click", installUpdate);
 
   el("notifications-switch").addEventListener("click", (event) => {
     const on = (event.currentTarget as HTMLElement).getAttribute("aria-checked") !== "true";
     set("set_notifications", { on });
+  });
+
+  el("autostart-switch").addEventListener("click", async (event) => {
+    const button = event.currentTarget as HTMLElement;
+    const on = button.getAttribute("aria-checked") !== "true";
+    try {
+      await (on ? enable() : disable());
+      button.setAttribute("aria-checked", String(on));
+    } catch (error) {
+      console.error(error);
+    }
   });
 
   el("project-list").addEventListener("click", (event) => {
@@ -1098,4 +1144,7 @@ window.addEventListener("DOMContentLoaded", () => {
   setInterval(poll, 1000);
   poll();
   checkForUpdates();
+  isEnabled()
+    .then((on) => el("autostart-switch").setAttribute("aria-checked", String(on)))
+    .catch(console.error);
 });
