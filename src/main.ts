@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
+import { check, type Update } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 import "@fontsource/lora/400.css";
 import "@fontsource/lora/500.css";
 import "@fontsource/lora/600.css";
@@ -119,6 +121,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     hooksDetected: "Hooks detected ✓",
     about: "About",
     tagline: "Watches your Claude Code sessions.",
+    installUpdate: "Update to v{version}",
+    updateInstalling: "Downloading update…",
+    updateFailed: "Update failed",
   },
   pt: {
     working: "Trabalhando",
@@ -171,6 +176,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     hooksDetected: "Hooks detectados ✓",
     about: "Sobre",
     tagline: "Vigia suas sessões do Claude Code.",
+    installUpdate: "Atualizar para v{version}",
+    updateInstalling: "Baixando atualização…",
+    updateFailed: "Falha na atualização",
   },
   es: {
     working: "Trabajando",
@@ -223,6 +231,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     hooksDetected: "Hooks detectados ✓",
     about: "Acerca de",
     tagline: "Vigila tus sesiones de Claude Code.",
+    installUpdate: "Actualizar a v{version}",
+    updateInstalling: "Descargando actualización…",
+    updateFailed: "Falló la actualización",
   },
   fr: {
     working: "En cours",
@@ -275,6 +286,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     hooksDetected: "Hooks détectés ✓",
     about: "À propos",
     tagline: "Veille sur vos sessions Claude Code.",
+    installUpdate: "Mettre à jour vers v{version}",
+    updateInstalling: "Téléchargement de la mise à jour…",
+    updateFailed: "Échec de la mise à jour",
   },
   de: {
     working: "Arbeitet",
@@ -327,6 +341,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     hooksDetected: "Hooks erkannt ✓",
     about: "Über",
     tagline: "Wacht über deine Claude-Code-Sitzungen.",
+    installUpdate: "Auf v{version} aktualisieren",
+    updateInstalling: "Update wird heruntergeladen…",
+    updateFailed: "Update fehlgeschlagen",
   },
   ru: {
     working: "Работает",
@@ -379,6 +396,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     hooksDetected: "Hooks обнаружены ✓",
     about: "О программе",
     tagline: "Следит за вашими сессиями Claude Code.",
+    installUpdate: "Обновить до v{version}",
+    updateInstalling: "Загрузка обновления…",
+    updateFailed: "Не удалось обновить",
   },
   zh: {
     working: "运行中",
@@ -431,6 +451,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     hooksDetected: "已检测到 hooks ✓",
     about: "关于",
     tagline: "守望你的 Claude Code 会话。",
+    installUpdate: "更新到 v{version}",
+    updateInstalling: "正在下载更新…",
+    updateFailed: "更新失败",
   },
   ja: {
     working: "実行中",
@@ -483,6 +506,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     hooksDetected: "hooks を検出 ✓",
     about: "情報",
     tagline: "Claude Code のセッションを見守ります。",
+    installUpdate: "v{version} に更新",
+    updateInstalling: "アップデートをダウンロード中…",
+    updateFailed: "アップデート失敗",
   },
   hi: {
     working: "काम कर रहा है",
@@ -535,6 +561,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     hooksDetected: "hooks मिल गए ✓",
     about: "परिचय",
     tagline: "आपके Claude Code सत्रों पर नज़र रखता है।",
+    installUpdate: "v{version} में अपडेट करें",
+    updateInstalling: "अपडेट डाउनलोड हो रहा है…",
+    updateFailed: "अपडेट विफल",
   },
   ar: {
     working: "قيد العمل",
@@ -587,6 +616,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     hooksDetected: "تم اكتشاف hooks ✓",
     about: "حول",
     tagline: "يراقب جلسات Claude Code لديك.",
+    installUpdate: "التحديث إلى v{version}",
+    updateInstalling: "جارٍ تنزيل التحديث…",
+    updateFailed: "فشل التحديث",
   },
 };
 
@@ -929,6 +961,35 @@ async function set(command: string, args: Record<string, unknown>) {
   poll();
 }
 
+let pendingUpdate: Update | null = null;
+
+/** Silent on launch: a found update surfaces as an About affordance, never an
+ *  auto-install. No endpoint reachable (dev, offline) degrades to nothing. */
+async function checkForUpdates() {
+  try {
+    const update = await check();
+    if (!update) return;
+    pendingUpdate = update;
+    const button = el("about-update");
+    button.textContent = t("installUpdate", { version: update.version });
+    button.hidden = false;
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+async function installUpdate() {
+  if (!pendingUpdate) return;
+  toast(t("updateInstalling"));
+  try {
+    await pendingUpdate.downloadAndInstall();
+    await relaunch();
+  } catch (error) {
+    console.error(error);
+    toast(t("updateFailed"));
+  }
+}
+
 let inflight = false;
 let lastSnapshot: Snapshot | undefined;
 
@@ -1016,6 +1077,8 @@ window.addEventListener("DOMContentLoaded", () => {
     invoke("open_url", { url: "https://ronaldoscotti.com" }).catch(console.error);
   });
 
+  el("about-update").addEventListener("click", installUpdate);
+
   el("notifications-switch").addEventListener("click", (event) => {
     const on = (event.currentTarget as HTMLElement).getAttribute("aria-checked") !== "true";
     set("set_notifications", { on });
@@ -1034,4 +1097,5 @@ window.addEventListener("DOMContentLoaded", () => {
   // scanner only reads the bytes appended since the last tick. Revisit if that changes.
   setInterval(poll, 1000);
   poll();
+  checkForUpdates();
 });

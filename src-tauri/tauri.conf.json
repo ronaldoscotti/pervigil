@@ -36,6 +36,15 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQzQjM0MTU2NUNGMTk0RDMKUldUVGxQRmNWa0d6US8vSWJic08vREM5NlBlUHRMY3BnTXdJNHQvS1FObnRKbHZaNDlQVFRRaEIK",
+      "endpoints": [
+        "https://github.com/ronaldoscotti/pervigil/releases/latest/download/latest.json"
+      ]
+    }
   }
 }
