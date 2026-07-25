@@ -48,6 +48,7 @@ interface Snapshot {
   waitingShare: number;
   cost: number;
   notifications: boolean;
+  dismissRead: boolean;
   hidden: string[];
   hooksInstalled: boolean;
   hookSnippet: string;
@@ -124,6 +125,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "Update to v{version}",
     updateInstalling: "Downloading update…",
     updateFailed: "Update failed",
+    dismissReadLabel: "Dismiss marks read",
   },
   pt: {
     working: "Trabalhando",
@@ -179,6 +181,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "Atualizar para v{version}",
     updateInstalling: "Baixando atualização…",
     updateFailed: "Falha na atualização",
+    dismissReadLabel: "Dispensar marca lida",
   },
   es: {
     working: "Trabajando",
@@ -234,6 +237,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "Actualizar a v{version}",
     updateInstalling: "Descargando actualización…",
     updateFailed: "Falló la actualización",
+    dismissReadLabel: "Descartar marca leído",
   },
   fr: {
     working: "En cours",
@@ -289,6 +293,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "Mettre à jour vers v{version}",
     updateInstalling: "Téléchargement de la mise à jour…",
     updateFailed: "Échec de la mise à jour",
+    dismissReadLabel: "Ignorer marque lu",
   },
   de: {
     working: "Arbeitet",
@@ -344,6 +349,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "Auf v{version} aktualisieren",
     updateInstalling: "Update wird heruntergeladen…",
     updateFailed: "Update fehlgeschlagen",
+    dismissReadLabel: "Ausblenden als gelesen",
   },
   ru: {
     working: "Работает",
@@ -399,6 +405,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "Обновить до v{version}",
     updateInstalling: "Загрузка обновления…",
     updateFailed: "Не удалось обновить",
+    dismissReadLabel: "Скрыть как прочитано",
   },
   zh: {
     working: "运行中",
@@ -454,6 +461,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "更新到 v{version}",
     updateInstalling: "正在下载更新…",
     updateFailed: "更新失败",
+    dismissReadLabel: "忽略即已读",
   },
   ja: {
     working: "実行中",
@@ -509,6 +517,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "v{version} に更新",
     updateInstalling: "アップデートをダウンロード中…",
     updateFailed: "アップデート失敗",
+    dismissReadLabel: "非表示で既読",
   },
   hi: {
     working: "काम कर रहा है",
@@ -564,6 +573,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "v{version} में अपडेट करें",
     updateInstalling: "अपडेट डाउनलोड हो रहा है…",
     updateFailed: "अपडेट विफल",
+    dismissReadLabel: "खारिज = पढ़ा हुआ",
   },
   ar: {
     working: "قيد العمل",
@@ -619,6 +629,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "التحديث إلى v{version}",
     updateInstalling: "جارٍ تنزيل التحديث…",
     updateFailed: "فشل التحديث",
+    dismissReadLabel: "التجاهل كمقروء",
   },
 };
 
@@ -882,6 +893,7 @@ let projectSig = "";
 /** The notifications switch tracks the server every poll — cheap, no flicker. */
 function renderSettings(snapshot: Snapshot) {
   el("notifications-switch").setAttribute("aria-checked", String(snapshot.notifications));
+  el("dismiss-read-switch").setAttribute("aria-checked", String(snapshot.dismissRead));
   if (!el("settings").hidden) renderProjects(snapshot);
 }
 
@@ -1082,6 +1094,11 @@ window.addEventListener("DOMContentLoaded", () => {
   el("notifications-switch").addEventListener("click", (event) => {
     const on = (event.currentTarget as HTMLElement).getAttribute("aria-checked") !== "true";
     set("set_notifications", { on });
+  });
+
+  el("dismiss-read-switch").addEventListener("click", (event) => {
+    const on = (event.currentTarget as HTMLElement).getAttribute("aria-checked") !== "true";
+    set("set_dismiss_read", { on });
   });
 
   el("project-list").addEventListener("click", (event) => {

@@ -96,6 +96,8 @@ pub struct Snapshot {
     /// Current settings the panel renders: the notifications toggle, and the projects
     /// the user hid (so they can be restored even with no live session).
     pub notifications: bool,
+    /// When true, dismiss marks a session read (demoted to idle) instead of hiding it.
+    pub dismiss_read: bool,
     pub hidden: Vec<String>,
     /// True once all four hooks are wired in `~/.claude/settings.json`. When false the
     /// panel shows the install card; pervigil never writes the file itself (spec item 12).
@@ -178,6 +180,10 @@ impl App {
         self.update(|config| config.notifications = on);
     }
 
+    pub fn set_dismiss_read(&self, on: bool) {
+        self.update(|config| config.dismiss_read = on);
+    }
+
     pub fn set_pinned(&self, id: &str, pinned: bool) {
         self.update(|config| {
             if pinned {
@@ -258,7 +264,7 @@ impl App {
 
         let mut sessions = store::merge(store::fold(&events, to, &prefs), scan.sessions);
         retain_live(&mut sessions, &SystemProcesses);
-        store::drop_dismissed(&mut sessions, &prefs);
+        store::apply_dismissed(&mut sessions, &prefs);
         sessions.retain(|session| config.shows(&project(&session.cwd)));
         store::sort(&mut sessions, &prefs);
 
@@ -338,6 +344,7 @@ impl App {
                 .filter_map(|entry| pricing::cost(&self.prices, &entry.model, &entry.usage))
                 .sum(),
             notifications: config.notifications,
+            dismiss_read: config.dismiss_read,
             hidden: config.hidden_projects.iter().cloned().collect(),
             hooks_installed: io::hooks::detect(
                 &std::fs::read_to_string(self.home.join(SETTINGS)).unwrap_or_default(),
@@ -490,6 +497,11 @@ pub fn focus(id: String, app: tauri::State<'_, App>) -> FocusOutcome {
 #[tauri::command]
 pub fn set_notifications(on: bool, app: tauri::State<'_, App>) {
     app.set_notifications(on);
+}
+
+#[tauri::command]
+pub fn set_dismiss_read(on: bool, app: tauri::State<'_, App>) {
+    app.set_dismiss_read(on);
 }
 
 #[tauri::command]
