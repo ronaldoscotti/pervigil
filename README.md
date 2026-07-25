@@ -16,12 +16,10 @@ like — at a glance.
 > last open items. Not yet formally released.
 
 <p align="center">
-  <img src="assets/demos/pervigil-demo.jpg" alt="The Pervigil panel: a session waiting on you sorts to the top, a combined activity lane, per-session cost." width="360">
+  <img src="assets/pervigil-screenshot.png" alt="The Pervigil panel: sessions across projects, the one waiting on you sorted to the top, a your-turn session pinned, a combined activity lane, per-session cost and branch." width="380">
 </p>
 
-<p align="center">
-  <img src="assets/demos/pervigil.gif" alt="Pervigil in action — sessions across projects, the one waiting on you pinned to the top, with live cost and a daily activity lane." width="760">
-</p>
+<sub align="center">Rendered from the real UI with fixed mock data — regenerate any time with <code>bash scripts/screenshot.sh</code>.</sub>
 
 ---
 
