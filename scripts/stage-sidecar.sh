@@ -9,11 +9,18 @@ cd "$(dirname "$0")/../src-tauri"
 profile="${1:-debug}"
 triple="$(rustc -vV | sed -n 's/^host: //p')"
 
+# Windows binaries carry a .exe suffix, and Tauri's externalBin expects it on the
+# staged name too.
+ext=""
+case "$triple" in
+  *windows*) ext=".exe" ;;
+esac
+
 # The shim lives in the app crate, so building it runs tauri-build, which refuses to
 # compile while its own `externalBin` target is missing. Break the cycle with an empty
 # placeholder the build accepts, then overwrite it with the real binary.
 mkdir -p binaries
-touch "binaries/record-$triple"
+touch "binaries/record-$triple$ext"
 
 if [ "$profile" = "release" ]; then
   cargo build --release --bin record
@@ -21,5 +28,5 @@ else
   cargo build --bin record
 fi
 
-cp "target/$profile/record" "binaries/record-$triple"
-echo "staged binaries/record-$triple ($profile)"
+cp "target/$profile/record$ext" "binaries/record-$triple$ext"
+echo "staged binaries/record-$triple$ext ($profile)"
