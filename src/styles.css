@@ -336,6 +336,28 @@ body.mac .topbar {
   border-radius: 3px;
 }
 
+.about-update {
+  margin-top: 10px;
+  width: 100%;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--ground-deep);
+  background: var(--waiting);
+  border: none;
+  border-radius: 6px;
+  padding: 7px 0;
+  cursor: pointer;
+}
+
+.about-update:hover {
+  filter: brightness(1.06);
+}
+
+.about-update:focus-visible {
+  outline: 1px solid var(--ink);
+}
+
 .switch {
   position: relative;
   width: 38px;
