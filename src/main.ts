@@ -137,6 +137,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     daySaved: "Day card saved to Downloads",
     shareNudge: "Good run today — share your day? Tap ↗ above",
     download: "Download",
+    tokens: "tokens",
   },
   pt: {
     working: "Trabalhando",
@@ -202,6 +203,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     daySaved: "Cartão do dia salvo em Downloads",
     shareNudge: "Belo dia — compartilhe? Toque em ↗ acima",
     download: "Baixar",
+    tokens: "tokens",
   },
   es: {
     working: "Trabajando",
@@ -267,6 +269,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     daySaved: "Tarjeta del día guardada en Descargas",
     shareNudge: "Buen día — ¿compartirlo? Toca ↗ arriba",
     download: "Descargar",
+    tokens: "tokens",
   },
   fr: {
     working: "En cours",
@@ -332,6 +335,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     daySaved: "Carte du jour enregistrée dans Téléchargements",
     shareNudge: "Belle journée — la partager ? Touchez ↗ en haut",
     download: "Télécharger",
+    tokens: "tokens",
   },
   de: {
     working: "Arbeitet",
@@ -397,6 +401,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     daySaved: "Tageskarte in Downloads gespeichert",
     shareNudge: "Guter Tag — teilen? Tippe oben auf ↗",
     download: "Herunterladen",
+    tokens: "Tokens",
   },
   ru: {
     working: "Работает",
@@ -462,6 +467,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     daySaved: "Карточка дня сохранена в Загрузки",
     shareNudge: "Хороший день — поделиться? Нажмите ↗ вверху",
     download: "Скачать",
+    tokens: "токены",
   },
   zh: {
     working: "运行中",
@@ -527,6 +533,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     daySaved: "今日卡片已保存到下载",
     shareNudge: "今天不错 — 分享一下？点击上方 ↗",
     download: "下载",
+    tokens: "tokens",
   },
   ja: {
     working: "実行中",
@@ -592,6 +599,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     daySaved: "今日のカードをダウンロードに保存しました",
     shareNudge: "良い一日 — シェアする？上の ↗ をタップ",
     download: "ダウンロード",
+    tokens: "トークン",
   },
   hi: {
     working: "काम कर रहा है",
@@ -657,6 +665,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     daySaved: "दिन का कार्ड Downloads में सहेजा गया",
     shareNudge: "अच्छा दिन — साझा करें? ऊपर ↗ टैप करें",
     download: "डाउनलोड",
+    tokens: "टोकन",
   },
   ar: {
     working: "قيد العمل",
@@ -722,6 +731,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     daySaved: "تم حفظ بطاقة اليوم في التنزيلات",
     shareNudge: "يوم جيد — شاركه؟ اضغط ↗ في الأعلى",
     download: "تنزيل",
+    tokens: "رموز",
   },
 };
 
@@ -1091,8 +1101,8 @@ function formatTokens(n: number): string {
 
 /** The message for X/WhatsApp — the same numbers the card shows, so the link isn't bare. */
 function shareText(snap: Snapshot): string {
-  const pct = Math.round(snap.waitingShare * 100);
-  return `My day with Claude Code 🦉\n${snap.sessions.length} sessions · ${formatTokens(snap.tokens)} tokens · ${pct}% waiting on me\n\nvia Pervigil — github.com/ronaldoscotti/pervigil`;
+  const stats = `${snap.sessions.length} ${t("sectionSessions").toLowerCase()} · ${formatTokens(snap.tokens)} ${t("tokens")} · ${t("waitingShare", { p: Math.round(snap.waitingShare * 100) })}`;
+  return `Claude Code 🦉\n${stats}\n\nvia Pervigil — github.com/ronaldoscotti/pervigil`;
 }
 
 function roundRectPath(
@@ -1145,7 +1155,7 @@ async function renderDayCanvas(snap: Snapshot): Promise<HTMLCanvasElement> {
     ctx.fillText("Pervigil", PAD, 106);
   }
 
-  const date = new Date(snap.now * 1000).toLocaleDateString("en-US", {
+  const date = new Date(snap.now * 1000).toLocaleDateString(lang, {
     month: "long",
     day: "numeric",
     year: "numeric",
@@ -1153,7 +1163,7 @@ async function renderDayCanvas(snap: Snapshot): Promise<HTMLCanvasElement> {
   ctx.fillStyle = "#878d9a";
   ctx.font = "400 24px 'Space Mono', monospace";
   ctx.textAlign = "right";
-  ctx.fillText(`MY DAY · ${date}`, W - PAD, 100);
+  ctx.fillText(date, W - PAD, 100);
   ctx.textAlign = "left";
 
   const laneY = 210;
@@ -1162,10 +1172,10 @@ async function renderDayCanvas(snap: Snapshot): Promise<HTMLCanvasElement> {
   const span = Math.max(snap.now - snap.from, 1);
   ctx.fillStyle = "#878d9a";
   ctx.font = "500 20px 'Space Mono', monospace";
-  ctx.fillText("TODAY", PAD, laneY - 18);
+  ctx.fillText(t("today").toUpperCase(), PAD, laneY - 18);
   ctx.fillStyle = "#e7c08a";
   ctx.textAlign = "right";
-  ctx.fillText(`${Math.round(snap.waitingShare * 100)}% waiting on you`, W - PAD, laneY - 18);
+  ctx.fillText(t("waitingShare", { p: Math.round(snap.waitingShare * 100) }), W - PAD, laneY - 18);
   ctx.textAlign = "left";
   roundRectPath(ctx, PAD, laneY, laneW, laneH, 9);
   ctx.fillStyle = "#20242e";
@@ -1183,12 +1193,12 @@ async function renderDayCanvas(snap: Snapshot): Promise<HTMLCanvasElement> {
   ctx.fillStyle = "#565c6a";
   ctx.font = "400 18px 'Space Mono', monospace";
   ctx.textAlign = "right";
-  ctx.fillText("now", W - PAD, laneY + laneH + 30);
+  ctx.fillText(t("now"), W - PAD, laneY + laneH + 30);
   ctx.textAlign = "left";
 
   const stats: [string, string][] = [
-    [String(snap.sessions.length), "sessions"],
-    [formatTokens(snap.tokens), "tokens"],
+    [String(snap.sessions.length), t("sectionSessions").toLowerCase()],
+    [formatTokens(snap.tokens), t("tokens")],
   ];
   stats.forEach(([value, label], i) => {
     const x = PAD + i * (laneW / 2);
