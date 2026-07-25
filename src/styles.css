@@ -226,6 +226,12 @@ body.mac .topbar {
   transition: opacity 0.2s ease;
 }
 
+/* The class-selector display below would otherwise beat the [hidden] UA rule and
+   leave an invisible full-window overlay swallowing every click and scroll. */
+.share-sheet[hidden] {
+  display: none;
+}
+
 .share-sheet.open {
   opacity: 1;
 }
