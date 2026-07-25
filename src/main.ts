@@ -130,6 +130,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     general: "General",
     starOnGithub: "Star on GitHub",
     dismissReadLabel: "Dismiss marks read",
+    shareMyDay: "Share my day",
+    dayCopied: "Day card copied — paste it anywhere",
+    dayCopyFailed: "Couldn't copy the card",
   },
   pt: {
     working: "Trabalhando",
@@ -189,6 +192,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     general: "Geral",
     starOnGithub: "Estrela no GitHub",
     dismissReadLabel: "Dispensar marca lida",
+    shareMyDay: "Compartilhar meu dia",
+    dayCopied: "Cartão do dia copiado — cole onde quiser",
+    dayCopyFailed: "Não foi possível copiar o cartão",
   },
   es: {
     working: "Trabajando",
@@ -248,6 +254,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     general: "General",
     starOnGithub: "Estrella en GitHub",
     dismissReadLabel: "Descartar marca leído",
+    shareMyDay: "Compartir mi día",
+    dayCopied: "Tarjeta del día copiada — pégala donde quieras",
+    dayCopyFailed: "No se pudo copiar la tarjeta",
   },
   fr: {
     working: "En cours",
@@ -307,6 +316,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     general: "Général",
     starOnGithub: "Étoile sur GitHub",
     dismissReadLabel: "Ignorer marque lu",
+    shareMyDay: "Partager ma journée",
+    dayCopied: "Carte du jour copiée — collez-la où vous voulez",
+    dayCopyFailed: "Impossible de copier la carte",
   },
   de: {
     working: "Arbeitet",
@@ -366,6 +378,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     general: "Allgemein",
     starOnGithub: "Stern auf GitHub",
     dismissReadLabel: "Ausblenden als gelesen",
+    shareMyDay: "Meinen Tag teilen",
+    dayCopied: "Tageskarte kopiert — überall einfügen",
+    dayCopyFailed: "Karte konnte nicht kopiert werden",
   },
   ru: {
     working: "Работает",
@@ -425,6 +440,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     general: "Общие",
     starOnGithub: "Звезда на GitHub",
     dismissReadLabel: "Скрыть как прочитано",
+    shareMyDay: "Поделиться днём",
+    dayCopied: "Карточка дня скопирована — вставьте куда угодно",
+    dayCopyFailed: "Не удалось скопировать карточку",
   },
   zh: {
     working: "运行中",
@@ -484,6 +502,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     general: "常规",
     starOnGithub: "在 GitHub 加星",
     dismissReadLabel: "忽略即已读",
+    shareMyDay: "分享我的一天",
+    dayCopied: "今日卡片已复制 — 随处粘贴",
+    dayCopyFailed: "无法复制卡片",
   },
   ja: {
     working: "実行中",
@@ -543,6 +564,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     general: "一般",
     starOnGithub: "GitHub でスター",
     dismissReadLabel: "非表示で既読",
+    shareMyDay: "今日をシェア",
+    dayCopied: "今日のカードをコピーしました — どこにでも貼り付け",
+    dayCopyFailed: "カードをコピーできませんでした",
   },
   hi: {
     working: "काम कर रहा है",
@@ -602,6 +626,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     general: "सामान्य",
     starOnGithub: "GitHub पर स्टार",
     dismissReadLabel: "खारिज = पढ़ा हुआ",
+    shareMyDay: "मेरा दिन साझा करें",
+    dayCopied: "दिन का कार्ड कॉपी हुआ — कहीं भी पेस्ट करें",
+    dayCopyFailed: "कार्ड कॉपी नहीं हो सका",
   },
   ar: {
     working: "قيد العمل",
@@ -661,6 +688,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     general: "عام",
     starOnGithub: "نجمة على GitHub",
     dismissReadLabel: "التجاهل كمقروء",
+    shareMyDay: "شارك يومي",
+    dayCopied: "تم نسخ بطاقة اليوم — الصقها أينما شئت",
+    dayCopyFailed: "تعذّر نسخ البطاقة",
   },
 };
 
@@ -966,6 +996,9 @@ function applyStaticStrings() {
   select.setAttribute("aria-label", t("language"));
   document.documentElement.lang = lang;
   document.documentElement.dir = RTL.has(lang) ? "rtl" : "ltr";
+  const share = el("share-day");
+  share.title = t("shareMyDay");
+  share.setAttribute("aria-label", t("shareMyDay"));
   el("about-version").textContent = `v${__APP_VERSION__}`;
 }
 
@@ -1002,6 +1035,82 @@ async function set(command: string, args: Record<string, unknown>) {
     console.error(error);
   }
   poll();
+}
+
+/** A privacy-safe day card — aggregate stats only, never a project name — to copy
+ *  and post. Rendered at social-card size in the brand's own colors. */
+async function renderDayCard(snap: Snapshot): Promise<Blob> {
+  await document.fonts.ready;
+  const W = 1200;
+  const H = 630;
+  const PAD = 80;
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext("2d")!;
+
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, "#181a22");
+  bg.addColorStop(1, "#141620");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  const date = new Date(snap.now * 1000).toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+
+  ctx.fillStyle = "#f4b860";
+  ctx.beginPath();
+  ctx.arc(PAD + 10, 96, 11, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#eae7de";
+  ctx.font = "600 44px Lora, serif";
+  ctx.fillText("Pervigil", PAD + 36, 110);
+  ctx.fillStyle = "#878d9a";
+  ctx.font = "400 24px 'Space Mono', monospace";
+  ctx.textAlign = "right";
+  ctx.fillText(`MY DAY · ${date}`, W - PAD, 104);
+
+  const stats: [string, string][] = [
+    [String(snap.sessions.length), "sessions"],
+    [`${Math.round(snap.waitingShare * 100)}%`, "waiting on me"],
+    [`$${snap.cost.toFixed(2)}`, "spent"],
+  ];
+  const colW = (W - PAD * 2) / 3;
+  ctx.textAlign = "center";
+  stats.forEach(([value, label], i) => {
+    const cx = PAD + colW * i + colW / 2;
+    ctx.fillStyle = "#f4b860";
+    ctx.font = "700 92px 'Space Mono', monospace";
+    ctx.fillText(value, cx, 370);
+    ctx.fillStyle = "#b8bec9";
+    ctx.font = "400 30px Lora, serif";
+    ctx.fillText(label, cx, 430);
+  });
+
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#565c6a";
+  ctx.font = "400 24px 'Space Mono', monospace";
+  ctx.fillText("github.com/ronaldoscotti/pervigil", PAD, H - 58);
+
+  return new Promise<Blob>((resolve, reject) =>
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("no blob"))), "image/png"),
+  );
+}
+
+async function shareDay() {
+  const snap = await invoke<Snapshot>("snapshot", { span: "today" }).catch(() => lastSnapshot);
+  if (!snap) return;
+  try {
+    const blob = await renderDayCard(snap);
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+    toast(t("dayCopied"));
+  } catch (error) {
+    console.error(error);
+    toast(t("dayCopyFailed"));
+  }
 }
 
 let pendingUpdate: Update | null = null;
@@ -1104,6 +1213,8 @@ window.addEventListener("DOMContentLoaded", () => {
     button.textContent = pinned ? t("pinned") : t("unpinned");
     invoke("set_window_pinned", { pinned }).catch(console.error);
   });
+
+  el("share-day").addEventListener("click", shareDay);
 
   el("lang-select").addEventListener("change", (event) => {
     const value = (event.target as HTMLSelectElement).value as Lang;
