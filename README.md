@@ -11,8 +11,9 @@ like — at a glance.
 
 > *pervigil* (Latin) — ever-watchful; keeping watch through the whole night.
 
-> 🚧 **Work in progress.** The macOS MVP is built, tested, signed, and public;
-> a few native-surface confirmations and auto-update are still open. Not yet released.
+> 🚧 **Work in progress.** The macOS app is built, tested, signed, and public, with
+> auto-updating signed releases from CI. A few native-surface confirmations are the
+> last open items. Not yet formally released.
 
 <p align="center">
   <img src="assets/demos/pervigil-demo.jpg" alt="The Pervigil panel: a session waiting on you sorts to the top, a combined activity lane, per-session cost." width="360">
@@ -40,8 +41,10 @@ macOS-only and read-only. Pervigil's two wedges:
 
 Plus what you'd expect once it's watching: a combined **activity lane** with a
 "% waiting on you" stat, per-session and per-window **cost** from a shipped price
-table, **click-to-focus** to jump to a session's terminal, and **pin / dismiss /
-project visibility**.
+table, **click-to-focus** to jump to a session's terminal, **pin / dismiss (hide or
+mark-as-read) / project visibility**, **launch-at-login** and single-instance, a
+**ten-language** UI (with RTL), a privacy-safe **share-your-day** card, and
+**auto-update** from signed CI releases.
 
 *(Full design: [`docs/specs/2026-07-23-pervigil-design.md`](docs/specs/2026-07-23-pervigil-design.md).)*
 
@@ -110,18 +113,21 @@ install card disappears the moment the hooks are detected.
 
 ## Status
 
-Built through **M10** of the plan — click-to-focus (confirmed raising the window
+Built through **M10 and beyond** — click-to-focus (confirmed raising the window
 under a real GUI launch), notifications, config, pin/dismiss, project visibility,
-the hook-install card, **ten UI languages** (with RTL), and a **signed + notarized
-macOS build** — on a pure core with **117 tests**. A short demo is at the top.
+the hook-install card, **ten UI languages** (with RTL), launch-at-login,
+single-instance, the dismiss "read" mode, a **share-your-day** card, and
+**auto-updating, signed + notarized releases from CI** — on a pure core with
+**120 tests**. A short demo is at the top; the release pipeline is proven end-to-end
+(a tag produces signed mac/Windows/Linux bundles plus the updater manifest).
 
 Verified honestly. The pure logic and the checkable side effects (clipboard copy,
-config and snippet round-trips, tier selection) are tested; three OS-surface effects
-are real code but **not yet visually confirmed** on the dev machine — the on-screen
-window raise for tmux/iTerm2, the macOS tray badge, and the notification banner (that
-box has neither tmux nor iTerm2, and the CI/dev environment can't capture the native
-surfaces). Next up: auto-updating signed releases from CI. See [`docs/qa/`](docs/qa/)
-for what each milestone did and did not prove.
+config and snippet round-trips, tier selection, the dismiss modes) are tested; three
+OS-surface effects are real code but **not yet visually confirmed** on the dev
+machine — the on-screen window raise for tmux/iTerm2, the macOS tray badge, and the
+notification banner (that box has neither tmux nor iTerm2, and the CI/dev environment
+can't capture the native surfaces). See [`docs/qa/`](docs/qa/) for what each
+milestone did and did not prove.
 
 ## Built in the open, by an explicit method
 
@@ -130,6 +136,13 @@ review-gated AI-assisted workflow, and the repo is the **honest record** of it �
 a description. Every stage deposits a real artifact; the git history records the
 order; nothing is claimed ahead of where the work actually is. Read
 [`docs/method/`](docs/method/) to follow it, or the git log to verify it.
+
+The core (M0–M10) went through the full pipeline — spec, plan, TDD, review — with the
+artifacts in `docs/`. The features added after launch were built in a faster loop:
+test-driven cores, agent-browser QA, and reviewed pull requests, but a written spec
+only where it earned one (the [release/auto-update spec](docs/specs/2026-07-24-auto-update-releases.md);
+the settings, dismiss modes, and share card shipped without one). The repo says so
+rather than back-dating specs it never wrote.
 
 ## License
 
