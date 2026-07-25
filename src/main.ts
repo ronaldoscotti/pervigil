@@ -49,6 +49,7 @@ interface Snapshot {
   waitingShare: number;
   cost: number;
   notifications: boolean;
+  dismissRead: boolean;
   hidden: string[];
   hooksInstalled: boolean;
   hookSnippet: string;
@@ -128,6 +129,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     launchAtLogin: "Launch at login",
     general: "General",
     starOnGithub: "Star on GitHub",
+    dismissReadLabel: "Dismiss marks read",
   },
   pt: {
     working: "Trabalhando",
@@ -186,6 +188,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     launchAtLogin: "Abrir ao iniciar sessão",
     general: "Geral",
     starOnGithub: "Estrela no GitHub",
+    dismissReadLabel: "Dispensar marca lida",
   },
   es: {
     working: "Trabajando",
@@ -244,6 +247,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     launchAtLogin: "Abrir al iniciar sesión",
     general: "General",
     starOnGithub: "Estrella en GitHub",
+    dismissReadLabel: "Descartar marca leído",
   },
   fr: {
     working: "En cours",
@@ -302,6 +306,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     launchAtLogin: "Lancer à la connexion",
     general: "Général",
     starOnGithub: "Étoile sur GitHub",
+    dismissReadLabel: "Ignorer marque lu",
   },
   de: {
     working: "Arbeitet",
@@ -360,6 +365,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     launchAtLogin: "Beim Anmelden starten",
     general: "Allgemein",
     starOnGithub: "Stern auf GitHub",
+    dismissReadLabel: "Ausblenden als gelesen",
   },
   ru: {
     working: "Работает",
@@ -418,6 +424,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     launchAtLogin: "Запускать при входе",
     general: "Общие",
     starOnGithub: "Звезда на GitHub",
+    dismissReadLabel: "Скрыть как прочитано",
   },
   zh: {
     working: "运行中",
@@ -476,6 +483,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     launchAtLogin: "登录时启动",
     general: "常规",
     starOnGithub: "在 GitHub 加星",
+    dismissReadLabel: "忽略即已读",
   },
   ja: {
     working: "実行中",
@@ -534,6 +542,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     launchAtLogin: "ログイン時に起動",
     general: "一般",
     starOnGithub: "GitHub でスター",
+    dismissReadLabel: "非表示で既読",
   },
   hi: {
     working: "काम कर रहा है",
@@ -592,6 +601,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     launchAtLogin: "लॉगिन पर लॉन्च करें",
     general: "सामान्य",
     starOnGithub: "GitHub पर स्टार",
+    dismissReadLabel: "खारिज = पढ़ा हुआ",
   },
   ar: {
     working: "قيد العمل",
@@ -650,6 +660,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     launchAtLogin: "التشغيل عند تسجيل الدخول",
     general: "عام",
     starOnGithub: "نجمة على GitHub",
+    dismissReadLabel: "التجاهل كمقروء",
   },
 };
 
@@ -913,6 +924,7 @@ let projectSig = "";
 /** The notifications switch tracks the server every poll — cheap, no flicker. */
 function renderSettings(snapshot: Snapshot) {
   el("notifications-switch").setAttribute("aria-checked", String(snapshot.notifications));
+  el("dismiss-read-switch").setAttribute("aria-checked", String(snapshot.dismissRead));
   if (!el("settings").hidden) renderProjects(snapshot);
 }
 
@@ -1128,6 +1140,11 @@ window.addEventListener("DOMContentLoaded", () => {
     } catch (error) {
       console.error(error);
     }
+  });
+
+  el("dismiss-read-switch").addEventListener("click", (event) => {
+    const on = (event.currentTarget as HTMLElement).getAttribute("aria-checked") !== "true";
+    set("set_dismiss_read", { on });
   });
 
   el("project-list").addEventListener("click", (event) => {

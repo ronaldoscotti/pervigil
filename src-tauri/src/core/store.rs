@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use super::event::{Event, SessionId, Timestamp};
-use super::session::{Session, SessionState, ViewPrefs};
+use super::session::{DismissMode, Session, SessionState, ViewPrefs};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Segment {
@@ -258,19 +258,25 @@ pub fn fold(events: &[Event], _now: Timestamp, prefs: &ViewPrefs) -> Vec<Session
         }
     }
 
-    drop_dismissed(&mut sessions, prefs);
+    apply_dismissed(&mut sessions, prefs);
     sort(&mut sessions, prefs);
     sessions
 }
 
-/// Hide dismissed sessions until they act again. Applied after [`merge`] too, so it
-/// also covers transcript-only sessions — which never pass through [`fold`] and would
-/// otherwise ignore a dismiss.
-pub fn drop_dismissed(sessions: &mut Vec<Session>, prefs: &ViewPrefs) {
-    sessions.retain(|session| match prefs.dismissed.get(&session.id) {
-        Some(dismissed_at) => session.last_active > *dismissed_at,
-        None => true,
-    });
+/// Resolve dismissed sessions per the chosen mode, until they act again: `Hide`
+/// removes them; `Read` keeps them but demotes to idle — a "mark as read". Applied
+/// after [`merge`] too, so it also covers transcript-only sessions — which never pass
+/// through [`fold`] and would otherwise ignore a dismiss.
+pub fn apply_dismissed(sessions: &mut Vec<Session>, prefs: &ViewPrefs) {
+    let dismissed = |session: &Session| matches!(prefs.dismissed.get(&session.id), Some(at) if session.last_active <= *at);
+    match prefs.dismiss_mode {
+        DismissMode::Hide => sessions.retain(|session| !dismissed(session)),
+        DismissMode::Read => {
+            for session in sessions.iter_mut().filter(|s| dismissed(s)) {
+                session.state = SessionState::Idle;
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -428,6 +434,55 @@ mod tests {
         };
 
         assert_eq!(fold(&events, 600, &prefs).len(), 1);
+    }
+
+    #[test]
+    fn read_mode_demotes_a_dismissed_session_to_idle_but_keeps_it() {
+        let events = vec![
+            start("s1", 100),
+            Event::Notification {
+                id: "s1".into(),
+                at: 300,
+            },
+        ];
+        let prefs = ViewPrefs {
+            dismissed: HashMap::from([("s1".to_string(), 400)]),
+            dismiss_mode: DismissMode::Read,
+            ..Default::default()
+        };
+
+        let sessions = fold(&events, 500, &prefs);
+
+        assert_eq!(sessions.len(), 1, "read mode keeps the session");
+        assert_eq!(
+            sessions[0].state,
+            SessionState::Idle,
+            "demoted, not waiting"
+        );
+    }
+
+    #[test]
+    fn read_mode_leaves_a_session_that_acted_after_dismiss_alone() {
+        let events = vec![
+            start("s1", 100),
+            Event::Notification {
+                id: "s1".into(),
+                at: 500,
+            },
+        ];
+        let prefs = ViewPrefs {
+            dismissed: HashMap::from([("s1".to_string(), 400)]),
+            dismiss_mode: DismissMode::Read,
+            ..Default::default()
+        };
+
+        let sessions = fold(&events, 600, &prefs);
+
+        assert_eq!(
+            sessions[0].state,
+            SessionState::WaitingOnYou,
+            "acted after read"
+        );
     }
 
     fn two_session_window() -> Vec<Event> {
@@ -675,7 +730,7 @@ mod tests {
             ..Default::default()
         };
 
-        drop_dismissed(&mut sessions, &prefs);
+        apply_dismissed(&mut sessions, &prefs);
 
         assert!(
             sessions.is_empty(),

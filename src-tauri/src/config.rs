@@ -4,7 +4,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::core::event::{SessionId, Timestamp};
-use crate::core::session::ViewPrefs;
+use crate::core::session::{DismissMode, ViewPrefs};
 
 /// User settings, persisted to `~/.pervigil/config.json`. Short and opinionated
 /// (spec §2): what the panel notifies about, which projects it shows, and the
@@ -17,6 +17,9 @@ pub struct Config {
     pub hidden_projects: BTreeSet<String>,
     pub pinned: BTreeSet<SessionId>,
     pub dismissed: BTreeMap<SessionId, Timestamp>,
+    /// When true, the dismiss action marks a session read (demotes it to idle) instead
+    /// of hiding it.
+    pub dismiss_read: bool,
 }
 
 impl Default for Config {
@@ -28,6 +31,7 @@ impl Default for Config {
             hidden_projects: BTreeSet::new(),
             pinned: BTreeSet::new(),
             dismissed: BTreeMap::new(),
+            dismiss_read: false,
         }
     }
 }
@@ -56,6 +60,11 @@ impl Config {
         ViewPrefs {
             pinned: self.pinned.iter().cloned().collect(),
             dismissed: self.dismissed.clone().into_iter().collect(),
+            dismiss_mode: if self.dismiss_read {
+                DismissMode::Read
+            } else {
+                DismissMode::Hide
+            },
         }
     }
 
@@ -115,6 +124,7 @@ mod tests {
             hidden_projects: BTreeSet::from(["secret-project".into()]),
             pinned: BTreeSet::from(["s1".into()]),
             dismissed: BTreeMap::from([("s2".into(), 1_700)]),
+            dismiss_read: true,
         };
 
         config.save(&path).unwrap();

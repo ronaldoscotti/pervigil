@@ -35,6 +35,7 @@ pub fn run() {
             app::snapshot,
             app::focus,
             app::set_notifications,
+            app::set_dismiss_read,
             app::set_pinned,
             app::set_project_hidden,
             app::dismiss,
