@@ -18,6 +18,11 @@ dist-ssr
 
 # Secrets — signing / notarization credentials
 .env
+# Never commit signing certificates or their base64 exports
+*.p12
+*.p8
+*.cer
+cert.b64
 
 # Staged sidecar binary (regenerated from `cargo build --bin record`)
 /src-tauri/binaries/
