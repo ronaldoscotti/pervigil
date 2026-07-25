@@ -5,6 +5,9 @@ import "@fontsource/lora/600.css";
 import "@fontsource/space-mono/400.css";
 import "@fontsource/space-mono/700.css";
 
+/** Injected at build time from package.json (see vite.config.ts). */
+declare const __APP_VERSION__: string;
+
 type SessionState = "Working" | "WaitingOnYou" | "YourTurn" | "Idle";
 type Span = "4h" | "today" | "week";
 
@@ -114,6 +117,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     snippetCopied: "Snippet copied — paste into settings.json",
     copyFailed: "Copy failed — select the snippet manually",
     hooksDetected: "Hooks detected ✓",
+    about: "About",
+    tagline: "Watches your Claude Code sessions.",
   },
   pt: {
     working: "Trabalhando",
@@ -164,6 +169,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     snippetCopied: "Trecho copiado — cole no settings.json",
     copyFailed: "Falha ao copiar — selecione o trecho manualmente",
     hooksDetected: "Hooks detectados ✓",
+    about: "Sobre",
+    tagline: "Vigia suas sessões do Claude Code.",
   },
   es: {
     working: "Trabajando",
@@ -214,6 +221,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     snippetCopied: "Fragmento copiado — pégalo en settings.json",
     copyFailed: "Falló la copia — selecciona el fragmento manualmente",
     hooksDetected: "Hooks detectados ✓",
+    about: "Acerca de",
+    tagline: "Vigila tus sesiones de Claude Code.",
   },
   fr: {
     working: "En cours",
@@ -264,6 +273,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     snippetCopied: "Extrait copié — collez dans settings.json",
     copyFailed: "Échec de la copie — sélectionnez l'extrait manuellement",
     hooksDetected: "Hooks détectés ✓",
+    about: "À propos",
+    tagline: "Veille sur vos sessions Claude Code.",
   },
   de: {
     working: "Arbeitet",
@@ -314,6 +325,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     snippetCopied: "Snippet kopiert — in settings.json einfügen",
     copyFailed: "Kopieren fehlgeschlagen — Snippet manuell auswählen",
     hooksDetected: "Hooks erkannt ✓",
+    about: "Über",
+    tagline: "Wacht über deine Claude-Code-Sitzungen.",
   },
   ru: {
     working: "Работает",
@@ -364,6 +377,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     snippetCopied: "Сниппет скопирован — вставьте в settings.json",
     copyFailed: "Не удалось скопировать — выделите сниппет вручную",
     hooksDetected: "Hooks обнаружены ✓",
+    about: "О программе",
+    tagline: "Следит за вашими сессиями Claude Code.",
   },
   zh: {
     working: "运行中",
@@ -414,6 +429,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     snippetCopied: "代码段已复制 — 粘贴到 settings.json",
     copyFailed: "复制失败 — 请手动选择代码段",
     hooksDetected: "已检测到 hooks ✓",
+    about: "关于",
+    tagline: "守望你的 Claude Code 会话。",
   },
   ja: {
     working: "実行中",
@@ -464,6 +481,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     snippetCopied: "スニペットをコピーしました — settings.json に貼り付け",
     copyFailed: "コピー失敗 — スニペットを手動で選択",
     hooksDetected: "hooks を検出 ✓",
+    about: "情報",
+    tagline: "Claude Code のセッションを見守ります。",
   },
   hi: {
     working: "काम कर रहा है",
@@ -514,6 +533,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     snippetCopied: "स्निपेट कॉपी हुआ — settings.json में पेस्ट करें",
     copyFailed: "कॉपी विफल — स्निपेट मैन्युअली चुनें",
     hooksDetected: "hooks मिल गए ✓",
+    about: "परिचय",
+    tagline: "आपके Claude Code सत्रों पर नज़र रखता है।",
   },
   ar: {
     working: "قيد العمل",
@@ -564,6 +585,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     snippetCopied: "تم نسخ المقتطف — الصقه في settings.json",
     copyFailed: "فشل النسخ — حدّد المقتطف يدويًا",
     hooksDetected: "تم اكتشاف hooks ✓",
+    about: "حول",
+    tagline: "يراقب جلسات Claude Code لديك.",
   },
 };
 
@@ -868,6 +891,7 @@ function applyStaticStrings() {
   select.setAttribute("aria-label", t("language"));
   document.documentElement.lang = lang;
   document.documentElement.dir = RTL.has(lang) ? "rtl" : "ltr";
+  el("about-version").textContent = `v${__APP_VERSION__}`;
 }
 
 let span: Span = "4h";
@@ -986,6 +1010,10 @@ window.addEventListener("DOMContentLoaded", () => {
     sessionSig = "";
     applyStaticStrings();
     if (lastSnapshot) render(lastSnapshot, span);
+  });
+
+  el("about-link").addEventListener("click", () => {
+    invoke("open_url", { url: "https://ronaldoscotti.com" }).catch(console.error);
   });
 
   el("notifications-switch").addEventListener("click", (event) => {

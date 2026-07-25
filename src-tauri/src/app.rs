@@ -522,6 +522,28 @@ pub fn open_settings(app: tauri::State<'_, App>) {
     let _ = std::process::Command::new(program).arg(path).spawn();
 }
 
+/// Open a URL in the default browser — used by the About panel's website link.
+/// Restricted to http(s) so this webview-exposed command can't be coerced into
+/// opening a local file or app.
+#[tauri::command]
+pub fn open_url(url: String) {
+    if !allowed_url(&url) {
+        return;
+    }
+    let program = if cfg!(target_os = "macos") {
+        "open"
+    } else if cfg!(target_os = "windows") {
+        "explorer"
+    } else {
+        "xdg-open"
+    };
+    let _ = std::process::Command::new(program).arg(url).spawn();
+}
+
+fn allowed_url(url: &str) -> bool {
+    url.starts_with("https://") || url.starts_with("http://")
+}
+
 /// Toggle the panel's always-on-top. A watch instrument you keep in view, but yours
 /// to unpin when it's in the way.
 #[tauri::command]
@@ -560,6 +582,15 @@ mod tests {
 
     fn now() -> DateTime<Local> {
         Local::now()
+    }
+
+    #[test]
+    fn open_url_allows_only_web_schemes() {
+        assert!(allowed_url("https://ronaldoscotti.com"));
+        assert!(allowed_url("http://example.com"));
+        assert!(!allowed_url("file:///etc/passwd"));
+        assert!(!allowed_url("/Applications/Calculator.app"));
+        assert!(!allowed_url("-a Calculator"));
     }
 
     #[test]

@@ -25,6 +25,7 @@ pub fn run() {
             app::set_project_hidden,
             app::dismiss,
             app::open_settings,
+            app::open_url,
             app::set_window_pinned
         ])
         .setup(|app| {
