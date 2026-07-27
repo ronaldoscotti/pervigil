@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use chrono::{DateTime, Datelike, Duration, Local, TimeZone};
+use chrono::{DateTime, Duration, Local, TimeZone};
 use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
@@ -34,15 +34,13 @@ pub enum Span {
     Week,
 }
 
-/// `[from, now]` in epoch seconds. Today and this week are local calendar
-/// boundaries; a rolling 24 hours would not be "today".
+/// `[from, now]` in epoch seconds. Today is a local calendar boundary; the week is
+/// trailing, so its last day never falls off a reset.
 pub fn bounds(span: Span, now: DateTime<Local>) -> (Timestamp, Timestamp) {
     let from = match span {
         Span::FourHours => now - Duration::hours(4),
         Span::Today => start_of_day(now),
-        Span::Week => {
-            start_of_day(now - Duration::days(now.weekday().num_days_from_monday() as i64))
-        }
+        Span::Week => now - Duration::days(7),
     };
 
     (
@@ -656,15 +654,12 @@ mod tests {
     }
 
     #[test]
-    fn the_week_starts_on_a_monday_no_later_than_today() {
+    fn the_week_is_a_trailing_seven_days_whatever_the_weekday() {
         let now = now();
 
-        let (from, _) = bounds(Span::Week, now);
+        let (from, to) = bounds(Span::Week, now);
 
-        let start = Local.timestamp_opt(from as i64, 0).unwrap();
-        assert_eq!(start.weekday(), chrono::Weekday::Mon);
-        assert!(start <= now);
-        assert!(now - start < Duration::days(7));
+        assert_eq!(to - from, Duration::days(7).num_seconds() as Timestamp);
     }
 
     fn waiting_session(id: &str, project: &str) -> Session {
