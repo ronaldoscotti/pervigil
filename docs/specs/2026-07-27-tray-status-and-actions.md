@@ -46,9 +46,10 @@ WindowEvent::CloseRequested            ──► prevent_close + hide
 RunEvent::Reopen                       ──► show panel       the Dock re-opens it
         │
         ▼
-Rust-side ticker (1s) ──► App::snapshot(Today) ──► tray_view() ──► TrayView
-        │                                              (pure)         │
-        └──► notifications                                            ▼
+panel visible  ──► webview poll (1s) ──┐
+panel hidden   ──► Rust ticker  (1s) ──┴──► App::snapshot ──► tray_view() ──► TrayView
+                                              │                  (pure)         │
+                                              └──► notifications                ▼
                                                     icon asset + menu, rebuilt on change
 ```
 
@@ -61,11 +62,24 @@ only real exit once the window merely hides. (The updater's relaunch needs no
 guard from us: `prevent_exit` already ignores itself when the code is
 `RESTART_EXIT_CODE`.)
 
-**The clock moves to Rust.** A ticker owned by the Rust side calls
-`App::snapshot` and drives both the tray and the notifications. The `snapshot`
-command stops carrying those side effects and goes back to being a plain read for
-the panel. This is what makes "with the panel closed" true, and it repairs the
-latent fragility in notifications rather than shipping on top of it.
+**Exactly one clock at a time.** A Rust-side ticker calls `App::snapshot` while
+the panel is hidden, and stops when it is shown; the webview's existing poll
+keeps driving everything while the panel is visible. Window visibility starts and
+stops the ticker.
+
+This is a hard requirement, not a tidiness preference. `App::snapshot` is not a
+read — it replaces `self.targets` wholesale (`app.rs:286`) and advances the
+notification `seen` state through `self.notify` (`app.rs:274`). Two tickers
+running at 1 Hz with different spans would fight over `targets`: a session the
+panel shows under a wider span, but which a narrower tray scan misses, would lose
+its focus target, and a click on that still-visible row would degrade silently to
+the clipboard floor with no `cd`. One clock removes the interleaving instead of
+managing it, and leaves the panel-visible path byte-for-byte as it is today.
+
+The waiting count itself is span-independent — `WaitingOnYou` only ever comes
+from `store::fold`, and transcript-derived sessions always yield `Idle` — so
+which clock is running never changes what the tray says is blocked. Only the cost
+figure would vary, and it does not: see the summary decision below.
 
 **Decision, pure.** `tray_view(&Snapshot) -> TrayView` takes no Tauri types, no
 clock, no I/O — the same shape as `store::timeline`. It picks the icon key, the
@@ -77,6 +91,14 @@ reads `9+`. Assets are pre-rendered from one SVG source by
 `scripts/gen-tray-icons.py`, so the asset count is a number rather than a cost.
 The badged icon is *wider* than the bare one — `9+` crammed into a 16pt square is
 a smudge.
+
+**One raster per state, at high resolution — no @1x/@2x pair.** `set_icon` takes
+a single `Image` and there is no scale-factor hook for a tray icon: the macOS
+backend rescales whatever it is handed to an 18pt height, and the Windows backend
+builds one `HICON` from the RGBA. A second density would be an asset no code
+could ever select. The generated PNGs are embedded with `include_bytes!` rather
+than shipped as bundle resources, so there is no path where the packaged app
+finds an empty icon directory that `tauri dev` found full.
 
 **Menu.**
 
@@ -114,9 +136,11 @@ The tooltip is `Pervigil — 3 waiting`, or `Pervigil — nothing waiting` at ze
   unlimited counts, which nobody needs, and pays in unverifiable code.)
 - **The tray summary is always today, whatever the panel is showing.** The
   panel's span is a user filter that defaults to `4h` and changes under you; the
-  tray has no filter UI and no room to explain one. The Rust ticker asks for
-  `Span::Today`, so the word "today" in the summary is literally true and does
-  not silently re-scope when the panel's pill changes.
+  tray has no filter UI and no room to explain one. Since either clock may be the
+  one running, the figure cannot come from the snapshot's span-scoped `cost`
+  without changing meaning when the panel opens. `Snapshot` gains a `today_cost`
+  field computed in the same pricing pass, so the word "today" is literally true
+  under both clocks and costs no extra scan.
 - **macOS uses a template image; Windows and Linux use light/dark pairs.**
   `icon_as_template` is macOS-only; there the system tints the alpha mask and the
   icon is correct in both themes for free. Elsewhere a white silhouette vanishes
@@ -146,7 +170,11 @@ The tooltip is `Pervigil — 3 waiting`, or `Pervigil — nothing waiting` at ze
   copying the resume command when it cannot raise a window. The panel reports
   that with a toast; a hidden panel has no toast, and a silent copy is
   indistinguishable from a dead click. The tray path fires a native notification
-  instead, reusing the notification plumbing already in `fire()`.
+  instead, reusing the plumbing in `fire()`. When the user has notifications
+  switched off, it **shows the panel** rather than staying quiet — the toggle
+  silences ambient alerts, not the feedback for something the user just clicked,
+  and falling back to silence would restore the exact failure this bullet exists
+  to remove.
 
 ## What this is and isn't (honesty)
 
@@ -165,6 +193,12 @@ The tooltip is `Pervigil — 3 waiting`, or `Pervigil — nothing waiting` at ze
   from observation.
 - **Degradation is explicit:** the tooltip is skipped on Linux, where it is
   unsupported. Nothing pretends to work where it does not.
+- **One guard is belt-and-braces, and QA should not hunt for it.**
+  `ExitRequested { code: None }` is emitted only when the last window is
+  destroyed, and the `CloseRequested` handler prevents that destruction — so in
+  normal use the guarded `prevent_exit` branch will not fire at all. It is the
+  documented pattern and it costs four lines, so it stays; it is recorded here so
+  nobody spends an afternoon trying to reach it.
 
 | | macOS | Windows | Linux |
 |---|---|---|---|
@@ -185,9 +219,13 @@ span switch in the menu; hiding the Dock icon; any change to the panel itself.
 - `src-tauri/src/app.rs` — `tray_view` and its `TrayView` type; `badge()` is
   replaced by it, and `snapshot` sheds its side effects.
 - `assets/tray.svg` — the source glyph, to be designed in the plan (new).
-- `src-tauri/icons/tray/` — generated assets: bare and `1`…`9`, `9+`, at @1x/@2x,
-  in light and dark variants for the non-macOS targets (new).
-- `scripts/gen-tray-icons.py` — SVG → PNG generator, rasterising with
-  `cairosvg`; Python tooling is already precedented by `scripts/screenshot-frame.py`
-  (new).
+- `src-tauri/icons/tray/` — generated assets: bare and `1`…`9`, `9+`, one
+  high-resolution raster each, in light and dark variants for the non-macOS
+  targets (new). Committed, and embedded with `include_bytes!`.
+- `scripts/gen-tray-icons.py` — SVG → PNG generator, rasterising with `cairosvg`
+  (new). Python tooling is precedented by `scripts/screenshot-frame.py`, but that
+  script uses Pillow, which cannot rasterise SVG — `cairosvg` and its native
+  libcairo are a **new dependency of the generator only**. Because the PNGs are
+  committed, it is needed by whoever changes the artwork and by nobody else: not
+  by the build, not by CI, not by a contributor running the app.
 - `docs/specs/2026-07-27-tray-status-and-actions.md` — this file.
