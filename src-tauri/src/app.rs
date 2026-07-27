@@ -253,11 +253,15 @@ impl App {
         let (events, _skipped) = parse_log(&log);
         let events = prune(events, to);
 
+        // Usage is read from midnight even when the panel asks for a narrower span:
+        // a transcript quiet since this morning is still today's spend, and the
+        // mtime gate would otherwise never open its file at all.
+        let midnight = start_of_day(now).timestamp().max(0) as Timestamp;
         let scan = self
             .scanner
             .lock()
             .expect("scanner lock")
-            .scan(&self.home.join(PROJECTS), from);
+            .scan(&self.home.join(PROJECTS), from, midnight);
 
         let config = self.config.lock().expect("config lock").clone();
         let prefs = config.view_prefs();

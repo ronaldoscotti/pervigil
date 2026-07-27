@@ -61,13 +61,22 @@ pub struct Scanner {
 }
 
 impl Scanner {
-    /// Transcripts untouched since `since` are skipped entirely — an append-only
-    /// file that has not grown cannot hold anything inside the window.
-    pub fn scan(&mut self, root: &Path, since: Timestamp) -> Scan {
+    /// Two floors, because cost and presence answer different questions. A file
+    /// untouched since `usage_since` is skipped entirely — an append-only file that
+    /// has not grown cannot hold anything inside the window. Between the two floors
+    /// a transcript is priced but not listed: the tray reports today's spend while
+    /// the panel shows a narrower span, and the wider read is what keeps this
+    /// morning's work from disappearing from the total.
+    pub fn scan(
+        &mut self,
+        root: &Path,
+        sessions_since: Timestamp,
+        usage_since: Timestamp,
+    ) -> Scan {
         let mut sessions = Vec::new();
         let mut usage: HashMap<SessionId, Vec<UsageEntry>> = HashMap::new();
 
-        for path in transcripts(root, since) {
+        for (path, modified) in transcripts(root, usage_since.min(sessions_since)) {
             let cached = self.files.entry(path.clone()).or_default();
             cached.absorb_appended(&path);
 
@@ -78,14 +87,16 @@ impl Scanner {
                 .entry(session.id.clone())
                 .or_default()
                 .extend(cached.transcript.usage.iter().cloned());
-            sessions.push(session);
+            if modified >= sessions_since {
+                sessions.push(session);
+            }
         }
 
         Scan { sessions, usage }
     }
 }
 
-fn transcripts(root: &Path, since: Timestamp) -> Vec<PathBuf> {
+fn transcripts(root: &Path, since: Timestamp) -> Vec<(PathBuf, Timestamp)> {
     let mut paths = Vec::new();
     let Ok(projects) = std::fs::read_dir(root) else {
         return paths;
@@ -97,8 +108,9 @@ fn transcripts(root: &Path, since: Timestamp) -> Vec<PathBuf> {
         };
         for file in files.flatten() {
             let path = file.path();
-            if path.extension().is_some_and(|ext| ext == "jsonl") && modified_at(&file) >= since {
-                paths.push(path);
+            let modified = modified_at(&file);
+            if path.extension().is_some_and(|ext| ext == "jsonl") && modified >= since {
+                paths.push((path, modified));
             }
         }
     }
@@ -167,7 +179,7 @@ mod tests {
         let projects = TempProjects::new("find");
         projects.append(FIRST);
 
-        let scan = Scanner::default().scan(&projects.0, 0);
+        let scan = Scanner::default().scan(&projects.0, 0, 0);
 
         assert_eq!(scan.sessions.len(), 1);
         assert_eq!(scan.sessions[0].id, "s1");
@@ -180,13 +192,13 @@ mod tests {
         let projects = TempProjects::new("append");
         projects.append(FIRST);
         let mut scanner = Scanner::default();
-        scanner.scan(&projects.0, 0);
+        scanner.scan(&projects.0, 0, 0);
 
         projects.append(concat!(
             r#"{"type":"assistant","sessionId":"s1","timestamp":"2026-07-23T11:00:00.000Z","message":{"model":"claude-opus-4-8","usage":{"output_tokens":20}}}"#,
             "\n",
         ));
-        let scan = scanner.scan(&projects.0, 0);
+        let scan = scanner.scan(&projects.0, 0, 0);
 
         assert_eq!(
             scan.usage["s1"].len(),
@@ -202,7 +214,7 @@ mod tests {
         projects.append(r#"{"type":"assistant","sessionId":"s1","timesta"#);
         let mut scanner = Scanner::default();
 
-        assert_eq!(scanner.scan(&projects.0, 0).usage["s1"].len(), 1);
+        assert_eq!(scanner.scan(&projects.0, 0, 0).usage["s1"].len(), 1);
 
         projects.append(concat!(
             r#"mp":"2026-07-23T11:00:00.000Z","message":{"model":"claude-opus-4-8","usage":{"output_tokens":20}}}"#,
@@ -210,7 +222,7 @@ mod tests {
         ));
 
         assert_eq!(
-            scanner.scan(&projects.0, 0).usage["s1"].len(),
+            scanner.scan(&projects.0, 0, 0).usage["s1"].len(),
             2,
             "the line completes on the next poll"
         );
@@ -223,14 +235,26 @@ mod tests {
         let far_future = u64::MAX / 2;
 
         assert!(Scanner::default()
-            .scan(&projects.0, far_future)
+            .scan(&projects.0, far_future, far_future)
             .sessions
             .is_empty());
     }
 
     #[test]
+    fn a_transcript_older_than_the_session_floor_still_contributes_usage() {
+        let projects = TempProjects::new("floors");
+        projects.append(FIRST);
+        let far_future = u64::MAX / 2;
+
+        let scan = Scanner::default().scan(&projects.0, far_future, 0);
+
+        assert!(scan.sessions.is_empty(), "too old for the session window");
+        assert_eq!(scan.usage["s1"].len(), 1, "but its cost still counts");
+    }
+
+    #[test]
     fn a_missing_projects_directory_is_not_an_error() {
-        let scan = Scanner::default().scan(Path::new("/nope/not/here"), 0);
+        let scan = Scanner::default().scan(Path::new("/nope/not/here"), 0, 0);
 
         assert!(scan.sessions.is_empty());
     }
