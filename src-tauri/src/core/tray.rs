@@ -121,7 +121,11 @@ pub fn tray_view(sessions: &[Session], today_cost: f64, words: &TrayStrings) -> 
         summary: counted.clone(),
         signature: [counted.as_str(), words.open.as_str(), words.quit.as_str()]
             .into_iter()
-            .chain(items.iter().flat_map(|item| [item.id.as_str(), item.label.as_str()]))
+            .chain(
+                items
+                    .iter()
+                    .flat_map(|item| [item.id.as_str(), item.label.as_str()]),
+            )
             .collect::<Vec<_>>()
             .join("\u{1f}"),
         items,
@@ -237,7 +241,10 @@ mod tests {
         let busy = tray_view(&[waiting("a"), waiting("b")], 4.2, &pt);
         let quiet = tray_view(&[idle("a")], 0.0, &pt);
 
-        assert_eq!(busy.tooltip, "Pervigil — 2 esperando por você · R$4.20 hoje");
+        assert_eq!(
+            busy.tooltip,
+            "Pervigil — 2 esperando por você · R$4.20 hoje"
+        );
         assert_eq!(quiet.tooltip, "Pervigil — nada esperando · R$0.00 hoje");
     }
 

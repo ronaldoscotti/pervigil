@@ -7,8 +7,6 @@ pub mod io;
 pub mod platform;
 mod tray;
 
-
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[cfg(target_os = "macos")]

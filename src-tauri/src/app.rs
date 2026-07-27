@@ -11,8 +11,8 @@ use crate::core::pricing::{self, PriceTable, UsageEntry};
 use crate::core::prune::prune;
 use crate::core::session::{project, Session, SessionState};
 use crate::core::store::{self, Segment};
-use crate::core::tray::{tray_view, TrayStrings, TrayView};
 use crate::core::terminal::Terminal;
+use crate::core::tray::{tray_view, TrayStrings, TrayView};
 use crate::io;
 use crate::io::scan::Scanner;
 use crate::platform::focuser::{self, Caps, Reach, Strategy, WindowFocuser};
@@ -288,11 +288,11 @@ impl App {
         // a transcript quiet since this morning is still today's spend, and the
         // mtime gate would otherwise never open its file at all.
         let midnight = start_of_day(now).timestamp().max(0) as Timestamp;
-        let scan = self
-            .scanner
-            .lock()
-            .expect("scanner lock")
-            .scan(&self.home.join(PROJECTS), from, midnight);
+        let scan = self.scanner.lock().expect("scanner lock").scan(
+            &self.home.join(PROJECTS),
+            from,
+            midnight,
+        );
         let spent: Vec<&UsageEntry> = scan.usage.values().flatten().collect();
 
         let config = self.config.lock().expect("config lock").clone();
@@ -335,8 +335,7 @@ impl App {
         // Computed here, where the raw sessions are still in scope, and kept for the
         // tray to read. One pass serves both surfaces, and whichever clock produced
         // this snapshot, the tray and the panel agree because they saw the same one.
-        let today_cost =
-            pricing::cost_in_window(&self.prices, spent.iter().copied(), midnight, to);
+        let today_cost = pricing::cost_in_window(&self.prices, spent.iter().copied(), midnight, to);
         *self.tray.lock().expect("tray lock") = tray_view(
             &sessions,
             today_cost,
@@ -530,10 +529,13 @@ fn outcome(result: std::io::Result<Reach>, resume: String, label: &str) -> Focus
 
 #[tauri::command]
 pub fn snapshot(span: Span, app: tauri::State<'_, App>, handle: tauri::AppHandle) -> Snapshot {
+    // Stamped either side of the work: the first claims the clock, the second keeps
+    // it through a tick that ran longer than the lease.
     crate::tray::panel_polled();
     let snapshot = app.snapshot(span, Local::now());
     crate::tray::apply(&handle);
     fire(&handle, app.take_pending());
+    crate::tray::panel_polled();
     snapshot
 }
 

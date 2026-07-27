@@ -126,7 +126,7 @@ mod tests {
             model: "claude-opus-4-8".into(),
             usage: real_turn(),
         };
-        let entries = vec![entry(midnight + 60), entry(now - 60)];
+        let entries = [entry(midnight + 60), entry(now - 60)];
 
         let today = cost_in_window(&table, entries.iter(), midnight, now);
         let last_four_hours = cost_in_window(&table, entries.iter(), now - 4 * 3_600, now);

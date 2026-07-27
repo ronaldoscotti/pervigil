@@ -126,7 +126,7 @@ form degrades to a plain `set_icon` on Windows and Linux, so it costs nothing.
 **Menu.**
 
 ```
-3 waiting · $4.20 today      (disabled)
+3 waiting                    (disabled)
 ──────────────
 pervigil — fix the axis ticks
 comercial-api — migrate to valkey
@@ -142,11 +142,14 @@ so a cap never hides the number. The menu is rebuilt only when its content
 changes, keyed by a structural signature over the waiting set and the waiting
 count; `src/main.ts:852` already applies that idea to the panel's rows.
 
-**The cost does not enter the signature.** It is an `f64` that moves on almost
-every tick during active work, and rebuilding a macOS menu closes it under the
-user's cursor. A menu that shuts while you are reading it is a worse failure than
-a cost line one rebuild stale — nobody watches a dollar figure at 1 Hz, and it
-refreshes with the next real change.
+**Nothing that moves every tick goes in the menu.** Today's spend lives in the
+tooltip, which `apply` rewrites on every tick for free. It cannot live in the
+menu: menu text can only be changed by rebuilding the menu, and a rebuild closes
+it under the user's cursor. An earlier draft kept the figure in the summary line
+and excluded it from the signature to avoid those rebuilds — which meant it
+silently stopped updating until a session changed state. A line that announces
+today's spend while showing an old number is precisely what "degrade, don't fake"
+forbids, so the figure moved to where it can be honest.
 
 The tooltip is `Pervigil — 3 waiting`, or `Pervigil — nothing waiting` at zero.
 
@@ -227,8 +230,12 @@ The tooltip is `Pervigil — 3 waiting`, or `Pervigil — nothing waiting` at ze
   this machine; this feature widens that area. It is stated here and in the PR,
   and the per-platform table is written from the Tauri documentation rather than
   from observation.
-- **Degradation is explicit:** the tooltip is skipped on Linux, where it is
-  unsupported. Nothing pretends to work where it does not.
+- **Degradation is explicit, and it now costs Linux something.** The tooltip is
+  skipped there, `set_tooltip` being unsupported — and since today's spend lives
+  in the tooltip, Linux gets the count and the sessions but no cost readout at
+  all. That is a real gap, not a rendering detail, and it is the price of keeping
+  the figure honest everywhere it does appear. The panel still shows it on every
+  platform.
 - **One guard is belt-and-braces, and QA should not hunt for it.**
   `ExitRequested { code: None }` is emitted only when the last window is
   destroyed, and the `CloseRequested` handler prevents that destruction — so in
@@ -247,7 +254,7 @@ The tooltip is `Pervigil — 3 waiting`, or `Pervigil — nothing waiting` at ze
 |---|---|---|---|
 | Left click | opens panel | opens panel | opens menu (not our choice) |
 | Right click | menu | menu | menu |
-| Tooltip | yes | yes | skipped — unsupported |
+| Tooltip (carries today's spend) | yes | yes | skipped — no cost readout |
 | Icon | template | light/dark pair | light/dark pair |
 
 ## Non-goals

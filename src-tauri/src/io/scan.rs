@@ -64,12 +64,7 @@ impl Scanner {
     /// Two floors: between them a transcript is priced but not listed. Files
     /// untouched since the lower one are skipped — append-only, so they cannot hold
     /// anything in either window.
-    pub fn scan(
-        &mut self,
-        root: &Path,
-        sessions_since: Timestamp,
-        usage_since: Timestamp,
-    ) -> Scan {
+    pub fn scan(&mut self, root: &Path, sessions_since: Timestamp, usage_since: Timestamp) -> Scan {
         let mut sessions = Vec::new();
         let mut usage: HashMap<SessionId, Vec<UsageEntry>> = HashMap::new();
 

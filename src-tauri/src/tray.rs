@@ -64,7 +64,8 @@ macro_rules! icon_table {
 /// is then no path where the packaged app finds an empty directory `tauri dev` found
 /// full.
 type IconRow = (&'static str, &'static [u8], &'static [u8]);
-static ICONS: &[IconRow] = icon_table!["bare", "1", "2", "3", "4", "5", "6", "7", "8", "9", "overflow"];
+static ICONS: &[IconRow] =
+    icon_table!["bare", "1", "2", "3", "4", "5", "6", "7", "8", "9", "overflow"];
 
 /// Show the panel. The clock needs no bookkeeping here — the panel takes it back by
 /// polling, and the ticker steps aside the moment it does.
@@ -189,7 +190,7 @@ fn image(app: &AppHandle, stem: &str) -> tauri::Result<Image<'static>> {
     let dark_background = app
         .get_webview_window("main")
         .and_then(|window| window.theme().ok())
-        .map_or(true, |theme| theme == Theme::Dark);
+        .is_none_or(|theme| theme == Theme::Dark);
 
     let row = ICONS
         .iter()
