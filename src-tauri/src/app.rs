@@ -9,7 +9,7 @@ use crate::config::Config;
 use crate::core::event::{parse_log, SessionId, Timestamp};
 use crate::core::pricing::{self, PriceTable, UsageEntry};
 use crate::core::prune::prune;
-use crate::core::session::{Session, SessionState};
+use crate::core::session::{project, Session, SessionState};
 use crate::core::store::{self, Segment};
 use crate::core::terminal::Terminal;
 use crate::io;
@@ -406,13 +406,6 @@ fn name(session: &Session) -> String {
         .title
         .clone()
         .unwrap_or_else(|| session.id.chars().take(8).collect())
-}
-
-fn project(cwd: &str) -> String {
-    cwd.rsplit(['/', '\\'])
-        .find(|part| !part.is_empty())
-        .unwrap_or(cwd)
-        .to_string()
 }
 
 /// The bundled `record` shim sits beside the app binary. Falls back to the bare name
