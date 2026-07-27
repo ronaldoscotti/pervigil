@@ -64,8 +64,27 @@ guard from us: `prevent_exit` already ignores itself when the code is
 
 **Exactly one clock at a time.** A Rust-side ticker calls `App::snapshot` while
 the panel is hidden, and stops when it is shown; the webview's existing poll
-keeps driving everything while the panel is visible. Window visibility starts and
-stops the ticker.
+keeps driving everything while the panel is visible. The ticker pins
+`Span::Today` — the panel's span lives in the frontend and is unreachable from
+Rust, and it is the panel's clock anyway.
+
+Tauri v2 has **no window-visibility event** — `WindowEvent` carries `Resized`,
+`Moved`, `CloseRequested`, `Destroyed`, `Focused`, `ScaleFactorChanged`,
+`DragDrop`, `ThemeChanged` and nothing else. So the invariant cannot be observed;
+it has to be *owned*. One pair of helpers, `show_panel` / `hide_panel`, performs
+the window call and flips the ticker together, and every site routes through
+them. There are five once this lands, and the first is pre-existing plumbing that
+reads as unrelated:
+
+- the single-instance handler (`lib.rs:20-25`)
+- the tray left-click handler (`lib.rs:55-58`)
+- the new `CloseRequested` hide
+- the new `RunEvent::Reopen` show
+- the new `Open Pervigil` menu item
+
+Missing one gives two clocks — the exact `targets` corruption below — or none, a
+frozen tray. The helpers exist so that "one clock" is a property of the code
+rather than a rule someone has to remember.
 
 This is a hard requirement, not a tidiness preference. `App::snapshot` is not a
 read — it replaces `self.targets` wholesale (`app.rs:286`) and advances the
@@ -98,7 +117,10 @@ backend rescales whatever it is handed to an 18pt height, and the Windows backen
 builds one `HICON` from the RGBA. A second density would be an asset no code
 could ever select. The generated PNGs are embedded with `include_bytes!` rather
 than shipped as bundle resources, so there is no path where the packaged app
-finds an empty icon directory that `tauri dev` found full.
+finds an empty icon directory that `tauri dev` found full. Swaps go through
+`set_icon_with_as_template`, which sets image and template flag atomically —
+`set_icon` followed by `set_icon_as_template` flickers on macOS, and the atomic
+form degrades to a plain `set_icon` on Windows and Linux, so it costs nothing.
 
 **Menu.**
 
@@ -116,8 +138,14 @@ Session items call the existing `app::focus` path — the same code the panel's
 rows already use. The list is capped at nine, in the panel's own order
 (`store::sort`, pins first); the summary line above always states the true count,
 so a cap never hides the number. The menu is rebuilt only when its content
-changes, keyed by a structural signature over the waiting set and the summary;
-`src/main.ts:852` already applies that idea to the panel's rows.
+changes, keyed by a structural signature over the waiting set and the waiting
+count; `src/main.ts:852` already applies that idea to the panel's rows.
+
+**The cost does not enter the signature.** It is an `f64` that moves on almost
+every tick during active work, and rebuilding a macOS menu closes it under the
+user's cursor. A menu that shuts while you are reading it is a worse failure than
+a cost line one rebuild stale — nobody watches a dollar figure at 1 Hz, and it
+refreshes with the next real change.
 
 The tooltip is `Pervigil — 3 waiting`, or `Pervigil — nothing waiting` at zero.
 
@@ -138,9 +166,16 @@ The tooltip is `Pervigil — 3 waiting`, or `Pervigil — nothing waiting` at ze
   panel's span is a user filter that defaults to `4h` and changes under you; the
   tray has no filter UI and no room to explain one. Since either clock may be the
   one running, the figure cannot come from the snapshot's span-scoped `cost`
-  without changing meaning when the panel opens. `Snapshot` gains a `today_cost`
-  field computed in the same pricing pass, so the word "today" is literally true
-  under both clocks and costs no extra scan.
+  without changing meaning when the panel opens.
+
+  Filtering the existing usage by today does **not** work: `Scanner::scan` skips
+  any transcript whose mtime predates the span floor (`io/scan.rs:100`), so under
+  the default `4h` span this morning's work is never read at all and "today"
+  would silently shrink. Instead `Scanner::scan` takes **two floors** — sessions
+  keep `from`, usage uses `min(from, start_of_day(now))`. One directory walk, one
+  set of incremental reads, two windows applied to two outputs. It costs a wider
+  file set in the same pass, not a second pass, and the session list the panel
+  renders is untouched.
 - **macOS uses a template image; Windows and Linux use light/dark pairs.**
   `icon_as_template` is macOS-only; there the system tints the alpha mask and the
   icon is correct in both themes for free. Elsewhere a white silhouette vanishes
@@ -199,6 +234,15 @@ The tooltip is `Pervigil — 3 waiting`, or `Pervigil — nothing waiting` at ze
   normal use the guarded `prevent_exit` branch will not fire at all. It is the
   documented pattern and it costs four lines, so it stays; it is recorded here so
   nobody spends an afternoon trying to reach it.
+- **`Cmd+Q` is unaffected.** It is not a window close, so the `CloseRequested`
+  hide never sees it; it still quits, exactly as today. Worth one QA tick because
+  it is the first thing anyone reading "closing now hides" will worry about.
+- **A minimised panel is a hidden panel we do not notice.** The ticker keys off
+  our own show/hide helpers, and minimising goes through neither — so the webview
+  keeps the clock while the OS is free to throttle its timers. Accepted: the
+  window is small, always-on-top by default, and minimising it is not a habit
+  this panel invites. Recorded rather than fixed, and it is the first thing to
+  revisit if the tray is ever reported as stale.
 
 | | macOS | Windows | Linux |
 |---|---|---|---|
