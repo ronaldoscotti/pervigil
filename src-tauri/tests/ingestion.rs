@@ -3,11 +3,11 @@
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use pervigil_lib::core::event::parse_log;
-use pervigil_lib::core::session::{SessionState, ViewPrefs};
-use pervigil_lib::core::store::fold;
-use pervigil_lib::core::terminal::Terminal;
-use pervigil_lib::io::record::{append_line, build_event};
+use specola_lib::core::event::parse_log;
+use specola_lib::core::session::{SessionState, ViewPrefs};
+use specola_lib::core::store::fold;
+use specola_lib::core::terminal::Terminal;
+use specola_lib::io::record::{append_line, build_event};
 
 const PAYLOAD: &str = r#"{"session_id":"s1","cwd":"/p"}"#;
 
@@ -19,7 +19,7 @@ impl TempLog {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        Self(std::env::temp_dir().join(format!("pervigil-{name}-{nanos}")))
+        Self(std::env::temp_dir().join(format!("specola-{name}-{nanos}")))
     }
 
     fn path(&self) -> PathBuf {
@@ -33,7 +33,7 @@ impl TempLog {
         append_line(&self.path(), &line).expect("append should succeed");
     }
 
-    fn fold_at(&self, now: u64) -> Vec<pervigil_lib::core::session::Session> {
+    fn fold_at(&self, now: u64) -> Vec<specola_lib::core::session::Session> {
         let contents = std::fs::read_to_string(self.path()).expect("log should be readable");
         let (events, _) = parse_log(&contents);
         fold(&events, now, &ViewPrefs::default())

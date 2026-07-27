@@ -1,9 +1,9 @@
 //! One realistic day: a terminal killed without a Stop event, a session resumed after
 //! hours, and two sessions live in the same project.
 
-use pervigil_lib::core::event::Event;
-use pervigil_lib::core::session::{SessionState, ViewPrefs};
-use pervigil_lib::core::store::{fold, timeline, waiting_share};
+use specola_lib::core::event::Event;
+use specola_lib::core::session::{SessionState, ViewPrefs};
+use specola_lib::core::store::{fold, timeline, waiting_share};
 
 const NOW: u64 = 68_400;
 const DAY_START: u64 = 28_800;
@@ -47,12 +47,12 @@ fn a_killed_terminal_never_sends_stop_and_stays_working() {
 #[test]
 fn one_project_can_hold_two_live_sessions() {
     let sessions = fold(&full_day(), NOW, &ViewPrefs::default());
-    let in_pervigil = sessions
+    let in_specola = sessions
         .iter()
-        .filter(|s| s.cwd.ends_with("/pervigil"))
+        .filter(|s| s.cwd.ends_with("/specola"))
         .count();
 
-    assert_eq!(in_pervigil, 2);
+    assert_eq!(in_specola, 2);
 }
 
 #[test]

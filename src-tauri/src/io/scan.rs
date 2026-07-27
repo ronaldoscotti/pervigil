@@ -126,7 +126,7 @@ mod tests {
     use super::*;
 
     const FIRST: &str = concat!(
-        r#"{"type":"user","sessionId":"s1","cwd":"/Users/x/pervigil","timestamp":"2026-07-23T10:00:00.000Z"}"#,
+        r#"{"type":"user","sessionId":"s1","cwd":"/Users/x/specola","timestamp":"2026-07-23T10:00:00.000Z"}"#,
         "\n",
         r#"{"type":"assistant","sessionId":"s1","timestamp":"2026-07-23T10:00:01.000Z","message":{"model":"claude-opus-4-8","usage":{"output_tokens":10}}}"#,
         "\n",
@@ -140,7 +140,7 @@ mod tests {
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
                 .as_nanos();
-            let root = std::env::temp_dir().join(format!("pervigil-scan-{name}-{nanos}"));
+            let root = std::env::temp_dir().join(format!("specola-scan-{name}-{nanos}"));
             std::fs::create_dir_all(root.join("a-project")).unwrap();
             Self(root)
         }
@@ -175,7 +175,7 @@ mod tests {
 
         assert_eq!(scan.sessions.len(), 1);
         assert_eq!(scan.sessions[0].id, "s1");
-        assert_eq!(scan.sessions[0].cwd, "/Users/x/pervigil");
+        assert_eq!(scan.sessions[0].cwd, "/Users/x/specola");
         assert_eq!(scan.usage["s1"].len(), 1);
     }
 

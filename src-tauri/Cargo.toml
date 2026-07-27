@@ -1,12 +1,12 @@
 [package]
-name = "pervigil"
+name = "specola"
 version = "0.1.0"
 description = "Cross-platform panel showing which Claude Code sessions are waiting on you"
 authors = ["Ronaldo Scotti"]
 edition = "2021"
 # The `record` shim is a second binary; without this, `cargo run` (and `tauri dev`)
 # can't tell which one is the app.
-default-run = "pervigil"
+default-run = "specola"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -14,7 +14,7 @@ default-run = "pervigil"
 # The `_lib` suffix may seem redundant but it is necessary
 # to make the lib name unique and wouldn't conflict with the bin name.
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
-name = "pervigil_lib"
+name = "specola_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

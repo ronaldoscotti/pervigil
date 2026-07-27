@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::core::event::{SessionId, Timestamp};
 use crate::core::session::{DismissMode, ViewPrefs};
 
-/// User settings, persisted to `~/.pervigil/config.json`. Short and opinionated
+/// User settings, persisted to `~/.specola/config.json`. Short and opinionated
 /// (spec §2): what the panel notifies about, which projects it shows, and the
 /// pin/dismiss state that can't live in the append-only event log. `BTree*` so the
 /// file serializes in a stable order and diffs cleanly.
@@ -86,7 +86,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        std::env::temp_dir().join(format!("pervigil-cfg-{name}-{nanos}/config.json"))
+        std::env::temp_dir().join(format!("specola-cfg-{name}-{nanos}/config.json"))
     }
 
     #[test]

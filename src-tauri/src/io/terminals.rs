@@ -3,7 +3,7 @@ use std::path::Path;
 
 use crate::core::terminal::Terminal;
 
-const DIR: &str = ".pervigil/terminals";
+const DIR: &str = ".specola/terminals";
 
 /// Persist a session's latest terminal, one small file per session. The shim
 /// overwrites it on every hook, so a session that never fired `SessionStart` (hooks
@@ -52,7 +52,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        std::env::temp_dir().join(format!("pervigil-term-{name}-{nanos}"))
+        std::env::temp_dir().join(format!("specola-term-{name}-{nanos}"))
     }
 
     #[test]

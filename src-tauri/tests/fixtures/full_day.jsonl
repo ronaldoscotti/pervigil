@@ -3,8 +3,8 @@
 {"type":"Notification","id":"s-pos","at":33600}
 {"type":"UserPromptSubmit","id":"s-pos","at":33900}
 {"type":"Stop","id":"s-pos","at":34800}
-{"type":"SessionStart","id":"s-perv-main","cwd":"/Users/scotti/work/personal/pervigil","pid":4003,"at":36000}
-{"type":"SessionStart","id":"s-perv-feat","cwd":"/Users/scotti/work/personal/pervigil","pid":4004,"at":36300}
+{"type":"SessionStart","id":"s-perv-main","cwd":"/Users/scotti/work/personal/specola","pid":4003,"at":36000}
+{"type":"SessionStart","id":"s-perv-feat","cwd":"/Users/scotti/work/personal/specola","pid":4004,"at":36300}
 {"type":"Stop","id":"s-perv-feat","at":37800}
 {"type":"Notification","id":"s-perv-main","at":39600}
 {"type":"UserPromptSubmit","id":"s-perv-feat","at":61200}

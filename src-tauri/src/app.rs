@@ -18,9 +18,9 @@ use crate::io::scan::Scanner;
 use crate::platform::focuser::{self, Caps, Reach, Strategy, WindowFocuser};
 use crate::platform::liveness::{retain_live, SystemProcesses};
 
-const LOG: &str = ".pervigil/events.jsonl";
+const LOG: &str = ".specola/events.jsonl";
 const PROJECTS: &str = ".claude/projects";
-const CONFIG: &str = ".pervigil/config.json";
+const CONFIG: &str = ".specola/config.json";
 const SETTINGS: &str = ".claude/settings.json";
 
 /// The one filter in the UI. It scopes the lane, the cost readout, and how far back
@@ -104,7 +104,7 @@ pub struct Snapshot {
     pub dismiss_read: bool,
     pub hidden: Vec<String>,
     /// True once all four hooks are wired in `~/.claude/settings.json`. When false the
-    /// panel shows the install card; pervigil never writes the file itself (spec item 12).
+    /// panel shows the install card; specola never writes the file itself (spec item 12).
     pub hooks_installed: bool,
     /// The block to paste, with the bundled shim's real path baked in.
     pub hook_snippet: String,
@@ -576,7 +576,7 @@ pub fn dismiss(id: String, app: tauri::State<'_, App>) {
     app.dismiss(&id, Local::now().timestamp().max(0) as Timestamp);
 }
 
-/// Open `~/.claude/settings.json` in the user's default editor for JSON — pervigil
+/// Open `~/.claude/settings.json` in the user's default editor for JSON — specola
 /// never edits it, so the fastest honest help is to take you there.
 #[tauri::command]
 pub fn open_settings(app: tauri::State<'_, App>) {
@@ -615,7 +615,7 @@ pub fn open_url(url: String) {
 pub fn save_day_card(bytes: Vec<u8>, app: tauri::State<'_, App>) -> Result<String, String> {
     let dir = app.home.join("Downloads");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let path = dir.join("pervigil-day.png");
+    let path = dir.join("specola-day.png");
     std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
     #[cfg(target_os = "macos")]
     let _ = std::process::Command::new("open")
@@ -875,13 +875,13 @@ mod tests {
 
     #[test]
     fn a_project_is_the_last_segment_of_its_path() {
-        assert_eq!(project("/Users/x/work/pervigil"), "pervigil");
-        assert_eq!(project("/Users/x/work/pervigil/"), "pervigil");
-        assert_eq!(project(r"C:\Users\x\pervigil"), "pervigil");
+        assert_eq!(project("/Users/x/work/specola"), "specola");
+        assert_eq!(project("/Users/x/work/specola/"), "specola");
+        assert_eq!(project(r"C:\Users\x\specola"), "specola");
         assert_eq!(project(""), "");
     }
 
-    /// Reads the real `~/.claude` and `~/.pervigil`, so it only means anything on a
+    /// Reads the real `~/.claude` and `~/.specola`, so it only means anything on a
     /// machine that has them. Ignored by default; the QA entry point:
     /// `cargo test real_home -- --ignored --nocapture`
     #[test]
