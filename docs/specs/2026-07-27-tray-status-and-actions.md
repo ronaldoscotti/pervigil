@@ -21,6 +21,15 @@ least finished. Four things are wrong, and the fourth invalidates the other thre
    ends the process and takes the tray with it. Pervigil is a background monitor
    that cannot run in the background.
 
+A fifth problem is latent today and becomes live the moment (4) is fixed. Both
+the tray badge and the native notifications are side effects of the `snapshot`
+command (`app.rs:496-499`), and the only thing that calls it is the webview's
+`setInterval(poll, 1000)` (`src/main.ts:1419`). While the window cannot be
+hidden, that timer always runs. Once closing the panel hides it, tray state and
+notifications inherit the lifetime of a hidden WebView's timer — which the OS is
+free to throttle or suspend. Adding hide-on-close without moving that clock would
+break notifications, a shipped feature.
+
 ## Goal
 
 With the panel closed, the tray answers *is something blocked on me* and lets you
@@ -29,24 +38,34 @@ reachable in one click.
 
 ## Approach
 
-Four layers, from the foundation up. The first is a prerequisite, not a feature.
+Four layers, from the foundation up. The first two are prerequisites, not features.
 
 ```
-RunEvent::ExitRequested  ──►  prevent_exit()        app survives a closed window
-WindowEvent::CloseRequested ─► prevent_close + hide  closing the panel hides it
-RunEvent::Reopen         ──►  show panel            the Dock icon re-opens it
+RunEvent::ExitRequested { code: None } ──► prevent_exit()   survive a closed window
+WindowEvent::CloseRequested            ──► prevent_close + hide
+RunEvent::Reopen                       ──► show panel       the Dock re-opens it
         │
         ▼
-Snapshot ──► tray_view() ──► TrayView { icon, tooltip, summary, items }
-   (pure)                            │
-                                     ▼
-                          icon asset + menu (rebuilt only on change)
+Rust-side ticker (1s) ──► App::snapshot(Today) ──► tray_view() ──► TrayView
+        │                                              (pure)         │
+        └──► notifications                                            ▼
+                                                    icon asset + menu, rebuilt on change
 ```
 
 **Lifecycle.** `prevent_exit` keeps the core thread alive with no windows — the
-Tauri docs name this as its purpose. `CloseRequested` hides instead of closing.
-`Quit` in the tray menu is then the only real exit, so it is mandatory, not
-optional.
+Tauri docs name this as its purpose — but it must be **guarded on
+`code.is_none()`**. `RunEvent::ExitRequested` carries `Some(code)` when the exit
+came from `AppHandle::exit`, and `None` only for user-interaction exits. An
+unconditional `prevent_exit()` would block the tray's own `Quit`, which is the
+only real exit once the window merely hides. (The updater's relaunch needs no
+guard from us: `prevent_exit` already ignores itself when the code is
+`RESTART_EXIT_CODE`.)
+
+**The clock moves to Rust.** A ticker owned by the Rust side calls
+`App::snapshot` and drives both the tray and the notifications. The `snapshot`
+command stops carrying those side effects and goes back to being a plain read for
+the panel. This is what makes "with the panel closed" true, and it repairs the
+latent fragility in notifications rather than shipping on top of it.
 
 **Decision, pure.** `tray_view(&Snapshot) -> TrayView` takes no Tauri types, no
 clock, no I/O — the same shape as `store::timeline`. It picks the icon key, the
@@ -72,9 +91,13 @@ Quit
 ```
 
 Session items call the existing `app::focus` path — the same code the panel's
-rows already use. The menu is rebuilt only when its content changes, keyed by a
-structural signature over the waiting set and the summary line; `src/main.ts:852`
-already applies that idea to the panel's rows.
+rows already use. The list is capped at nine, in the panel's own order
+(`store::sort`, pins first); the summary line above always states the true count,
+so a cap never hides the number. The menu is rebuilt only when its content
+changes, keyed by a structural signature over the waiting set and the summary;
+`src/main.ts:852` already applies that idea to the panel's rows.
+
+The tooltip is `Pervigil — 3 waiting`, or `Pervigil — nothing waiting` at zero.
 
 ## Decisions
 
@@ -89,14 +112,26 @@ already applies that idea to the panel's rows.
   script keeps the assets cheap to regenerate when the artwork changes.
   (Alternative: compose digits at runtime with the `image` crate. Rejected — buys
   unlimited counts, which nobody needs, and pays in unverifiable code.)
+- **The tray summary is always today, whatever the panel is showing.** The
+  panel's span is a user filter that defaults to `4h` and changes under you; the
+  tray has no filter UI and no room to explain one. The Rust ticker asks for
+  `Span::Today`, so the word "today" in the summary is literally true and does
+  not silently re-scope when the panel's pill changes.
 - **macOS uses a template image; Windows and Linux use light/dark pairs.**
   `icon_as_template` is macOS-only; there the system tints the alpha mask and the
   icon is correct in both themes for free. Elsewhere a white silhouette vanishes
-  on a light Windows 11 taskbar, so the theme is detected and the matching
-  variant selected.
+  on a light Windows 11 taskbar, so the variant is chosen from
+  `WebviewWindow::theme()` at startup and re-chosen on `WindowEvent::ThemeChanged`,
+  defaulting to the dark-background variant when the theme is unknown. This is an
+  approximation and is labelled as one: on Windows the taskbar's theme is a
+  separate system setting from the app theme Tauri reports, and they can disagree.
 - **Two states, not three.** Waiting and not-waiting. A `working` state would
   change constantly while asking nothing of the user, competing for attention
   with the one state that does.
+- **Left click keeps opening the panel where we control it.** Tauri defaults
+  `show_menu_on_left_click` to `true`, so adding a menu would silently take the
+  left click away; it is set to `false` on macOS and Windows. On Linux the
+  setting is unsupported and the left click is not ours.
 - **The Dock icon stays.** `RunEvent::Reopen` fires when it is clicked; the
   handler shows the panel, so the Dock becomes a second door rather than a dead
   click. (Alternative: `ActivationPolicy::Accessory`. Rejected — it removes the
@@ -107,21 +142,27 @@ already applies that idea to the panel's rows.
   `set_show_menu_on_left_click` is unsupported there, so left-click behaviour is
   not ours to choose. Without the menu item, a Linux user has no way to open the
   panel.
+- **A tray click that falls to the clipboard says so.** `App::focus` degrades to
+  copying the resume command when it cannot raise a window. The panel reports
+  that with a toast; a hidden panel has no toast, and a silent copy is
+  indistinguishable from a dead click. The tray path fires a native notification
+  instead, reusing the notification plumbing already in `fire()`.
 
 ## What this is and isn't (honesty)
 
 - **Verified on macOS:** the icon treatment, the menu, the lifecycle, and the
   count, by using the build.
 - **Verified everywhere:** `tray_view` is pure and fixture-tested — count 0 maps
-  to the bare icon, 12 maps to `9+`, and the menu signature changes only when the
-  waiting set or the summary does. What is tested is the decision, not the
-  drawing.
+  to the bare icon, 12 maps to `9+`, the list caps at nine while the summary
+  still reads twelve, and the menu signature changes only when the waiting set or
+  the summary does. What is tested is the decision, not the drawing.
 - **Not verified on Windows or Linux:** how the icon actually looks in those
-  shells, and whether the light/dark variant selection matches the system theme
-  in practice. `CLAUDE.md` already records the tray badge as visually unverified
-  on this machine; this feature widens that area. It is stated here and in the
-  PR, and the per-platform behaviour table is written from the Tauri
-  documentation rather than from observation.
+  shells, and whether the light/dark selection matches the system theme in
+  practice — on Windows it is known to be an approximation, per the decision
+  above. `CLAUDE.md` already records the tray badge as visually unverified on
+  this machine; this feature widens that area. It is stated here and in the PR,
+  and the per-platform table is written from the Tauri documentation rather than
+  from observation.
 - **Degradation is explicit:** the tooltip is skipped on Linux, where it is
   unsupported. Nothing pretends to work where it does not.
 
@@ -139,10 +180,14 @@ span switch in the menu; hiding the Dock icon; any change to the panel itself.
 
 ## Files
 
-- `src-tauri/src/lib.rs` — lifecycle handlers, tray menu construction, icon
-  application.
+- `src-tauri/src/lib.rs` — lifecycle handlers, the ticker, tray menu
+  construction, icon application.
 - `src-tauri/src/app.rs` — `tray_view` and its `TrayView` type; `badge()` is
-  replaced by it.
-- `src-tauri/icons/tray/` — generated icon assets (new).
-- `scripts/gen-tray-icons.py` — SVG → PNG generator (new).
+  replaced by it, and `snapshot` sheds its side effects.
+- `assets/tray.svg` — the source glyph, to be designed in the plan (new).
+- `src-tauri/icons/tray/` — generated assets: bare and `1`…`9`, `9+`, at @1x/@2x,
+  in light and dark variants for the non-macOS targets (new).
+- `scripts/gen-tray-icons.py` — SVG → PNG generator, rasterising with
+  `cairosvg`; Python tooling is already precedented by `scripts/screenshot-frame.py`
+  (new).
 - `docs/specs/2026-07-27-tray-status-and-actions.md` — this file.
