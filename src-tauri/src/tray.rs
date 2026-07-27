@@ -8,7 +8,7 @@ use std::time::Duration;
 use chrono::Local;
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuEvent, MenuItemBuilder, PredefinedMenuItem};
-use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Manager, Theme};
 
 use crate::app::{self, App, Span};
@@ -65,23 +65,16 @@ pub(crate) fn hide_panel(app: &AppHandle) {
 pub(crate) fn build(app: &AppHandle) -> tauri::Result<()> {
     let tray = TrayIconBuilder::with_id(TRAY_ID)
         .icon(image(app, &crate::core::tray::IconKey::Bare.asset())?)
-        .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click {
-                button: MouseButton::Left,
-                button_state: MouseButtonState::Up,
-                ..
-            } = event
-            {
-                show_panel(tray.app_handle());
-            }
-        })
         .on_menu_event(on_menu_event)
         .build(app)?;
 
     #[cfg(target_os = "macos")]
     let _ = tray.set_icon_as_template(true);
-    // Defaults to true, so adding a menu would silently take the left click away.
-    let _ = tray.set_show_menu_on_left_click(false);
+    // Either button opens the menu, and the panel is one item inside it. Right-click
+    // cannot be made to do something else: `tray-icon` has a switch for the
+    // right-click menu, Tauri 2.11 exposes only the left-click one, so the menu pops
+    // on right-click no matter what we hang off the click event.
+    let _ = tray.set_show_menu_on_left_click(true);
 
     apply(app);
     spawn_ticker(app.clone());

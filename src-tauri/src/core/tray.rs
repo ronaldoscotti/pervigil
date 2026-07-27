@@ -116,9 +116,9 @@ pub fn tray_view(sessions: &[Session], today_cost: f64, words: &TrayStrings) -> 
             "{counted} · {}",
             words.today.replace("{cost}", &format!("{today_cost:.2}"))
         ),
-        signature: items
-            .iter()
-            .map(|item| item.id.as_str())
+        signature: [counted.as_str(), words.open.as_str(), words.quit.as_str()]
+            .into_iter()
+            .chain(items.iter().flat_map(|item| [item.id.as_str(), item.label.as_str()]))
             .collect::<Vec<_>>()
             .join("\u{1f}"),
         items,
@@ -235,6 +235,25 @@ mod tests {
 
         assert_eq!(busy.summary, "2 esperando por você · R$4.20 hoje");
         assert_eq!(quiet.tooltip, "Pervigil — nada esperando");
+    }
+
+    /// The menu is rebuilt only when the signature moves, so a language change that
+    /// left it alone would leave yesterday's words on screen until a session did
+    /// something. Every word the menu draws is in the signature; only the cost is not.
+    #[test]
+    fn the_signature_changes_when_the_language_does() {
+        let sessions = [waiting("a")];
+        let pt = TrayStrings {
+            waiting: "{n} esperando".into(),
+            open: "Abrir Pervigil".into(),
+            quit: "Sair".into(),
+            ..TrayStrings::default()
+        };
+
+        assert_ne!(
+            tray_view(&sessions, 0.0, &en()).signature,
+            tray_view(&sessions, 0.0, &pt).signature
+        );
     }
 
     #[test]
