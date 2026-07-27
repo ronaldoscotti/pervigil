@@ -1,4 +1,3 @@
-use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::Manager;
 
 pub mod app;
@@ -6,8 +5,7 @@ pub mod config;
 pub mod core;
 pub mod io;
 pub mod platform;
-
-pub(crate) const TRAY_ID: &str = "pervigil";
+mod tray;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -18,10 +16,7 @@ pub fn run() {
         // Must be the first plugin: a second launch focuses the running panel
         // instead of opening another window.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
+            tray::show_panel(app);
         }))
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -38,32 +33,36 @@ pub fn run() {
             app::set_dismiss_read,
             app::set_pinned,
             app::set_project_hidden,
+            app::set_tray_strings,
             app::dismiss,
             app::open_settings,
             app::open_url,
             app::save_day_card,
             app::set_window_pinned
         ])
-        .setup(|app| {
-            let mut tray = TrayIconBuilder::with_id(TRAY_ID).on_tray_icon_event(|tray, event| {
-                if let TrayIconEvent::Click {
-                    button: MouseButton::Left,
-                    button_state: MouseButtonState::Up,
-                    ..
-                } = event
-                {
-                    if let Some(panel) = tray.app_handle().get_webview_window("main") {
-                        let _ = panel.show();
-                        let _ = panel.set_focus();
-                    }
-                }
-            });
-            if let Some(icon) = app.default_window_icon() {
-                tray = tray.icon(icon.clone());
+        // Closing the panel hides it; the tray's Quit is the only real exit.
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                tray::hide_panel(window.app_handle());
             }
-            tray.build(app)?;
+        })
+        .setup(|app| {
+            tray::build(app.handle())?;
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| match event {
+            // `Some` came from `AppHandle::exit` — our own Quit — and must be let
+            // through.
+            tauri::RunEvent::ExitRequested {
+                code: None, api, ..
+            } => api.prevent_exit(),
+            #[cfg(target_os = "macos")]
+            tauri::RunEvent::Reopen { .. } => tray::show_panel(app),
+            _ => {
+                let _ = app;
+            }
+        });
 }

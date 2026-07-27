@@ -51,3 +51,12 @@ pub struct ViewPrefs {
     pub dismissed: HashMap<SessionId, Timestamp>,
     pub dismiss_mode: DismissMode,
 }
+
+/// A session's display name: the last non-empty path segment of its cwd. Handles
+/// both separators — a Windows transcript can be read on any platform.
+pub fn project(cwd: &str) -> String {
+    cwd.rsplit(['/', '\\'])
+        .find(|part| !part.is_empty())
+        .unwrap_or(cwd)
+        .to_string()
+}

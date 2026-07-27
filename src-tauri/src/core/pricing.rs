@@ -61,14 +61,14 @@ pub fn cost(table: &PriceTable, model: &str, usage: &TokenUsage) -> Option<f64> 
 
 /// Total cost of entries falling inside `[from, to]`. Entries the table can't price
 /// are skipped, so an unknown model never inflates the total.
-pub fn cost_in_window(
+pub fn cost_in_window<'a>(
     table: &PriceTable,
-    entries: &[UsageEntry],
+    entries: impl IntoIterator<Item = &'a UsageEntry>,
     from: Timestamp,
     to: Timestamp,
 ) -> f64 {
     entries
-        .iter()
+        .into_iter()
         .filter(|entry| entry.at >= from && entry.at <= to)
         .filter_map(|entry| cost(table, &entry.model, &entry.usage))
         .sum()
@@ -112,6 +112,30 @@ mod tests {
         let total = cost(&table, "claude-opus-4-8", &real_turn()).unwrap();
 
         assert!(near(total, 0.293_654), "got {total}");
+    }
+
+    /// The tray reports today while the panel may be showing four hours. Both totals
+    /// come from the same entries, and only the window tells them apart.
+    #[test]
+    fn a_window_reaching_back_to_midnight_counts_what_a_short_one_misses() {
+        let table = shipped();
+        let midnight = 1_000_000;
+        let now = midnight + 15 * 3_600;
+        let entry = |at| UsageEntry {
+            at,
+            model: "claude-opus-4-8".into(),
+            usage: real_turn(),
+        };
+        let entries = [entry(midnight + 60), entry(now - 60)];
+
+        let today = cost_in_window(&table, entries.iter(), midnight, now);
+        let last_four_hours = cost_in_window(&table, entries.iter(), now - 4 * 3_600, now);
+
+        assert!(
+            today > last_four_hours,
+            "this morning is today's spend even when the panel cannot see it"
+        );
+        assert!(last_four_hours > 0.0, "and the short window still counts");
     }
 
     #[test]

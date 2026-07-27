@@ -9,9 +9,10 @@ use crate::config::Config;
 use crate::core::event::{parse_log, SessionId, Timestamp};
 use crate::core::pricing::{self, PriceTable, UsageEntry};
 use crate::core::prune::prune;
-use crate::core::session::{Session, SessionState};
+use crate::core::session::{project, Session, SessionState};
 use crate::core::store::{self, Segment};
 use crate::core::terminal::Terminal;
+use crate::core::tray::{tray_view, TrayStrings, TrayView};
 use crate::io;
 use crate::io::scan::Scanner;
 use crate::platform::focuser::{self, Caps, Reach, Strategy, WindowFocuser};
@@ -91,6 +92,9 @@ pub struct Snapshot {
     pub segments: Vec<Segment>,
     pub waiting_share: f64,
     pub cost: f64,
+    /// Spend since local midnight, whatever span the panel is showing. The tray has
+    /// no filter UI, so its summary has to mean the same thing under either clock.
+    pub today_cost: f64,
     /// Total tokens processed in the window — input, output, and cache.
     pub tokens: u64,
     /// Current settings the panel renders: the notifications toggle, and the projects
@@ -146,6 +150,12 @@ pub struct App {
     /// about sessions that were already waiting.
     seen: Mutex<Option<HashMap<SessionId, SessionState>>>,
     pending: Mutex<Vec<Notice>>,
+    /// The tray's words, pushed down by the frontend, which owns the ten locales.
+    /// English until it does — see `core::tray::TrayStrings`.
+    strings: Mutex<TrayStrings>,
+    /// The last tray view computed, so the tray is applied from the same snapshot the
+    /// panel saw rather than from a second pass over the log.
+    tray: Mutex<TrayView>,
     /// Absolute path to the bundled `record` shim, baked into the install snippet.
     record_path: String,
 }
@@ -164,6 +174,8 @@ impl App {
             targets: Mutex::new(HashMap::new()),
             seen: Mutex::new(None),
             pending: Mutex::new(Vec::new()),
+            tray: Mutex::new(tray_view(&[], 0.0, &TrayStrings::default())),
+            strings: Mutex::new(TrayStrings::default()),
             record_path: record_path(),
             home,
         }
@@ -212,6 +224,25 @@ impl App {
         });
     }
 
+    /// What the tray should currently show. Cheap: the work happened in `snapshot`.
+    pub fn tray(&self) -> TrayView {
+        self.tray.lock().expect("tray lock").clone()
+    }
+
+    pub fn words(&self) -> TrayStrings {
+        self.strings.lock().expect("strings lock").clone()
+    }
+
+    /// Whether ambient alerts are on. The tray's clipboard fallback asks, because a
+    /// user who silenced alerts still needs to know a click did something.
+    pub fn notifications_on(&self) -> bool {
+        self.config.lock().expect("config lock").notifications
+    }
+
+    pub fn set_strings(&self, words: TrayStrings) {
+        *self.strings.lock().expect("strings lock") = words;
+    }
+
     /// The notices the last snapshot produced, cleared as they're taken.
     pub fn take_pending(&self) -> Vec<Notice> {
         std::mem::take(&mut self.pending.lock().expect("pending lock"))
@@ -253,11 +284,16 @@ impl App {
         let (events, _skipped) = parse_log(&log);
         let events = prune(events, to);
 
-        let scan = self
-            .scanner
-            .lock()
-            .expect("scanner lock")
-            .scan(&self.home.join(PROJECTS), from);
+        // Usage is read from midnight even when the panel asks for a narrower span:
+        // a transcript quiet since this morning is still today's spend, and the
+        // mtime gate would otherwise never open its file at all.
+        let midnight = start_of_day(now).timestamp().max(0) as Timestamp;
+        let scan = self.scanner.lock().expect("scanner lock").scan(
+            &self.home.join(PROJECTS),
+            from,
+            midnight,
+        );
+        let spent: Vec<&UsageEntry> = scan.usage.values().flatten().collect();
 
         let config = self.config.lock().expect("config lock").clone();
         let prefs = config.view_prefs();
@@ -296,6 +332,16 @@ impl App {
             })
             .collect();
 
+        // Computed here, where the raw sessions are still in scope, and kept for the
+        // tray to read. One pass serves both surfaces, and whichever clock produced
+        // this snapshot, the tray and the panel agree because they saw the same one.
+        let today_cost = pricing::cost_in_window(&self.prices, spent.iter().copied(), midnight, to);
+        *self.tray.lock().expect("tray lock") = tray_view(
+            &sessions,
+            today_cost,
+            &self.strings.lock().expect("strings lock"),
+        );
+
         let projects: Vec<String> = sessions.iter().map(|s| project(&s.cwd)).collect();
         let sessions: Vec<SessionView> = sessions
             .iter()
@@ -331,7 +377,6 @@ impl App {
             .collect();
 
         let segments = store::timeline(&events, from, to);
-        let spent: Vec<&UsageEntry> = scan.usage.values().flatten().collect();
 
         Snapshot {
             now: to,
@@ -341,11 +386,8 @@ impl App {
                 .filter(|s| s.state == SessionState::WaitingOnYou)
                 .count(),
             waiting_share: store::waiting_share(&segments),
-            cost: spent
-                .iter()
-                .filter(|entry| entry.at >= from && entry.at <= to)
-                .filter_map(|entry| pricing::cost(&self.prices, &entry.model, &entry.usage))
-                .sum(),
+            cost: pricing::cost_in_window(&self.prices, spent.iter().copied(), from, to),
+            today_cost: pricing::cost_in_window(&self.prices, spent.iter().copied(), midnight, to),
             tokens: spent
                 .iter()
                 .filter(|entry| entry.at >= from && entry.at <= to)
@@ -402,13 +444,6 @@ fn name(session: &Session) -> String {
         .title
         .clone()
         .unwrap_or_else(|| session.id.chars().take(8).collect())
-}
-
-fn project(cwd: &str) -> String {
-    cwd.rsplit(['/', '\\'])
-        .find(|part| !part.is_empty())
-        .unwrap_or(cwd)
-        .to_string()
 }
 
 /// The bundled `record` shim sits beside the app binary. Falls back to the bare name
@@ -494,10 +529,21 @@ fn outcome(result: std::io::Result<Reach>, resume: String, label: &str) -> Focus
 
 #[tauri::command]
 pub fn snapshot(span: Span, app: tauri::State<'_, App>, handle: tauri::AppHandle) -> Snapshot {
+    // Stamped either side of the work: the first claims the clock, the second keeps
+    // it through a tick that ran longer than the lease.
+    crate::tray::panel_polled();
     let snapshot = app.snapshot(span, Local::now());
-    badge(&handle, snapshot.waiting);
+    crate::tray::apply(&handle);
     fire(&handle, app.take_pending());
+    crate::tray::panel_polled();
     snapshot
+}
+
+/// The panel owns the ten locales; the tray is built in Rust. This is how the words
+/// get there — at startup, and again whenever the language changes.
+#[tauri::command]
+pub fn set_tray_strings(words: crate::core::tray::TrayStrings, app: tauri::State<'_, App>) {
+    app.set_strings(words);
 }
 
 #[tauri::command]
@@ -590,17 +636,9 @@ pub fn set_window_pinned(pinned: bool, window: tauri::WebviewWindow) {
     let _ = window.set_always_on_top(pinned);
 }
 
-/// The tray title is the count of sessions blocked on you — the product thesis, at
-/// menu-bar size. Blank at zero: nothing is waiting, so nothing shouts.
-fn badge(handle: &tauri::AppHandle, waiting: usize) {
-    if let Some(tray) = handle.tray_by_id(crate::TRAY_ID) {
-        let _ = tray.set_title((waiting > 0).then(|| waiting.to_string()));
-    }
-}
-
 /// Show the queued notices. Best-effort: a notification that won't show must never
 /// disturb the panel.
-fn fire(handle: &tauri::AppHandle, notices: Vec<Notice>) {
+pub(crate) fn fire(handle: &tauri::AppHandle, notices: Vec<Notice>) {
     use tauri_plugin_notification::NotificationExt;
 
     for notice in notices {
