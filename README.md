@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/logo-light.png">
-    <img alt="Pervigil" src="assets/logo-dark.png" width="440">
+    <img alt="Specola" src="assets/logo-dark.png" width="440">
   </picture>
 </p>
 
@@ -16,7 +16,7 @@ like — at a glance.
 > last open items. Not yet formally released.
 
 <p align="center">
-  <img src="assets/pervigil-screenshot.png" alt="The Pervigil panel: sessions across projects, the one waiting on you sorted to the top, a your-turn session pinned, a combined activity lane, per-session cost and branch." width="380">
+  <img src="assets/specola-screenshot.png" alt="The Pervigil panel: sessions across projects, the one waiting on you sorted to the top, a your-turn session pinned, a combined activity lane, per-session cost and branch." width="380">
 </p>
 
 <sub align="center">Rendered from the real UI with fixed mock data — regenerate any time with <code>bash scripts/screenshot.sh</code>.</sub>
