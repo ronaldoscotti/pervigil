@@ -61,12 +61,9 @@ pub struct Scanner {
 }
 
 impl Scanner {
-    /// Two floors, because cost and presence answer different questions. A file
-    /// untouched since `usage_since` is skipped entirely — an append-only file that
-    /// has not grown cannot hold anything inside the window. Between the two floors
-    /// a transcript is priced but not listed: the tray reports today's spend while
-    /// the panel shows a narrower span, and the wider read is what keeps this
-    /// morning's work from disappearing from the total.
+    /// Two floors: between them a transcript is priced but not listed. Files
+    /// untouched since the lower one are skipped — append-only, so they cannot hold
+    /// anything in either window.
     pub fn scan(
         &mut self,
         root: &Path,

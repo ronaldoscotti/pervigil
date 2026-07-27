@@ -62,29 +62,24 @@ only real exit once the window merely hides. (The updater's relaunch needs no
 guard from us: `prevent_exit` already ignores itself when the code is
 `RESTART_EXIT_CODE`.)
 
-**Exactly one clock at a time.** A Rust-side ticker calls `App::snapshot` while
-the panel is hidden, and stops when it is shown; the webview's existing poll
-keeps driving everything while the panel is visible. The ticker pins
-`Span::Today` — the panel's span lives in the frontend and is unreachable from
-Rust, and it is the panel's clock anyway.
+**Exactly one clock at a time, decided by a lease.** The `snapshot` command stamps
+the moment the panel last polled; the Rust ticker runs only when that stamp is older
+than three seconds. Whoever is actually ticking holds the clock, and loses it by
+going quiet.
 
-Tauri v2 has **no window-visibility event** — `WindowEvent` carries `Resized`,
-`Moved`, `CloseRequested`, `Destroyed`, `Focused`, `ScaleFactorChanged`,
-`DragDrop`, `ThemeChanged` and nothing else. So the invariant cannot be observed;
-it has to be *owned*. One pair of helpers, `show_panel` / `hide_panel`, performs
-the window call and flips the ticker together, and every site routes through
-them. There are five once this lands, and the first is pre-existing plumbing that
-reads as unrelated:
+Visibility was the wrong question, and asking it produced a bug caught in review.
+`window.hide()` does not stop a WebView, so a hidden panel keeps polling — a
+ticker gated on "is the panel hidden" would have run *beside* the webview's poll,
+which is the exact `targets` corruption this section exists to prevent. Telling the
+frontend to stop polling would not fix it either: that message has to reach a
+WebView which may already be throttled, and a throttled WebView is the reason the
+ticker exists at all.
 
-- the single-instance handler (`lib.rs:20-25`)
-- the tray left-click handler (`lib.rs:55-58`)
-- the new `CloseRequested` hide
-- the new `RunEvent::Reopen` show
-- the new `Open Pervigil` menu item
-
-Missing one gives two clocks — the exact `targets` corruption below — or none, a
-frozen tray. The helpers exist so that "one clock" is a property of the code
-rather than a rule someone has to remember.
+A lease needs neither answer. It observes the behaviour that matters instead of a
+proxy for it, and it covers the cases a visibility flag could not: a hidden but
+lively WebView keeps the clock, a throttled or suspended one loses it within three
+seconds, and a *minimised* window — which fires no event we could hook — is handled
+by the same rule as everything else.
 
 This is a hard requirement, not a tidiness preference. `App::snapshot` is not a
 read — it replaces `self.targets` wholesale (`app.rs:286`) and advances the
@@ -243,12 +238,10 @@ The tooltip is `Pervigil — 3 waiting`, or `Pervigil — nothing waiting` at ze
 - **`Cmd+Q` is unaffected.** It is not a window close, so the `CloseRequested`
   hide never sees it; it still quits, exactly as today. Worth one QA tick because
   it is the first thing anyone reading "closing now hides" will worry about.
-- **A minimised panel is a hidden panel we do not notice.** The ticker keys off
-  our own show/hide helpers, and minimising goes through neither — so the webview
-  keeps the clock while the OS is free to throttle its timers. Accepted: the
-  window is small, always-on-top by default, and minimising it is not a habit
-  this panel invites. Recorded rather than fixed, and it is the first thing to
-  revisit if the tray is ever reported as stale.
+- **Minimising needs no special case.** An earlier draft accepted that a minimised
+  panel would keep a clock the OS might throttle, because minimising fires no
+  event we could hook. The lease removes the exception: a minimised window that
+  stops polling loses the clock in three seconds, exactly like a hidden one.
 
 | | macOS | Windows | Linux |
 |---|---|---|---|

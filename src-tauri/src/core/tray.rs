@@ -68,9 +68,8 @@ pub struct TrayView {
     pub tooltip: String,
     pub summary: String,
     pub items: Vec<TrayItem>,
-    /// Changes only when the menu's *structure* does. The cost is deliberately
-    /// excluded: it moves on almost every tick, and rebuilding a macOS menu closes
-    /// it under the user's cursor.
+    /// Changes only when something the menu actually draws changes. Nothing that
+    /// moves every tick reaches the menu at all — see `tooltip`.
     pub signature: String,
 }
 
@@ -111,11 +110,15 @@ pub fn tray_view(sessions: &[Session], today_cost: f64, words: &TrayStrings) -> 
             n if n <= BADGE_MAX => IconKey::Count(n as u8),
             _ => IconKey::Overflow,
         },
-        tooltip: format!("Pervigil — {counted}"),
-        summary: format!(
-            "{counted} · {}",
+        // The cost lives in the tooltip, not the summary. Updating menu text means
+        // rebuilding the menu, and a rebuild closes it under the user's cursor — so a
+        // figure that moves every tick would either close menus or, kept out of the
+        // signature, quietly freeze. The tooltip is rewritten every tick for free.
+        tooltip: format!(
+            "Pervigil — {counted} · {}",
             words.today.replace("{cost}", &format!("{today_cost:.2}"))
         ),
+        summary: counted.clone(),
         signature: [counted.as_str(), words.open.as_str(), words.quit.as_str()]
             .into_iter()
             .chain(items.iter().flat_map(|item| [item.id.as_str(), item.label.as_str()]))
@@ -160,7 +163,7 @@ mod tests {
         let view = tray_view(&[idle("a")], 0.0, &en());
 
         assert_eq!(view.icon, IconKey::Bare);
-        assert_eq!(view.tooltip, "Pervigil — nothing waiting");
+        assert_eq!(view.tooltip, "Pervigil — nothing waiting · $0.00 today");
         assert!(view.items.is_empty());
     }
 
@@ -169,7 +172,8 @@ mod tests {
         let view = tray_view(&[waiting("a"), idle("b"), waiting("c")], 4.2, &en());
 
         assert_eq!(view.icon, IconKey::Count(2));
-        assert_eq!(view.summary, "2 waiting · $4.20 today");
+        assert_eq!(view.summary, "2 waiting");
+        assert_eq!(view.tooltip, "Pervigil — 2 waiting · $4.20 today");
         assert_eq!(view.items.len(), 2, "an idle session is not a menu item");
     }
 
@@ -198,7 +202,7 @@ mod tests {
         let view = tray_view(&many, 0.0, &en());
 
         assert_eq!(view.icon, IconKey::Overflow);
-        assert_eq!(view.tooltip, "Pervigil — 12 waiting");
+        assert_eq!(view.tooltip, "Pervigil — 12 waiting · $0.00 today");
         assert!(view.summary.starts_with("12 waiting"));
         assert_eq!(view.items.len(), 9, "the menu caps; the summary does not");
     }
@@ -218,7 +222,7 @@ mod tests {
         let dear = tray_view(&sessions, 99.00, &en());
 
         assert_eq!(cheap.signature, dear.signature);
-        assert_ne!(cheap.summary, dear.summary, "but the line itself moved");
+        assert_ne!(cheap.tooltip, dear.tooltip, "but the tooltip still moved");
     }
 
     #[test]
@@ -233,8 +237,8 @@ mod tests {
         let busy = tray_view(&[waiting("a"), waiting("b")], 4.2, &pt);
         let quiet = tray_view(&[idle("a")], 0.0, &pt);
 
-        assert_eq!(busy.summary, "2 esperando por você · R$4.20 hoje");
-        assert_eq!(quiet.tooltip, "Pervigil — nada esperando");
+        assert_eq!(busy.tooltip, "Pervigil — 2 esperando por você · R$4.20 hoje");
+        assert_eq!(quiet.tooltip, "Pervigil — nada esperando · R$0.00 hoje");
     }
 
     /// The menu is rebuilt only when the signature moves, so a language change that

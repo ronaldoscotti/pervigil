@@ -1,18 +1,9 @@
 #!/usr/bin/env python3
 """Generate the tray icon set from one source mask.
 
-The source is an RGBA image whose *alpha channel* is the glyph; its colours are
-ignored. Everything shipped is derived here so the artwork has one origin:
-
-    bare, 1..9, overflow   x   light, dark
-
-`-light` is black ink, for a light taskbar; `-dark` is white ink, for a dark one.
-macOS uses `-light` as a template image and discards the colour entirely, tinting
-the alpha itself — so the same file serves as mask there and as artwork on
-Windows and Linux.
-
-Developer-only: the outputs are committed, so nobody needs this to build or run
-Pervigil. Run it when the artwork changes.
+The source's *alpha channel* is the glyph; its colours are ignored. Outputs
+bare, 1..9 and overflow, each in a black-ink `-light` and a white-ink `-dark`
+variant. Developer-only — the results are committed.
 
     python3 scripts/gen-tray-icons.py
 """

@@ -1,9 +1,8 @@
-//! The tray, applied. Every decision lives in [`crate::core::tray`]; this module
-//! only draws it and routes the clicks.
+//! The tray, applied: assets, menu, clicks, and the clock that keeps it fresh.
+//! What the tray *says* is decided in [`crate::core::tray`] and only drawn here.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use chrono::Local;
 use tauri::image::Image;
@@ -21,10 +20,32 @@ const SESSION: &str = "session:";
 const OPEN: &str = "open";
 const QUIT: &str = "quit";
 
-/// Whether the Rust ticker is the clock right now. It is, exactly when the panel is
-/// hidden — Tauri has no window-visibility event, so this is owned rather than
-/// observed, and [`show_panel`] / [`hide_panel`] are the only writers.
-static TICKING: AtomicBool = AtomicBool::new(false);
+/// When the panel's own poll last drove a snapshot. The ticker stands down while
+/// that is recent: exactly one clock runs, and which one is decided by observing
+/// whether the webview is still ticking rather than by tracking whether the window
+/// is visible.
+///
+/// Visibility was the wrong question. Hiding a window does not stop its WebView, so
+/// a hidden panel keeps polling; and a *throttled* WebView stops polling without any
+/// window event to tell us. A lease answers both: the webview holds the clock while
+/// it is actually calling, and loses it by going quiet, whatever the reason.
+static POLLED_AT: Mutex<Option<Instant>> = Mutex::new(None);
+
+/// How long the panel's poll holds the clock. Comfortably above its 1s period, so a
+/// slow tick does not hand the clock over and briefly double it.
+const LEASE: Duration = Duration::from_secs(3);
+
+/// Called by the `snapshot` command: the panel just drove a tick, so it is the clock.
+pub(crate) fn panel_polled() {
+    *POLLED_AT.lock().expect("polled lock") = Some(Instant::now());
+}
+
+fn panel_holds_the_clock() -> bool {
+    POLLED_AT
+        .lock()
+        .expect("polled lock")
+        .is_some_and(|at| at.elapsed() < LEASE)
+}
 
 /// The signature of the menu currently on screen. Rebuilding a menu closes it under
 /// the user's cursor, so it happens only when the structure actually changed.
@@ -45,21 +66,19 @@ macro_rules! icon_table {
 type IconRow = (&'static str, &'static [u8], &'static [u8]);
 static ICONS: &[IconRow] = icon_table!["bare", "1", "2", "3", "4", "5", "6", "7", "8", "9", "overflow"];
 
-/// Show the panel, and stand the ticker down. Every show goes through here.
+/// Show the panel. The clock needs no bookkeeping here — the panel takes it back by
+/// polling, and the ticker steps aside the moment it does.
 pub(crate) fn show_panel(app: &AppHandle) {
-    TICKING.store(false, Ordering::Relaxed);
     if let Some(panel) = app.get_webview_window("main") {
         let _ = panel.show();
         let _ = panel.set_focus();
     }
 }
 
-/// Hide the panel, and let the ticker take over. Every hide goes through here.
 pub(crate) fn hide_panel(app: &AppHandle) {
     if let Some(panel) = app.get_webview_window("main") {
         let _ = panel.hide();
     }
-    TICKING.store(true, Ordering::Relaxed);
 }
 
 pub(crate) fn build(app: &AppHandle) -> tauri::Result<()> {
@@ -180,13 +199,12 @@ fn image(app: &AppHandle, stem: &str) -> tauri::Result<Image<'static>> {
     Image::from_bytes(bytes)
 }
 
-/// One thread for the app's life. It is the clock only while the panel is hidden;
-/// while the panel is up, the webview's poll already drives `App::snapshot`, and two
-/// clocks would fight over the targets the next click depends on.
+/// One thread for the app's life, idle whenever the panel's poll is doing the job.
+/// Two clocks would fight over `App::targets`, which the next click depends on.
 fn spawn_ticker(app: AppHandle) {
     std::thread::spawn(move || loop {
         std::thread::sleep(Duration::from_secs(1));
-        if !TICKING.load(Ordering::Relaxed) {
+        if panel_holds_the_clock() {
             continue;
         }
         let state = app.state::<App>();

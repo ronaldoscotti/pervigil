@@ -224,7 +224,6 @@ impl App {
         });
     }
 
-    /// The notices the last snapshot produced, cleared as they're taken.
     /// What the tray should currently show. Cheap: the work happened in `snapshot`.
     pub fn tray(&self) -> TrayView {
         self.tray.lock().expect("tray lock").clone()
@@ -244,6 +243,7 @@ impl App {
         *self.strings.lock().expect("strings lock") = words;
     }
 
+    /// The notices the last snapshot produced, cleared as they're taken.
     pub fn take_pending(&self) -> Vec<Notice> {
         std::mem::take(&mut self.pending.lock().expect("pending lock"))
     }
@@ -530,9 +530,8 @@ fn outcome(result: std::io::Result<Reach>, resume: String, label: &str) -> Focus
 
 #[tauri::command]
 pub fn snapshot(span: Span, app: tauri::State<'_, App>, handle: tauri::AppHandle) -> Snapshot {
+    crate::tray::panel_polled();
     let snapshot = app.snapshot(span, Local::now());
-    // While the panel is up it is the clock, so it drives the tray too — the Rust
-    // ticker only takes over once the panel is hidden.
     crate::tray::apply(&handle);
     fire(&handle, app.take_pending());
     snapshot

@@ -56,10 +56,8 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| match event {
-            // `None` is a user-interaction exit — the last window going away. `Some`
-            // came from `AppHandle::exit`, which is our own Quit, and must be let
-            // through. (The updater's relaunch needs no guard here: `prevent_exit`
-            // already ignores itself at `RESTART_EXIT_CODE`.)
+            // `Some` came from `AppHandle::exit` — our own Quit — and must be let
+            // through.
             tauri::RunEvent::ExitRequested {
                 code: None, api, ..
             } => api.prevent_exit(),
