@@ -106,10 +106,16 @@ tooltip, the summary line, and the session items. The Tauri side applies the
 result; it does not decide anything.
 
 **Icon.** Count 0 is the bare glyph; count *n* carries a badge; above 9 the badge
-reads `9+`. Assets are pre-rendered from one SVG source by
+reads `9+`. Assets are pre-rendered from one source mask by
 `scripts/gen-tray-icons.py`, so the asset count is a number rather than a cost.
 The badged icon is *wider* than the bare one — `9+` crammed into a 16pt square is
 a smudge.
+
+The source is `assets/tray-owl.png`, whose **alpha channel is the glyph** and
+whose colours are ignored. It is thresholded at 50% before anything else: the
+generated artwork carries a soft glow, about a quarter of its ink, and a template
+image renders partial alpha as grey fuzz. Hardening first and downscaling second
+puts the anti-aliasing where it belongs — on the outline, from the resize.
 
 **One raster per state, at high resolution — no @1x/@2x pair.** `set_icon` takes
 a single `Image` and there is no scale-factor hook for a tray icon: the macOS
@@ -262,14 +268,14 @@ span switch in the menu; hiding the Dock icon; any change to the panel itself.
   construction, icon application.
 - `src-tauri/src/app.rs` — `tray_view` and its `TrayView` type; `badge()` is
   replaced by it, and `snapshot` sheds its side effects.
-- `assets/tray.svg` — the source glyph, to be designed in the plan (new).
-- `src-tauri/icons/tray/` — generated assets: bare and `1`…`9`, `9+`, one
-  high-resolution raster each, in light and dark variants for the non-macOS
-  targets (new). Committed, and embedded with `include_bytes!`.
-- `scripts/gen-tray-icons.py` — SVG → PNG generator, rasterising with `cairosvg`
-  (new). Python tooling is precedented by `scripts/screenshot-frame.py`, but that
-  script uses Pillow, which cannot rasterise SVG — `cairosvg` and its native
-  libcairo are a **new dependency of the generator only**. Because the PNGs are
-  committed, it is needed by whoever changes the artwork and by nobody else: not
-  by the build, not by CI, not by a contributor running the app.
+- `assets/tray-owl.png` — the source mask: the owl's head, alpha-only, no body
+  and no shield (new).
+- `src-tauri/icons/tray/` — 22 generated assets: bare and `1`…`9`, `9+`, one
+  raster each, in light and dark variants (new). Committed, and embedded with
+  `include_bytes!`.
+- `scripts/gen-tray-icons.py` — the generator (new). **Pillow only**, which
+  `scripts/screenshot-frame.py` already uses: no SVG rasteriser, and therefore no
+  `cairosvg` and no native libcairo. Because the PNGs are committed it is needed
+  by whoever changes the artwork and by nobody else — not by the build, not by
+  CI, not by a contributor running the app.
 - `docs/specs/2026-07-27-tray-status-and-actions.md` — this file.

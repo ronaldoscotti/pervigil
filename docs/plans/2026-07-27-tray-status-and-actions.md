@@ -6,7 +6,7 @@
 
 **Architecture:** A pure `core::tray::tray_view` turns sessions plus today's cost into everything the tray shows — icon key, tooltip, summary, menu items, and a rebuild signature. `lib.rs` applies that result and owns the lifecycle: the app survives a closed window, and exactly one clock runs at a time (the webview's poll while the panel is visible, a Rust ticker while it is hidden).
 
-**Tech Stack:** Rust, Tauri v2 (`tray-icon`, `menu`), TypeScript frontend, Python + `cairosvg` for the icon generator (developer-only, outputs committed).
+**Tech Stack:** Rust, Tauri v2 (`tray-icon`, `menu`), TypeScript frontend, Python + Pillow for the icon generator (developer-only, outputs committed).
 
 **Spec:** [`../specs/2026-07-27-tray-status-and-actions.md`](../specs/2026-07-27-tray-status-and-actions.md)
 
@@ -21,9 +21,9 @@
 | `src-tauri/src/io/scan.rs` | `Scanner::scan` takes two floors — one for sessions, one for usage. |
 | `src-tauri/src/app.rs` | `Snapshot` gains `today_cost`; `badge()` is deleted; `snapshot` keeps its command shape. |
 | `src-tauri/src/lib.rs` | Lifecycle handlers, `show_panel`/`hide_panel`, the ticker, tray icon and menu application. Currently 69 lines; this is where the growth lands. |
-| `src-tauri/icons/tray/*.png` (new) | Generated, committed, embedded with `include_bytes!`. |
-| `assets/tray.svg` (new) | Source glyph. |
-| `scripts/gen-tray-icons.py` (new) | SVG → PNG. Developer-only. |
+| `src-tauri/icons/tray/*.png` (new) | 22 generated assets, committed, embedded with `include_bytes!`. |
+| `assets/tray-owl.png` (new) | Source mask — alpha is the glyph, colour is ignored. |
+| `scripts/gen-tray-icons.py` (new) | Mask → icon set, Pillow only. Developer-only. |
 
 `app.rs` is already 857 lines and mixes Tauri commands with pure helpers. The tray decision goes to `core/` rather than growing it further — that is also what makes it testable without a Tauri runtime.
 
@@ -363,20 +363,29 @@ git commit -m "feat(tray): decide the tray's contents as a pure function"
 
 ---
 
-## Task 5: Icon assets and their generator
+## Task 5: Icon assets and their generator — **done**
 
-**Files:**
-- Create: `assets/tray.svg`, `scripts/gen-tray-icons.py`, `src-tauri/icons/tray/*.png`
+Completed ahead of the rest, because the artwork gated the design and the plan
+assumed a source that turned out not to be the cheapest one.
 
-- [ ] **Step 1: Draw `assets/tray.svg`** — a silhouette, not the colour logo. Two artboards: bare (square) and badged (wider, per the spec — `9+` crammed into a square is a smudge). Solid shapes only; a template image is an alpha mask and gradients turn to mud.
-- [ ] **Step 2: Write `scripts/gen-tray-icons.py`** — rasterise with `cairosvg` at one high resolution per state. Emit `bare`, `1`…`9`, `overflow`, each in `-light` and `-dark` variants. No `@2x`: `set_icon` takes a single `Image` and the backends rescale, so a second density is an asset no code could select.
-- [ ] **Step 3: Generate and eyeball every file.** This is the verification — the assets are checked at build time precisely because nobody can check them on Windows or Linux at runtime.
-- [ ] **Step 4: Commit** the SVG, the script, and the PNGs.
+**Files:** `assets/tray-owl.png`, `scripts/gen-tray-icons.py`, `src-tauri/icons/tray/*.png`
 
-```bash
-git add assets/tray.svg scripts/gen-tray-icons.py src-tauri/icons/tray
-git commit -m "feat(tray): generate the icon set from one svg source"
-```
+- [x] **Step 1: Source mask.** The owl's head, generated from the app icon, alpha
+  channel only — no body, no shield. The plan originally called for an SVG; a
+  PNG mask does the same job here, which is what removes `cairosvg` below.
+- [x] **Step 2: Generator, Pillow only.** Threshold the source alpha at 50% (the
+  generated art carries a soft glow, roughly a quarter of its ink, which a
+  template image renders as grey fuzz), crop, scale to 128px tall, then emit
+  `bare`, `1`…`9`, `overflow` × `light`/`dark`. The badge is a pill with the
+  label **knocked out** — a digit painted in another colour disappears the moment
+  macOS tints the mask. No `@2x`: `set_icon` takes a single `Image` and the
+  backends rescale, so a second density is an asset no code could select.
+- [x] **Step 3: Verified at menu bar size.** All 22 rendered at 18px over both a
+  dark and a light background and inspected. The bare glyph reads as an owl;
+  digits are legible; `9+` is the tightest and holds. This eyeball *is* the
+  verification — the assets are checked here precisely because nobody can check
+  them on Windows or Linux at runtime.
+- [x] **Step 4: Committed.**
 
 ---
 
