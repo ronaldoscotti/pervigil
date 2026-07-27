@@ -268,8 +268,11 @@ span switch in the menu; hiding the Dock icon; any change to the panel itself.
   construction, icon application.
 - `src-tauri/src/app.rs` — `tray_view` and its `TrayView` type; `badge()` is
   replaced by it, and `snapshot` sheds its side effects.
-- `assets/tray-owl.png` — the source mask: the owl's head, alpha-only, no body
-  and no shield (new).
+- `assets/tray-owl.png` — the source mask: a hand-made owl head, alpha-only (new).
+  Chosen over a plainer filled silhouette after seeing both in a real menu bar. A
+  flat 18px render understates it — a Retina menu bar draws the template at 36
+  physical pixels, so line weight that dies in a 1x simulation survives on screen.
+  Judge tray artwork in the menu bar, not in a downscale.
 - `src-tauri/icons/tray/` — 22 generated assets: bare and `1`…`9`, `9+`, one
   raster each, in light and dark variants (new). Committed, and embedded with
   `include_bytes!`.
