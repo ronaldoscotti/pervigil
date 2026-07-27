@@ -3,7 +3,37 @@
 //! The tray is applied from this, never computed at the call site: everything that
 //! could be wrong here is testable, and everything downstream is a redraw.
 
+use serde::Deserialize;
+
 use super::session::{project, Session, SessionState};
+
+/// The tray's words. The panel owns ten locales and the tray is built in Rust, so
+/// the frontend pushes these down once at startup and again on a language change.
+/// The defaults are English and are what the tray uses until it does — a tray that
+/// reads correctly before the webview has loaded, rather than a blank one.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrayStrings {
+    /// `{n}` is replaced by the count.
+    pub waiting: String,
+    pub nothing: String,
+    /// `{cost}` is replaced by the formatted figure.
+    pub today: String,
+    pub open: String,
+    pub quit: String,
+}
+
+impl Default for TrayStrings {
+    fn default() -> Self {
+        Self {
+            waiting: "{n} waiting".into(),
+            nothing: "nothing waiting".into(),
+            today: "${cost} today".into(),
+            open: "Open Pervigil".into(),
+            quit: "Quit".into(),
+        }
+    }
+}
 
 /// Which generated asset to display. `Overflow` is the `9+` artwork.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -52,12 +82,16 @@ const MENU_CAP: usize = 9;
 /// the summary and the tooltip keep the real figure.
 const BADGE_MAX: usize = 9;
 
-pub fn tray_view(sessions: &[Session], today_cost: f64) -> TrayView {
+pub fn tray_view(sessions: &[Session], today_cost: f64, words: &TrayStrings) -> TrayView {
     let waiting: Vec<&Session> = sessions
         .iter()
         .filter(|session| session.state == SessionState::WaitingOnYou)
         .collect();
     let count = waiting.len();
+    let counted = match count {
+        0 => words.nothing.clone(),
+        n => words.waiting.replace("{n}", &n.to_string()),
+    };
 
     let items: Vec<TrayItem> = waiting
         .iter()
@@ -77,11 +111,11 @@ pub fn tray_view(sessions: &[Session], today_cost: f64) -> TrayView {
             n if n <= BADGE_MAX => IconKey::Count(n as u8),
             _ => IconKey::Overflow,
         },
-        tooltip: match count {
-            0 => "Pervigil — nothing waiting".to_string(),
-            n => format!("Pervigil — {n} waiting"),
-        },
-        summary: format!("{count} waiting · ${today_cost:.2} today"),
+        tooltip: format!("Pervigil — {counted}"),
+        summary: format!(
+            "{counted} · {}",
+            words.today.replace("{cost}", &format!("{today_cost:.2}"))
+        ),
         signature: items
             .iter()
             .map(|item| item.id.as_str())
@@ -94,6 +128,10 @@ pub fn tray_view(sessions: &[Session], today_cost: f64) -> TrayView {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn en() -> TrayStrings {
+        TrayStrings::default()
+    }
 
     fn session(id: &str, state: SessionState) -> Session {
         Session {
@@ -119,7 +157,7 @@ mod tests {
 
     #[test]
     fn nothing_waiting_shows_the_bare_icon() {
-        let view = tray_view(&[idle("a")], 0.0);
+        let view = tray_view(&[idle("a")], 0.0, &en());
 
         assert_eq!(view.icon, IconKey::Bare);
         assert_eq!(view.tooltip, "Pervigil — nothing waiting");
@@ -128,7 +166,7 @@ mod tests {
 
     #[test]
     fn only_waiting_sessions_reach_the_icon_and_the_menu() {
-        let view = tray_view(&[waiting("a"), idle("b"), waiting("c")], 4.2);
+        let view = tray_view(&[waiting("a"), idle("b"), waiting("c")], 4.2, &en());
 
         assert_eq!(view.icon, IconKey::Count(2));
         assert_eq!(view.summary, "2 waiting · $4.20 today");
@@ -137,7 +175,7 @@ mod tests {
 
     #[test]
     fn a_menu_row_names_its_project_and_its_title() {
-        let view = tray_view(&[waiting("pervigil")], 0.0);
+        let view = tray_view(&[waiting("pervigil")], 0.0, &en());
 
         assert_eq!(view.items[0].label, "pervigil — do the pervigil thing");
         assert_eq!(view.items[0].id, "pervigil");
@@ -148,7 +186,7 @@ mod tests {
         let mut bare = waiting("pervigil");
         bare.title = None;
 
-        let view = tray_view(&[bare], 0.0);
+        let view = tray_view(&[bare], 0.0, &en());
 
         assert_eq!(view.items[0].label, "pervigil");
     }
@@ -157,7 +195,7 @@ mod tests {
     fn above_nine_the_icon_overflows_but_the_count_is_never_hidden() {
         let many: Vec<Session> = (0..12).map(|n| waiting(&n.to_string())).collect();
 
-        let view = tray_view(&many, 0.0);
+        let view = tray_view(&many, 0.0, &en());
 
         assert_eq!(view.icon, IconKey::Overflow);
         assert_eq!(view.tooltip, "Pervigil — 12 waiting");
@@ -169,24 +207,40 @@ mod tests {
     fn exactly_nine_still_gets_a_digit() {
         let nine: Vec<Session> = (0..9).map(|n| waiting(&n.to_string())).collect();
 
-        assert_eq!(tray_view(&nine, 0.0).icon, IconKey::Count(9));
+        assert_eq!(tray_view(&nine, 0.0, &en()).icon, IconKey::Count(9));
     }
 
     #[test]
     fn the_signature_ignores_cost_so_a_rebuild_never_closes_an_open_menu() {
         let sessions = [waiting("a")];
 
-        let cheap = tray_view(&sessions, 1.00);
-        let dear = tray_view(&sessions, 99.00);
+        let cheap = tray_view(&sessions, 1.00, &en());
+        let dear = tray_view(&sessions, 99.00, &en());
 
         assert_eq!(cheap.signature, dear.signature);
         assert_ne!(cheap.summary, dear.summary, "but the line itself moved");
     }
 
     #[test]
+    fn the_words_come_from_the_caller_so_the_tray_speaks_the_panels_language() {
+        let pt = TrayStrings {
+            waiting: "{n} esperando por você".into(),
+            nothing: "nada esperando".into(),
+            today: "R${cost} hoje".into(),
+            ..TrayStrings::default()
+        };
+
+        let busy = tray_view(&[waiting("a"), waiting("b")], 4.2, &pt);
+        let quiet = tray_view(&[idle("a")], 0.0, &pt);
+
+        assert_eq!(busy.summary, "2 esperando por você · R$4.20 hoje");
+        assert_eq!(quiet.tooltip, "Pervigil — nada esperando");
+    }
+
+    #[test]
     fn the_signature_changes_when_the_waiting_set_does() {
-        let before = tray_view(&[waiting("a")], 0.0);
-        let after = tray_view(&[waiting("b")], 0.0);
+        let before = tray_view(&[waiting("a")], 0.0, &en());
+        let after = tray_view(&[waiting("b")], 0.0, &en());
 
         assert_ne!(before.signature, after.signature);
     }
