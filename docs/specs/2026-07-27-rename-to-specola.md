@@ -127,18 +127,29 @@ is load-bearing — see *Decisions*.
   `docs/brand/logo-prompts.md:6` all gloss *pervigil* as Latin for "ever-watchful;
   keeping watch through the whole night." Substituting the name yields a
   confidently false etymology — *specola* is a watchtower or observatory, not an
-  adjective meaning watchful. These lines are rewritten by hand, not replaced.
+  adjective meaning watchful. Only the `README.md` gloss is rewritten, by hand;
+  the rest sit in preserved documents.
 
   The sweep therefore runs with path exclusions, and a manual pass covers the
   glosses. `grep -rn "ever-watchful"` returning nothing outside preserved
   documents is part of the layer-③ exit check.
 
-- **`design/` and `docs/brand/logo-prompts.md` are historical, not forward-facing.**
-  `design/` is the visual direction locked at stage M2 and dated to it;
-  `logo-prompts.md` records the prompts that actually generated the original mark.
-  Both describe work done under the old name, so both stay, on the same reasoning
-  as the dated specs. The owl they produced carries over unchanged, which is why
-  no new prompt record is needed.
+- **`design/`, `docs/brand/logo-prompts.md`, and `docs/method/01-context.md` are
+  historical, not forward-facing.** `design/` is the visual direction locked at
+  stage M2 and dated to it; `logo-prompts.md` records the prompts that actually
+  generated the original mark. Both describe work done under the old name, so both
+  stay, on the same reasoning as the dated specs. The owl they produced carries
+  over unchanged, which is why no new prompt record is needed.
+
+  `01-context.md` is the sharpest case, and was initially misfiled as
+  forward-facing. It contains the **naming-research table from the original
+  context-gathering** — the row reading "*Pervigil* · **Clean.** No GitHub/npm
+  collision; only hit is a defunct 2012 IT co. **Chosen.**" Sweeping it produced a
+  document asserting that *Specola* was researched and chosen in July 2023, against
+  a collision that was never Specola's. That is a fabricated record of a decision,
+  not a stale string. The file is preserved whole; the other two `docs/method/`
+  documents are swept, because every occurrence in them is a present-tense
+  statement about what the product is.
 
 - **Product name is capitalized consistently as `Specola`.** The current copy is
   inconsistent — `"Open Pervigil"` in the tray, `"pervigil never edits it"` in the
@@ -217,11 +228,12 @@ is load-bearing — see *Decisions*.
 
 **Docs**
 `README.md`, `CLAUDE.md`, `NEXT-STEPS.md`,
-`docs/method/{01-context,02-sota-alignment,README}.md`, and this spec
+`docs/method/{02-sota-alignment,README}.md`, and this spec
 
 **Unchanged, deliberately**
 `docs/specs/2026-07-23-pervigil-design.md`, `docs/plans/2026-07-23-pervigil-plan.md`,
 `docs/plans/2026-07-27-tray-status-and-actions.md`,
 `docs/specs/2026-07-27-tray-status-and-actions.md`, `docs/qa/*`,
 `design/index.html`, `design/README.md`, `docs/brand/logo-prompts.md`,
+`docs/method/01-context.md`,
 `src-tauri/icons/*`, `assets/tray-owl.png`, `assets/app-icon-*.png`

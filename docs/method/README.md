@@ -1,6 +1,6 @@
 # The Method — how this repo is built
 
-Pervigil is built with an explicit, spec-first, review-gated AI-assisted
+Specola is built with an explicit, spec-first, review-gated AI-assisted
 workflow. This directory is not a description of that workflow — it is the
 **residue** of running it. Each stage deposits a real artifact; the git history
 records the order.
@@ -64,7 +64,7 @@ reached.
 
 ## Why a session monitor, built this way
 
-The recursion is deliberate. Pervigil is a tool for staying on top of many
+The recursion is deliberate. Specola is a tool for staying on top of many
 parallel AI-coding sessions. Building it *with* the disciplined AI workflow it's
 meant to support makes the repo a single, coherent argument: here is how I work
 with AI agents, and here is the thing that workflow produced.

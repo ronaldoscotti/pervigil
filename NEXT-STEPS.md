@@ -1,4 +1,4 @@
-# Pervigil — next steps (scratch, do not commit)
+# Specola — next steps (scratch, do not commit)
 
 State as of tonight: **M0–M9 done**, M10 mostly done. **Nothing merged to `main`,
 no git remote, no PRs.** All green (**114 tests**, clippy clean). Owl branding +
@@ -37,22 +37,22 @@ uniform across every offender. Original diagnosis kept below.
   make the whole lane waiting.
 
 ### 0b. Bundle identifier ends in `.app`  ✅ FIXED (commit 2171101)
-Renamed `dev.pervigil.app` → `dev.pervigil.panel`. Verified nothing keys off the
-identifier — all state lives under `~/.pervigil`. Original note below.
+Renamed `dev.specola.app` → `dev.specola.panel`. Verified nothing keys off the
+identifier — all state lives under `~/.specola`. Original note below.
 
-- `tauri.conf.json` `identifier` is `dev.pervigil.app` — Tauri warns this conflicts with
-  the `.app` bundle extension on macOS. Change to e.g. `dev.pervigil.panel` (or
-  `app.pervigil.desktop`). **Do it before any public release** — the identifier is hard
+- `tauri.conf.json` `identifier` is `dev.specola.app` — Tauri warns this conflicts with
+  the `.app` bundle extension on macOS. Change to e.g. `dev.specola.panel` (or
+  `app.specola.desktop`). **Do it before any public release** — the identifier is hard
   to change once people have the app installed (macOS keys prefs/permissions to it).
-  Note: this also changes the `~/.pervigil` vs identifier-keyed state, so verify nothing
+  Note: this also changes the `~/.specola` vs identifier-keyed state, so verify nothing
   keys off the identifier.
 
 ## 1. Ship the signed app (done, pending a clean-machine launch)
 - [x] `APPLE_ID` fixed in `.env` (was the Team ID).
 - [x] Signed + notarized build via `bash scripts/build-signed.sh` — built 18:03 from
-      HEAD (so the lane fix + `dev.pervigil.panel` are baked in). Notary status
+      HEAD (so the lane fix + `dev.specola.panel` are baked in). Notary status
       **Accepted**; `spctl` = "accepted, source=Notarized Developer ID"; staple valid.
-      Output: `src-tauri/target/release/bundle/{macos/pervigil.app,dmg/pervigil_0.1.0_aarch64.dmg}`.
+      Output: `src-tauri/target/release/bundle/{macos/specola.app,dmg/specola_0.1.0_aarch64.dmg}`.
 - [ ] Confirm it launches from a *truly* clean machine (another Mac) with no
       Gatekeeper warning. `spctl` here already assesses it as notarized, which is the
       strong signal — this is the belt-and-suspenders step.
