@@ -91,6 +91,9 @@ pub struct Snapshot {
     pub segments: Vec<Segment>,
     pub waiting_share: f64,
     pub cost: f64,
+    /// Spend since local midnight, whatever span the panel is showing. The tray has
+    /// no filter UI, so its summary has to mean the same thing under either clock.
+    pub today_cost: f64,
     /// Total tokens processed in the window — input, output, and cache.
     pub tokens: u64,
     /// Current settings the panel renders: the notifications toggle, and the projects
@@ -345,11 +348,8 @@ impl App {
                 .filter(|s| s.state == SessionState::WaitingOnYou)
                 .count(),
             waiting_share: store::waiting_share(&segments),
-            cost: spent
-                .iter()
-                .filter(|entry| entry.at >= from && entry.at <= to)
-                .filter_map(|entry| pricing::cost(&self.prices, &entry.model, &entry.usage))
-                .sum(),
+            cost: pricing::cost_in_window(&self.prices, spent.iter().copied(), from, to),
+            today_cost: pricing::cost_in_window(&self.prices, spent.iter().copied(), midnight, to),
             tokens: spent
                 .iter()
                 .filter(|entry| entry.at >= from && entry.at <= to)
