@@ -19,7 +19,11 @@ jobs:
           - platform: macos-latest # Apple silicon
             target: aarch64-apple-darwin
             gate: true
-          - platform: macos-13 # Intel
+          # Intel. `macos-13` was retired in December 2025 and the job sat queued
+          # against a pool that no longer exists — silently, because a queued job
+          # never fails. GitHub drops x86_64 macOS entirely in late 2027; the
+          # upgrade path then is cross-compiling this target from the arm64 runner.
+          - platform: macos-15-intel
             target: x86_64-apple-darwin
             gate: true
           - platform: windows-latest
