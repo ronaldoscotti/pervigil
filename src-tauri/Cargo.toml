@@ -1,6 +1,6 @@
 [package]
 name = "specola"
-version = "0.1.0"
+version = "0.1.1"
 description = "Cross-platform panel showing which Claude Code sessions are waiting on you"
 authors = ["Ronaldo Scotti"]
 edition = "2021"
