@@ -90,6 +90,43 @@ jobs:
           releaseName: "Specola ${{ github.ref_name }}"
           releaseDraft: true
           prerelease: false
+          # Keyed on file suffix, not full filename, so it survives version bumps.
+          releaseBody: |
+            ## Which file do I download?
+
+            | If you're on | Download the file ending in |
+            |---|---|
+            | **macOS**, Apple silicon (M1–M4) | `_aarch64.dmg` |
+            | **macOS**, Intel | `_x64.dmg` |
+            | **Windows** | `_x64-setup.exe` |
+            | **Linux** — anything | `_amd64.AppImage` (`chmod +x` and run, no install) |
+            | **Linux** — Debian/Ubuntu | `_amd64.deb` |
+            | **Linux** — Fedora/RHEL | `.x86_64.rpm` |
+
+            Everything else in the list — `latest.json`, `.app.tar.gz`, and every
+            `.sig` file — is auto-updater plumbing. You don't need to download any
+            of it.
+
+            ### Before you install
+
+            **macOS** is signed and notarized; it opens normally.
+
+            **Windows** is not code-signed yet, so SmartScreen shows *"Windows
+            protected your PC"*. To install anyway: **More info → Run anyway**. If
+            that's not a trade you want to make, build from source — same code.
+
+            **Windows and Linux have never run on a maintainer's machine.** They're
+            built from this same pipeline and the platform code is real, but macOS is
+            the only tested target. If you try either, a
+            [platform test report](https://github.com/ronaldoscotti/specola/issues/new?template=platform_test.yml)
+            is the most useful thing you can send this project — partial reports very
+            much included.
+
+            ### After you install
+
+            Open **Settings** in the panel and paste the hook snippet it shows into
+            `~/.claude/settings.json`. Specola never edits that file for you. The
+            install card disappears once the hooks are detected.
           # The bundle-only config carries externalBin so the record shim ships
           # inside the app; the target keeps host == target for the sidecar.
           args: >-

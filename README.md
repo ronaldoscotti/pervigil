@@ -99,12 +99,17 @@ falls back rather than pretending.
 Download from the
 **[latest release](https://github.com/ronaldoscotti/specola/releases/latest)**.
 
-| Platform | Download | What to expect |
+| If you're on | Download the file ending in | What to expect |
 |---|---|---|
-| **macOS** (Apple silicon) | `Specola_x.y.z_aarch64.dmg` | Signed and notarized — opens normally. |
-| **macOS** (Intel) | `Specola_x.y.z_x64.dmg` | Signed and notarized — opens normally. |
-| **Windows** | `Specola_x.y.z_x64-setup.exe` | **Not code-signed yet** — see below. |
-| **Linux** | `.AppImage`, `.deb`, or `.rpm` | Untested on a maintainer's machine. |
+| **macOS**, Apple silicon (M1–M4) | `_aarch64.dmg` | Signed and notarized — opens normally. |
+| **macOS**, Intel | `_x64.dmg` | Signed and notarized — opens normally. |
+| **Windows** | `_x64-setup.exe` | **Not code-signed yet** — see below. |
+| **Linux**, anything | `_amd64.AppImage` | `chmod +x` and run, no install. |
+| **Linux**, Debian/Ubuntu | `_amd64.deb` | |
+| **Linux**, Fedora/RHEL | `.x86_64.rpm` | |
+
+Everything else on the releases page — `latest.json`, `.app.tar.gz`, and the `.sig`
+files — is auto-updater plumbing. You don't need to download any of it.
 
 **Windows: SmartScreen will warn you.** The installer isn't code-signed yet, so
 Windows shows *"Windows protected your PC"*. To install anyway: **More info →
@@ -113,11 +118,10 @@ it's the same code. Signing is [planned](CONTRIBUTING.md); note that even a sign
 installer keeps warning until it accumulates download reputation, so this won't
 vanish the day it's signed.
 
-**Linux:** the AppImage needs no install (`chmod +x` and run). The tray icon depends
-on your desktop having an app-indicator implementation, and on Wayland the
-compositor blocks window activation — click-to-focus falls back to copying the
-resume command rather than raising a window. Both are documented behavior, not
-bugs; anything else is, and a
+**Linux:** the tray icon depends on your desktop having an app-indicator
+implementation, and on Wayland the compositor blocks window activation —
+click-to-focus falls back to copying the resume command rather than raising a
+window. Both are documented behavior, not bugs; anything else is, and a
 [report](https://github.com/ronaldoscotti/specola/issues/new?template=platform_test.yml)
 is genuinely useful.
 
