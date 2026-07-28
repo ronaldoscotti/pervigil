@@ -48,21 +48,21 @@ mark-as-read) / project visibility**, **launch-at-login** and single-instance, a
 
 ## How it works
 
-```
-Claude Code session
-   │  SessionStart / Notification / Stop / UserPromptSubmit hooks
-   ▼
-hook shim ──► `specola record`  (bundled CLI, atomic append, always exit 0)
-                    │
-        ~/.specola/events.jsonl        ← source of truth for state
-                    +
-   ~/.claude/projects/**/*.jsonl        ← second input: tokens → cost, session title
-                    │
-                    ▼
-             pure Rust core  ──  fold(events) → sessions,  timeline(events) → lane
-                    │
-                    ▼
-          Tauri v2 panel + tray badge
+```mermaid
+flowchart TD
+    S(["Claude Code session"])
+    H["hook shim → specola record<br/>bundled CLI · atomic append · always exits 0"]
+    E[("~/.specola/events.jsonl")]
+    T[("~/.claude/projects/**/*.jsonl")]
+    C["pure Rust core<br/>fold(events, now, prefs) → sessions<br/>timeline(events) → lane"]
+    U["Tauri v2 panel + tray badge"]
+
+    S -->|"SessionStart · Notification · Stop · UserPromptSubmit"| H
+    S -->|"writes its own transcripts"| T
+    H --> E
+    E -->|"state — source of truth"| C
+    T -->|"tokens → cost, session title"| C
+    C --> U
 ```
 
 Two design decisions carry the whole thing:
