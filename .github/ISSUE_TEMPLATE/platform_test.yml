@@ -1,0 +1,82 @@
+name: Platform test report (Windows / Linux)
+description: You ran Specola on Windows or Linux and want to report what worked and what didn't.
+title: "[platform] "
+labels: ["help wanted"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you — this is the most useful thing anyone can send this project
+        right now. macOS is the tested target; Windows and Linux are
+        architecturally supported but have never run on a maintainer's machine.
+
+        **Partial reports are welcome.** "The tray icon never appeared, I stopped
+        there" is a real, useful report. Don't wait until you've tested everything.
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Windows
+        - Linux
+    validations:
+      required: true
+
+  - type: input
+    id: os-version
+    attributes:
+      label: OS version
+      placeholder: Windows 11 23H2 / Fedora 41
+    validations:
+      required: true
+
+  - type: dropdown
+    id: display-server
+    attributes:
+      label: Linux only — display server
+      description: |
+        This changes documented behavior: Wayland compositors block window
+        activation, so click-to-focus is expected to fall back rather than raise
+        a window. Check with `echo $XDG_SESSION_TYPE`.
+      options:
+        - Not applicable (Windows)
+        - X11
+        - Wayland
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: terminal
+    attributes:
+      label: Where you run Claude Code
+      description: Terminal emulator, and whether you use tmux or run sessions inside VS Code.
+      placeholder: Windows Terminal / Ghostty + tmux / VS Code integrated terminal
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: What worked
+      description: Check what worked. Leave unchecked what didn't or what you didn't try — the notes field below is where the detail goes.
+      options:
+        - label: The installer/bundle ran and the app opened
+        - label: The Settings panel showed a hook snippet I could paste into ~/.claude/settings.json
+        - label: After adding the hooks, my sessions appeared in the panel
+        - label: A session that was waiting on my input sorted to the top
+        - label: A desktop notification fired when a session started waiting on me
+        - label: The tray icon appeared
+        - label: The tray icon showed a badge/count
+        - label: Clicking a session focused the right terminal window
+        - label: When it couldn't focus a window, it fell back to copying the resume command
+        - label: The panel stayed on top of other windows
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: What broke, and anything unchecked above
+      description: Screenshots or a screen recording help a lot for tray, badge, and notification issues.
+    validations:
+      required: true

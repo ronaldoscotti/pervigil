@@ -29,3 +29,7 @@ cert.b64
 
 # Icon generation source (regenerate with: tauri icon <src>)
 /app-icon.png
+
+# Untracked launch working docs
+/LAUNCH-PLAN.md
+/DRAFTS-community.md
