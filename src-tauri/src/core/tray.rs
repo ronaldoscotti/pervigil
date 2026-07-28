@@ -29,7 +29,7 @@ impl Default for TrayStrings {
             waiting: "{n} waiting".into(),
             nothing: "nothing waiting".into(),
             today: "${cost} today".into(),
-            open: "Open Pervigil".into(),
+            open: "Open Specola".into(),
             quit: "Quit".into(),
         }
     }
@@ -115,7 +115,7 @@ pub fn tray_view(sessions: &[Session], today_cost: f64, words: &TrayStrings) -> 
         // figure that moves every tick would either close menus or, kept out of the
         // signature, quietly freeze. The tooltip is rewritten every tick for free.
         tooltip: format!(
-            "Pervigil — {counted} · {}",
+            "Specola — {counted} · {}",
             words.today.replace("{cost}", &format!("{today_cost:.2}"))
         ),
         summary: counted.clone(),
@@ -167,7 +167,7 @@ mod tests {
         let view = tray_view(&[idle("a")], 0.0, &en());
 
         assert_eq!(view.icon, IconKey::Bare);
-        assert_eq!(view.tooltip, "Pervigil — nothing waiting · $0.00 today");
+        assert_eq!(view.tooltip, "Specola — nothing waiting · $0.00 today");
         assert!(view.items.is_empty());
     }
 
@@ -177,26 +177,26 @@ mod tests {
 
         assert_eq!(view.icon, IconKey::Count(2));
         assert_eq!(view.summary, "2 waiting");
-        assert_eq!(view.tooltip, "Pervigil — 2 waiting · $4.20 today");
+        assert_eq!(view.tooltip, "Specola — 2 waiting · $4.20 today");
         assert_eq!(view.items.len(), 2, "an idle session is not a menu item");
     }
 
     #[test]
     fn a_menu_row_names_its_project_and_its_title() {
-        let view = tray_view(&[waiting("pervigil")], 0.0, &en());
+        let view = tray_view(&[waiting("specola")], 0.0, &en());
 
-        assert_eq!(view.items[0].label, "pervigil — do the pervigil thing");
-        assert_eq!(view.items[0].id, "pervigil");
+        assert_eq!(view.items[0].label, "specola — do the specola thing");
+        assert_eq!(view.items[0].id, "specola");
     }
 
     #[test]
     fn a_session_with_no_title_still_names_its_project() {
-        let mut bare = waiting("pervigil");
+        let mut bare = waiting("specola");
         bare.title = None;
 
         let view = tray_view(&[bare], 0.0, &en());
 
-        assert_eq!(view.items[0].label, "pervigil");
+        assert_eq!(view.items[0].label, "specola");
     }
 
     #[test]
@@ -206,7 +206,7 @@ mod tests {
         let view = tray_view(&many, 0.0, &en());
 
         assert_eq!(view.icon, IconKey::Overflow);
-        assert_eq!(view.tooltip, "Pervigil — 12 waiting · $0.00 today");
+        assert_eq!(view.tooltip, "Specola — 12 waiting · $0.00 today");
         assert!(view.summary.starts_with("12 waiting"));
         assert_eq!(view.items.len(), 9, "the menu caps; the summary does not");
     }
@@ -241,11 +241,8 @@ mod tests {
         let busy = tray_view(&[waiting("a"), waiting("b")], 4.2, &pt);
         let quiet = tray_view(&[idle("a")], 0.0, &pt);
 
-        assert_eq!(
-            busy.tooltip,
-            "Pervigil — 2 esperando por você · R$4.20 hoje"
-        );
-        assert_eq!(quiet.tooltip, "Pervigil — nada esperando · R$0.00 hoje");
+        assert_eq!(busy.tooltip, "Specola — 2 esperando por você · R$4.20 hoje");
+        assert_eq!(quiet.tooltip, "Specola — nada esperando · R$0.00 hoje");
     }
 
     /// The menu is rebuilt only when the signature moves, so a language change that
@@ -256,7 +253,7 @@ mod tests {
         let sessions = [waiting("a")];
         let pt = TrayStrings {
             waiting: "{n} esperando".into(),
-            open: "Abrir Pervigil".into(),
+            open: "Abrir Specola".into(),
             quit: "Sair".into(),
             ..TrayStrings::default()
         };

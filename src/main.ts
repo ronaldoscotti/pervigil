@@ -87,7 +87,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     trayWaiting: "{n} waiting",
     trayNothing: "nothing waiting",
     trayToday: "${cost} today",
-    trayOpen: "Open Pervigil",
+    trayOpen: "Open Specola",
     trayQuit: "Quit",
     pinned: "Pinned",
     unpinned: "Unpinned",
@@ -115,7 +115,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     notDetected: "Not detected",
     installTitle: "Install hooks to track live state",
     installNote:
-      "States read <em>idle</em> until these run. Names and cost are already live. Paste into {path} — pervigil never edits it for you.",
+      "States read <em>idle</em> until these run. Names and cost are already live. Paste into {path} — Specola never edits it for you.",
     copySnippet: "Copy snippet",
     jumpToPane: "Jump to pane",
     focusTab: "Focus tab",
@@ -158,7 +158,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     trayWaiting: "{n} esperando por você",
     trayNothing: "nada esperando",
     trayToday: "${cost} hoje",
-    trayOpen: "Abrir Pervigil",
+    trayOpen: "Abrir Specola",
     trayQuit: "Sair",
     pinned: "Fixado",
     unpinned: "Solto",
@@ -186,7 +186,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     notDetected: "Não detectado",
     installTitle: "Instale os hooks para acompanhar o estado ao vivo",
     installNote:
-      "Os estados aparecem como <em>parados</em> até os hooks rodarem. Nomes e custo já estão ao vivo. Cole em {path} — o pervigil nunca edita o arquivo por você.",
+      "Os estados aparecem como <em>parados</em> até os hooks rodarem. Nomes e custo já estão ao vivo. Cole em {path} — o Specola nunca edita o arquivo por você.",
     copySnippet: "Copiar trecho",
     jumpToPane: "Ir para o painel",
     focusTab: "Focar a aba",
@@ -229,7 +229,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     trayWaiting: "{n} esperando",
     trayNothing: "nada esperando",
     trayToday: "${cost} hoy",
-    trayOpen: "Abrir Pervigil",
+    trayOpen: "Abrir Specola",
     trayQuit: "Salir",
     pinned: "Fijado",
     unpinned: "Suelto",
@@ -257,7 +257,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     notDetected: "No detectado",
     installTitle: "Instala los hooks para seguir el estado en vivo",
     installNote:
-      "Los estados aparecen como <em>inactivos</em> hasta que se ejecuten. Los nombres y el costo ya están en vivo. Pega en {path} — pervigil nunca lo edita por ti.",
+      "Los estados aparecen como <em>inactivos</em> hasta que se ejecuten. Los nombres y el costo ya están en vivo. Pega en {path} — Specola nunca lo edita por ti.",
     copySnippet: "Copiar fragmento",
     jumpToPane: "Ir al panel",
     focusTab: "Enfocar pestaña",
@@ -300,7 +300,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     trayWaiting: "{n} en attente",
     trayNothing: "rien en attente",
     trayToday: "${cost} aujourd'hui",
-    trayOpen: "Ouvrir Pervigil",
+    trayOpen: "Ouvrir Specola",
     trayQuit: "Quitter",
     pinned: "Épinglé",
     unpinned: "Détaché",
@@ -328,7 +328,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     notDetected: "Non détecté",
     installTitle: "Installez les hooks pour suivre l'état en direct",
     installNote:
-      "Les états affichent <em>inactif</em> jusqu'à leur exécution. Les noms et le coût sont déjà en direct. Collez dans {path} — pervigil ne le modifie jamais pour vous.",
+      "Les états affichent <em>inactif</em> jusqu'à leur exécution. Les noms et le coût sont déjà en direct. Collez dans {path} — Specola ne le modifie jamais pour vous.",
     copySnippet: "Copier l'extrait",
     jumpToPane: "Aller au panneau",
     focusTab: "Activer l'onglet",
@@ -371,7 +371,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     trayWaiting: "{n} warten",
     trayNothing: "nichts wartet",
     trayToday: "${cost} heute",
-    trayOpen: "Pervigil öffnen",
+    trayOpen: "Specola öffnen",
     trayQuit: "Beenden",
     pinned: "Angeheftet",
     unpinned: "Gelöst",
@@ -399,7 +399,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     notDetected: "Nicht erkannt",
     installTitle: "Hooks installieren, um den Live-Status zu verfolgen",
     installNote:
-      "Zustände zeigen <em>inaktiv</em>, bis die Hooks laufen. Namen und Kosten sind bereits live. Füge in {path} ein — pervigil bearbeitet die Datei nie für dich.",
+      "Zustände zeigen <em>inaktiv</em>, bis die Hooks laufen. Namen und Kosten sind bereits live. Füge in {path} ein — Specola bearbeitet die Datei nie für dich.",
     copySnippet: "Snippet kopieren",
     jumpToPane: "Zum Bereich springen",
     focusTab: "Tab fokussieren",
@@ -442,7 +442,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     trayWaiting: "{n} ждут вас",
     trayNothing: "ничего не ждёт",
     trayToday: "${cost} сегодня",
-    trayOpen: "Открыть Pervigil",
+    trayOpen: "Открыть Specola",
     trayQuit: "Выход",
     pinned: "Закреплено",
     unpinned: "Откреплено",
@@ -470,7 +470,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     notDetected: "Не обнаружено",
     installTitle: "Установите hooks для отслеживания состояния в реальном времени",
     installNote:
-      "Состояния показывают <em>простой</em>, пока hooks не запущены. Имена и стоимость уже актуальны. Вставьте в {path} — pervigil никогда не редактирует его за вас.",
+      "Состояния показывают <em>простой</em>, пока hooks не запущены. Имена и стоимость уже актуальны. Вставьте в {path} — Specola никогда не редактирует его за вас.",
     copySnippet: "Копировать сниппет",
     jumpToPane: "Перейти к панели",
     focusTab: "Фокус на вкладку",
@@ -513,7 +513,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     trayWaiting: "{n} 项等待",
     trayNothing: "无等待项",
     trayToday: "今日 ${cost}",
-    trayOpen: "打开 Pervigil",
+    trayOpen: "打开 Specola",
     trayQuit: "退出",
     pinned: "已置顶",
     unpinned: "未置顶",
@@ -541,7 +541,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     notDetected: "未检测到",
     installTitle: "安装 hooks 以跟踪实时状态",
     installNote:
-      "在 hooks 运行前状态显示为<em>空闲</em>。名称和成本已是实时的。粘贴到 {path} — pervigil 绝不会替你编辑它。",
+      "在 hooks 运行前状态显示为<em>空闲</em>。名称和成本已是实时的。粘贴到 {path} — Specola 绝不会替你编辑它。",
     copySnippet: "复制代码段",
     jumpToPane: "跳转到窗格",
     focusTab: "聚焦标签页",
@@ -584,7 +584,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     trayWaiting: "{n} 件待機中",
     trayNothing: "待機なし",
     trayToday: "本日 ${cost}",
-    trayOpen: "Pervigil を開く",
+    trayOpen: "Specola を開く",
     trayQuit: "終了",
     pinned: "固定中",
     unpinned: "固定解除",
@@ -612,7 +612,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     notDetected: "未検出",
     installTitle: "ライブ状態を追跡するには hooks をインストール",
     installNote:
-      "hooks が動くまで状態は<em>アイドル</em>と表示されます。名前とコストはすでにライブです。{path} に貼り付けてください — pervigil が代わりに編集することはありません。",
+      "hooks が動くまで状態は<em>アイドル</em>と表示されます。名前とコストはすでにライブです。{path} に貼り付けてください — Specola が代わりに編集することはありません。",
     copySnippet: "スニペットをコピー",
     jumpToPane: "ペインに移動",
     focusTab: "タブをフォーカス",
@@ -655,7 +655,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     trayWaiting: "{n} प्रतीक्षारत",
     trayNothing: "कुछ भी प्रतीक्षारत नहीं",
     trayToday: "आज ${cost}",
-    trayOpen: "Pervigil खोलें",
+    trayOpen: "Specola खोलें",
     trayQuit: "बाहर निकलें",
     pinned: "पिन किया",
     unpinned: "अनपिन",
@@ -683,7 +683,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     notDetected: "पता नहीं चला",
     installTitle: "लाइव स्थिति ट्रैक करने के लिए hooks इंस्टॉल करें",
     installNote:
-      "hooks चलने तक स्थिति <em>निष्क्रिय</em> दिखती है। नाम और लागत पहले से लाइव हैं। {path} में पेस्ट करें — pervigil इसे आपके लिए कभी संपादित नहीं करता।",
+      "hooks चलने तक स्थिति <em>निष्क्रिय</em> दिखती है। नाम और लागत पहले से लाइव हैं। {path} में पेस्ट करें — Specola इसे आपके लिए कभी संपादित नहीं करता।",
     copySnippet: "स्निपेट कॉपी करें",
     jumpToPane: "पेन पर जाएँ",
     focusTab: "टैब फोकस करें",
@@ -726,7 +726,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     trayWaiting: "{n} في الانتظار",
     trayNothing: "لا شيء في الانتظار",
     trayToday: "${cost} اليوم",
-    trayOpen: "افتح Pervigil",
+    trayOpen: "افتح Specola",
     trayQuit: "إنهاء",
     pinned: "مثبّت",
     unpinned: "غير مثبّت",
@@ -754,7 +754,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     notDetected: "غير مكتشف",
     installTitle: "ثبّت hooks لتتبع الحالة الحيّة",
     installNote:
-      "تظهر الحالات <em>خامل</em> حتى تعمل الـ hooks. الأسماء والتكلفة حيّة بالفعل. الصق في {path} — لا يعدّله pervigil نيابةً عنك أبدًا.",
+      "تظهر الحالات <em>خامل</em> حتى تعمل الـ hooks. الأسماء والتكلفة حيّة بالفعل. الصق في {path} — لا يعدّله Specola نيابةً عنك أبدًا.",
     copySnippet: "نسخ المقتطف",
     jumpToPane: "الانتقال إلى الجزء",
     focusTab: "تركيز التبويب",
@@ -979,7 +979,7 @@ let hooksWere: boolean | undefined;
 
 /**
  * The install card: shown only while the hooks are missing, so its disappearance is
- * the live "detected" signal. Pervigil never writes settings.json — the user pastes.
+ * the live "detected" signal. Specola never writes settings.json — the user pastes.
  */
 function renderHooks(snapshot: Snapshot) {
   if (hooksWere === false && snapshot.hooksInstalled) toast(t("hooksDetected"));
@@ -1166,7 +1166,7 @@ function formatTokens(n: number): string {
 /** The message for X/WhatsApp — the same numbers the card shows, so the link isn't bare. */
 function shareText(snap: Snapshot): string {
   const stats = `${snap.sessions.length} ${t("sectionSessions").toLowerCase()} · ${formatTokens(snap.tokens)} ${t("tokens")} · ${t("waitingShare", { p: Math.round(snap.waitingShare * 100) })}`;
-  return `Claude Code 🦉\n${stats}\n\nvia Pervigil — github.com/ronaldoscotti/pervigil`;
+  return `Claude Code 🦉\n${stats}\n\nvia Specola — github.com/ronaldoscotti/specola`;
 }
 
 function roundRectPath(
@@ -1216,7 +1216,7 @@ async function renderDayCanvas(snap: Snapshot): Promise<HTMLCanvasElement> {
   } catch {
     ctx.fillStyle = "#eae7de";
     ctx.font = "600 46px Lora, serif";
-    ctx.fillText("Pervigil", PAD, 106);
+    ctx.fillText("Specola", PAD, 106);
   }
 
   const date = new Date(snap.now * 1000).toLocaleDateString(lang, {
@@ -1276,7 +1276,7 @@ async function renderDayCanvas(snap: Snapshot): Promise<HTMLCanvasElement> {
 
   ctx.fillStyle = "#565c6a";
   ctx.font = "400 22px 'Space Mono', monospace";
-  ctx.fillText("github.com/ronaldoscotti/pervigil", PAD, H - 46);
+  ctx.fillText("github.com/ronaldoscotti/specola", PAD, H - 46);
 
   return canvas;
 }
@@ -1443,7 +1443,7 @@ window.addEventListener("DOMContentLoaded", () => {
   });
 
   el("about-star").addEventListener("click", () => {
-    invoke("open_url", { url: "https://github.com/ronaldoscotti/pervigil" }).catch(console.error);
+    invoke("open_url", { url: "https://github.com/ronaldoscotti/specola" }).catch(console.error);
   });
 
   el("about-update").addEventListener("click", installUpdate);
@@ -1489,12 +1489,12 @@ window.addEventListener("DOMContentLoaded", () => {
 
   // Referral loop: a single, dismissible nudge to share the day — only after the
   // tool has proven itself over a few launches, and only on a day with real activity.
-  const launches = Number(localStorage.getItem("pervigil.launches") ?? "0") + 1;
-  localStorage.setItem("pervigil.launches", String(launches));
-  if (launches >= 3 && localStorage.getItem("pervigil.shareNudged") !== "1") {
+  const launches = Number(localStorage.getItem("specola.launches") ?? "0") + 1;
+  localStorage.setItem("specola.launches", String(launches));
+  if (launches >= 3 && localStorage.getItem("specola.shareNudged") !== "1") {
     setTimeout(() => {
       if ((lastSnapshot?.sessions.length ?? 0) > 0) {
-        localStorage.setItem("pervigil.shareNudged", "1");
+        localStorage.setItem("specola.shareNudged", "1");
         toast(t("shareNudge"));
       }
     }, 2500);

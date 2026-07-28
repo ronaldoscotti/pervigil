@@ -13,7 +13,7 @@ use tauri::{AppHandle, Manager, Theme};
 use crate::app::{self, App, Span};
 use crate::core::tray::TrayView;
 
-pub(crate) const TRAY_ID: &str = "pervigil";
+pub(crate) const TRAY_ID: &str = "specola";
 
 /// Menu ids for a session row, so they can never collide with the fixed entries.
 const SESSION: &str = "session:";

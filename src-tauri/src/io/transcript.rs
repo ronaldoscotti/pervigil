@@ -167,13 +167,13 @@ mod tests {
     use super::*;
 
     const TRANSCRIPT: &str = concat!(
-        r#"{"type":"user","sessionId":"5f5f47fc","cwd":"/Users/x/pervigil","gitBranch":"feat/timeline","timestamp":"2026-07-23T10:00:00.000Z"}"#,
+        r#"{"type":"user","sessionId":"5f5f47fc","cwd":"/Users/x/specola","gitBranch":"feat/timeline","timestamp":"2026-07-23T10:00:00.000Z"}"#,
         "\n",
         r#"{"type":"ai-title","sessionId":"5f5f47fc","aiTitle":"Design the panel"}"#,
         "\n",
         r#"garbage that is not json"#,
         "\n",
-        r#"{"type":"assistant","sessionId":"5f5f47fc","cwd":"/Users/x/pervigil","gitBranch":"feat/timeline","timestamp":"2026-07-23T16:39:50.417Z"}"#,
+        r#"{"type":"assistant","sessionId":"5f5f47fc","cwd":"/Users/x/specola","gitBranch":"feat/timeline","timestamp":"2026-07-23T16:39:50.417Z"}"#,
         "\n",
     );
 
@@ -184,7 +184,7 @@ mod tests {
             .expect("transcript should yield a session");
 
         assert_eq!(session.id, "5f5f47fc");
-        assert_eq!(session.cwd, "/Users/x/pervigil");
+        assert_eq!(session.cwd, "/Users/x/specola");
         assert_eq!(session.title.as_deref(), Some("Design the panel"));
         assert_eq!(session.git_branch.as_deref(), Some("feat/timeline"));
         assert_eq!(session.last_active, 1_784_824_790);

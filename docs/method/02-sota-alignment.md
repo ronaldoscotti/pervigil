@@ -24,9 +24,9 @@ A distinction most people blur, and this repo keeps explicit:
 - **(b) Shipping software that *uses* AI** — a product with an LLM inside. This is
   where **evals** (layer 2) stop being optional.
 
-Pervigil is mostly a **(b)-free** product: its core is deterministic (a pure
+Specola is mostly a **(b)-free** product: its core is deterministic (a pure
 `fold` over an event log). That is a deliberate design choice, and it's why most
-of Pervigil's verification is ordinary fixture testing rather than evals. The one
+of Specola's verification is ordinary fixture testing rather than evals. The one
 place (b) could appear is a future optional LLM feature (e.g. summarizing a
 session) — and *that* is the only place an eval harness would belong.
 
@@ -53,10 +53,10 @@ right number of steps) from **outcome correctness** (did the full run accomplish
 the goal) ([DeepEval](https://deepeval.com/blog/eval-driven-development),
 [Confident AI](https://www.confident-ai.com/blog/llm-agent-evaluation-complete-guide)).
 
-**In this repo.** ⚪ **Not applicable yet, by design.** Pervigil's core is
+**In this repo.** ⚪ **Not applicable yet, by design.** Specola's core is
 deterministic, so it uses fixture tests, not evals — the honest tool for the job.
 An eval harness enters *only if* an LLM feature is added, and would live in
-`evals/` with its golden set. This doc will not pretend Pervigil has evals it
+`evals/` with its golden set. This doc will not pretend Specola has evals it
 doesn't need. *(The high-leverage place to demonstrate this layer is a
 product that ships an LLM in the hot path — not this one.)*
 
@@ -83,7 +83,7 @@ policy-as-code in miniature, and it lands when stage 5 (TDD) reaches the shim.
 **What it is.** Trace every agent step, evaluate in CI, detect distribution drift
 post-launch (Braintrust, Galileo, DeepEval).
 
-**In this repo.** ⚪ **Not applicable.** Pervigil has no agent in its runtime to
+**In this repo.** ⚪ **Not applicable.** Specola has no agent in its runtime to
 trace. Its "observability" is inverted — it's a tool that gives *you*
 observability over *your* Claude Code sessions. Worth noting the irony, not worth
 claiming the layer.

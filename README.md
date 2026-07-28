@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/logo-light.png">
-    <img alt="Pervigil" src="assets/logo-dark.png" width="440">
+    <img alt="Specola" src="assets/logo-dark.png" width="440">
   </picture>
 </p>
 
@@ -9,14 +9,15 @@
 every project, which ones are **waiting on you**, and what your day actually looked
 like — at a glance.
 
-> *pervigil* (Latin) — ever-watchful; keeping watch through the whole night.
+> *specola* — a watchtower; the raised place you keep watch from. Also the
+> *Specola Vaticana*, the Vatican Observatory.
 
 > 🚧 **Work in progress.** The macOS app is built, tested, signed, and public, with
 > auto-updating signed releases from CI. A few native-surface confirmations are the
 > last open items. Not yet formally released.
 
 <p align="center">
-  <img src="assets/pervigil-screenshot.png" alt="The Pervigil panel: sessions across projects, the one waiting on you sorted to the top, a your-turn session pinned, a combined activity lane, per-session cost and branch." width="380">
+  <img src="assets/specola-screenshot.png" alt="The Specola panel: sessions across projects, the one waiting on you sorted to the top, a your-turn session pinned, a combined activity lane, per-session cost and branch." width="380">
 </p>
 
 <sub align="center">Rendered from the real UI with fixed mock data — regenerate any time with <code>bash scripts/screenshot.sh</code>.</sub>
@@ -28,7 +29,7 @@ like — at a glance.
 Running many Claude Code sessions across many projects, work falls through the
 cracks: a session finishes unnoticed, or sits **blocked on your input** while
 you're heads-down elsewhere. The category is validated but every incumbent is
-macOS-only and read-only. Pervigil's two wedges:
+macOS-only and read-only. Specola's two wedges:
 
 - **"Waiting on you" is the organizing principle** — the urgent state sorts to the
   top and is the whole point, not one column among many. A native notification fires
@@ -52,9 +53,9 @@ mark-as-read) / project visibility**, **launch-at-login** and single-instance, a
 Claude Code session
    │  SessionStart / Notification / Stop / UserPromptSubmit hooks
    ▼
-hook shim ──► `pervigil record`  (bundled CLI, atomic append, always exit 0)
+hook shim ──► `specola record`  (bundled CLI, atomic append, always exit 0)
                     │
-        ~/.pervigil/events.jsonl        ← source of truth for state
+        ~/.specola/events.jsonl        ← source of truth for state
                     +
    ~/.claude/projects/**/*.jsonl        ← second input: tokens → cost, session title
                     │
@@ -90,7 +91,7 @@ lane, cost. Platform-specific, **degrading honestly**:
 
 Click-to-focus is tiered and best-available: tmux pane → iTerm2 tab → VS Code folder
 → copy the resume command (the universal floor, so it never fully fails).
-**Correct-but-coarse beats precise-but-wrong** — pervigil never raises a guessed
+**Correct-but-coarse beats precise-but-wrong** — specola never raises a guessed
 window. Where a platform blocks a capability (Wayland activation), it says so and
 falls back rather than pretending.
 
@@ -99,14 +100,14 @@ falls back rather than pretending.
 macOS, with a Rust toolchain and Node:
 
 ```bash
-git clone https://github.com/ronaldoscotti/pervigil.git && cd pervigil
+git clone https://github.com/ronaldoscotti/specola.git && cd specola
 npm install
 npm run tauri dev      # run it
 npm run tauri build    # or build a bundle
 ```
 
 Then open **Settings** in the panel and paste the shown hook snippet into
-`~/.claude/settings.json` — pervigil never edits that file for you. The panel's
+`~/.claude/settings.json` — specola never edits that file for you. The panel's
 install card disappears the moment the hooks are detected.
 
 ## Status
@@ -129,7 +130,7 @@ milestone did and did not prove.
 
 ## Built in the open, by an explicit method
 
-This repo is also a demonstration. Pervigil is built with a disciplined, spec-first,
+This repo is also a demonstration. Specola is built with a disciplined, spec-first,
 review-gated AI-assisted workflow, and the repo is the **honest record** of it — not
 a description. Every stage deposits a real artifact; the git history records the
 order; nothing is claimed ahead of where the work actually is. Read

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Where a session is running, captured by the `record` shim at `SessionStart` — the
-/// one moment pervigil is inside the session's own process tree and can read its
+/// one moment specola is inside the session's own process tree and can read its
 /// environment. Nothing else recovers this later; transcripts don't carry it.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Terminal {

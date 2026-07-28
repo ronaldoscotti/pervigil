@@ -1,4 +1,4 @@
-# Pervigil — Brain
+# Specola — Brain
 
 Cross-platform desktop panel that shows every Claude Code session across your
 projects, which ones are **blocked on you**, and what your day looked like — at a
@@ -59,8 +59,8 @@ review.
 - **Tauri v2** — Rust core + web frontend. Real tray on macOS/Windows/Linux.
 - **`store` is a pure function** `fold(Vec<Event>) -> Vec<Session>` — no clock, no
   fs, no GUI. This is the heart and it is fixture-tested.
-- **Event-log file** (`~/.pervigil/events.jsonl`) is the single source of truth,
-  fed by hooks via a bundled `pervigil record` binary. No daemon, no socket.
+- **Event-log file** (`~/.specola/events.jsonl`) is the single source of truth,
+  fed by hooks via a bundled `specola record` binary. No daemon, no socket.
 - **Two inputs, separate failure domains:** hooks → state; transcripts → cost.
 - The hook shim **must never block or fail a Claude Code turn** — fire-and-forget,
   hard timeout, always exit 0.
@@ -78,7 +78,7 @@ review.
 
 ## Current position
 
-Implementation through **M10 and beyond**: **120 tests green**. Signed + notarized
+Implementation through **M10 and beyond**: **139 tests green**. Signed + notarized
 macOS build; **auto-updating, signed releases from CI** (tag → mac/Windows/Linux
 bundles + updater manifest, proven end-to-end); ten UI languages with RTL;
 launch-at-login; single-instance; a dismiss "read" mode; and a share-your-day card.

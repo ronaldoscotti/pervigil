@@ -9,7 +9,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-OUT="assets/pervigil-screenshot.png"
+OUT="assets/specola-screenshot.png"
 TMP="$(mktemp -d)"
 PORT=1420
 
@@ -41,7 +41,7 @@ agent-browser --session shot eval --stdin >/dev/null <<'EVALEOF'
     notifications: true, dismissRead: false, hidden: [], hooksInstalled: true, hookSnippet: "",
     sessions: [
       S("1", "ronaldoscotti.com", "Implement the Editorial Noir hero variant", "main", "WaitingOnYou", 95, 1, 12.4, "Open in VS Code", false),
-      S("2", "pervigil", "Read the plan and execute milestone M10", null, "YourTurn", 1160, 1, 8.72, "Jump to pane", true),
+      S("2", "specola", "Read the plan and execute milestone M10", null, "YourTurn", 1160, 1, 8.72, "Jump to pane", true),
       S("3", "meu-feed-catolico-api", "Add a retry worker to the webhook", "feat/retries", "Working", 140, 2, 3.1, "Focus tab", false),
       S("4", "meu-feed-catolico-api", "Investigate the flaky calendar test", "fix/flaky", "Idle", 3600, 2, 0.8, "Copy resume command", false),
       S("5", "meu-feed-catolico-app", "Optimize the App Store submission", null, "Idle", 7200, 1, 5.2, "Copy resume command", false),

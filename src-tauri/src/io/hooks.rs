@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-/// The four Claude Code events pervigil records. `SessionStart` gives the row and its
+/// The four Claude Code events specola records. `SessionStart` gives the row and its
 /// terminal, `Notification` is the only honest "blocked on you", `Stop`/`UserPromptSubmit`
 /// close and reopen the loop.
 pub const EVENTS: [&str; 4] = ["SessionStart", "Notification", "Stop", "UserPromptSubmit"];
@@ -21,7 +21,7 @@ pub struct HookState {
     pub installed: bool,
 }
 
-/// Which of pervigil's hooks are wired in `~/.claude/settings.json`. Parses defensively:
+/// Which of specola's hooks are wired in `~/.claude/settings.json`. Parses defensively:
 /// an unreadable or hook-less file simply reports nothing installed, never an error.
 pub fn detect(settings_json: &str) -> HookReport {
     let root: serde_json::Value = serde_json::from_str(settings_json).unwrap_or_default();
@@ -43,7 +43,7 @@ pub fn detect(settings_json: &str) -> HookReport {
 
 /// True when a command under this event invokes the `record` shim with the event as its
 /// argument. Matched on `record` + the event name — not the brand — so an install by
-/// absolute path (`…/Pervigil.app/…/record`) is recognised regardless of case.
+/// absolute path (`…/Specola.app/…/record`) is recognised regardless of case.
 fn wired(entries: &serde_json::Value, event: &str) -> bool {
     entries
         .as_array()
@@ -56,7 +56,7 @@ fn wired(entries: &serde_json::Value, event: &str) -> bool {
 }
 
 /// The block to paste into `~/.claude/settings.json` — one command per event, calling
-/// the bundled shim by absolute path. Pervigil never writes this file itself (spec item
+/// the bundled shim by absolute path. Specola never writes this file itself (spec item
 /// 12); the user pastes it, so it's shown, not applied.
 pub fn snippet(record_path: &str) -> String {
     let hooks: serde_json::Map<String, serde_json::Value> = EVENTS
@@ -99,10 +99,10 @@ mod tests {
     fn a_full_install_is_detected_whatever_the_binary_path() {
         let settings = r#"{
           "hooks": {
-            "SessionStart": [{"hooks":[{"type":"command","command":"/Applications/Pervigil.app/Contents/MacOS/record SessionStart"}]}],
-            "Notification": [{"hooks":[{"type":"command","command":"/opt/pervigil/record Notification"}]}],
-            "Stop": [{"hooks":[{"type":"command","command":"pervigil record Stop"}]}],
-            "UserPromptSubmit": [{"hooks":[{"type":"command","command":"pervigil record UserPromptSubmit"}]}]
+            "SessionStart": [{"hooks":[{"type":"command","command":"/Applications/Specola.app/Contents/MacOS/record SessionStart"}]}],
+            "Notification": [{"hooks":[{"type":"command","command":"/opt/specola/record Notification"}]}],
+            "Stop": [{"hooks":[{"type":"command","command":"specola record Stop"}]}],
+            "UserPromptSubmit": [{"hooks":[{"type":"command","command":"specola record UserPromptSubmit"}]}]
           }
         }"#;
 
@@ -113,7 +113,7 @@ mod tests {
     fn a_partial_install_is_reported_honestly_not_rounded_up() {
         let settings = r#"{
           "hooks": {
-            "SessionStart": [{"hooks":[{"type":"command","command":"pervigil record SessionStart"}]}],
+            "SessionStart": [{"hooks":[{"type":"command","command":"specola record SessionStart"}]}],
             "Notification": [{"hooks":[{"type":"command","command":"some-other-tool notify"}]}]
           }
         }"#;
@@ -131,7 +131,7 @@ mod tests {
 
     #[test]
     fn the_snippet_wires_every_event_and_is_detected_by_our_own_reader() {
-        let snippet = snippet("/opt/pervigil/record");
+        let snippet = snippet("/opt/specola/record");
 
         let report = detect(&snippet);
 
@@ -139,7 +139,7 @@ mod tests {
             report.all_installed,
             "what we tell the user to paste must satisfy our own detection"
         );
-        assert!(snippet.contains("/opt/pervigil/record"));
+        assert!(snippet.contains("/opt/specola/record"));
     }
 
     #[test]

@@ -1,9 +1,9 @@
 use std::io::Read;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use pervigil_lib::core::terminal::Terminal;
-use pervigil_lib::io::record::{append_line, build_event};
-use pervigil_lib::io::terminals;
+use specola_lib::core::terminal::Terminal;
+use specola_lib::io::record::{append_line, build_event};
+use specola_lib::io::terminals;
 
 /// Always exits 0. A monitor that can fail the turn it monitors is worse than none,
 /// so every error path here is silently swallowed.
@@ -30,7 +30,7 @@ fn record() -> Option<()> {
         let _ = terminals::write(&home, event.id(), &hint);
     }
 
-    append_line(&home.join(".pervigil").join("events.jsonl"), &line).ok()
+    append_line(&home.join(".specola").join("events.jsonl"), &line).ok()
 }
 
 /// Read the terminal context from the shim's own environment — the hook runs inside
