@@ -12,9 +12,9 @@ like — at a glance.
 > *specola* — a watchtower; the raised place you keep watch from. Also the
 > *Specola Vaticana*, the Vatican Observatory.
 
-> 🚧 **Work in progress.** The macOS app is built, tested, signed, and public, with
-> auto-updating signed releases from CI. A few native-surface confirmations are the
-> last open items. Not yet formally released.
+> **macOS is the tested target.** Windows and Linux ship from the same CI pipeline
+> and the platform code is real, but neither has run on a maintainer's machine yet.
+> [Testers wanted](CONTRIBUTING.md).
 
 <p align="center">
   <img src="assets/specola-screenshot.png" alt="The Specola panel: sessions across projects, the one waiting on you sorted to the top, a your-turn session pinned, a combined activity lane, per-session cost and branch." width="380">
@@ -28,8 +28,7 @@ like — at a glance.
 
 Running many Claude Code sessions across many projects, work falls through the
 cracks: a session finishes unnoticed, or sits **blocked on your input** while
-you're heads-down elsewhere. The category is validated but every incumbent is
-macOS-only and read-only. Specola's two wedges:
+you're heads-down elsewhere. Specola is built around exactly that:
 
 - **"Waiting on you" is the organizing principle** — the urgent state sorts to the
   top and is the whole point, not one column among many. A native notification fires
@@ -95,9 +94,42 @@ Click-to-focus is tiered and best-available: tmux pane → iTerm2 tab → VS Cod
 window. Where a platform blocks a capability (Wayland activation), it says so and
 falls back rather than pretending.
 
-## Install (from source)
+## Install
 
-macOS, with a Rust toolchain and Node:
+Download from the
+**[latest release](https://github.com/ronaldoscotti/specola/releases/latest)**.
+
+| Platform | Download | What to expect |
+|---|---|---|
+| **macOS** (Apple silicon) | `Specola_x.y.z_aarch64.dmg` | Signed and notarized — opens normally. |
+| **macOS** (Intel) | `Specola_x.y.z_x64.dmg` | Signed and notarized — opens normally. |
+| **Windows** | `Specola_x.y.z_x64-setup.exe` | **Not code-signed yet** — see below. |
+| **Linux** | `.AppImage`, `.deb`, or `.rpm` | Untested on a maintainer's machine. |
+
+**Windows: SmartScreen will warn you.** The installer isn't code-signed yet, so
+Windows shows *"Windows protected your PC"*. To install anyway: **More info →
+Run anyway**. If that trade isn't one you want to make, build from source below —
+it's the same code. Signing is [planned](CONTRIBUTING.md); note that even a signed
+installer keeps warning until it accumulates download reputation, so this won't
+vanish the day it's signed.
+
+**Linux:** the AppImage needs no install (`chmod +x` and run). The tray icon depends
+on your desktop having an app-indicator implementation, and on Wayland the
+compositor blocks window activation — click-to-focus falls back to copying the
+resume command rather than raising a window. Both are documented behavior, not
+bugs; anything else is, and a
+[report](https://github.com/ronaldoscotti/specola/issues/new?template=platform_test.yml)
+is genuinely useful.
+
+### Then wire up the hooks
+
+Open **Settings** in the panel and paste the shown hook snippet into
+`~/.claude/settings.json` — Specola never edits that file for you. The panel's
+install card disappears the moment the hooks are detected.
+
+### Or build from source
+
+A [Rust toolchain](https://rustup.rs) and Node 18+:
 
 ```bash
 git clone https://github.com/ronaldoscotti/specola.git && cd specola
@@ -106,9 +138,7 @@ npm run tauri dev      # run it
 npm run tauri build    # or build a bundle
 ```
 
-Then open **Settings** in the panel and paste the shown hook snippet into
-`~/.claude/settings.json` — specola never edits that file for you. The panel's
-install card disappears the moment the hooks are detected.
+Linux needs system dependencies first — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Status
 
@@ -117,7 +147,7 @@ under a real GUI launch), notifications, config, pin/dismiss, project visibility
 the hook-install card, **ten UI languages** (with RTL), launch-at-login,
 single-instance, the dismiss "read" mode, a **share-your-day** card, and
 **auto-updating, signed + notarized releases from CI** — on a pure core with
-**120 tests**. A short demo is at the top; the release pipeline is proven end-to-end
+**139 tests**. A short demo is at the top; the release pipeline is proven end-to-end
 (a tag produces signed mac/Windows/Linux bundles plus the updater manifest).
 
 Verified honestly. The pure logic and the checkable side effects (clipboard copy,

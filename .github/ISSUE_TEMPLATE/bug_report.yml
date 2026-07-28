@@ -1,0 +1,45 @@
+name: Bug report
+description: Something in Specola doesn't do what it says it does.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        If the bug is specific to Windows or Linux, please use the
+        **Platform test report** template instead — it asks for the details
+        that make those reports actionable.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you got instead.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Specola version
+      description: From the panel's Settings, or the release tag you downloaded.
+      placeholder: v0.1.0
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: macOS 15.2 (Apple Silicon)
+    validations:
+      required: true
+
+  - type: textarea
+    id: events
+    attributes:
+      label: Relevant lines from ~/.specola/events.jsonl
+      description: |
+        Optional, but it turns most guesses into a fix. The file records session
+        lifecycle events. Redact any project path you'd rather not share — the
+        state machine doesn't care about the names.
+      render: json
