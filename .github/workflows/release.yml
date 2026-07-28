@@ -93,9 +93,12 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: "Specola ${{ github.ref_name }}"
           releaseDraft: true
-          # Pre-1.0, and Windows/Linux are untested targets. Flip to false when
-          # the platform matrix has real coverage and the version says 1.0.
-          prerelease: true
+          # Must stay false: the updater endpoint is
+          # `releases/latest/download/latest.json`, and GitHub's `latest`
+          # resolution skips pre-releases — marking releases pre-release 404s
+          # every installed client. Pre-1.0 status is signalled in the README
+          # banner, the release body, and the 0.x version instead.
+          prerelease: false
           # Keyed on file suffix, not full filename, so it survives version bumps.
           releaseBody: |
             ## Which file do I download?
