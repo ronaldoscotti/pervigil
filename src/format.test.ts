@@ -21,6 +21,7 @@ const snapshot = (sessions: SessionView[]): Snapshot => ({
   now: 1_000,
   from: 0,
   waiting: 0,
+  waitingOutsideWindow: 0,
   sessions,
   segments: [],
   waitingShare: 0,

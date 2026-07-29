@@ -42,7 +42,8 @@ pub fn timeline(
     for (id, at) in activity.iter().filter(|(_, at)| *at <= to) {
         ticks.push(Tick::Active(id, *at));
     }
-    // Stable by time; at one instant a real event wins, then activity, then expiry.
+    // Activity is applied before the events of the same instant: the assistant record
+    // that triggers a permission prompt shares its second, and must not cancel it.
     ticks.sort_by_key(|tick| (tick.at(), tick.rank()));
 
     let mut states: HashMap<&SessionId, (SessionState, Timestamp)> = HashMap::new();
@@ -98,8 +99,8 @@ impl Tick<'_> {
 
     fn rank(&self) -> u8 {
         match self {
-            Tick::Event(_) => 0,
-            Tick::Active(..) => 1,
+            Tick::Active(..) => 0,
+            Tick::Event(_) => 1,
             Tick::Expire(..) => 2,
         }
     }
@@ -296,34 +297,53 @@ pub fn fold(events: &[Event], _now: Timestamp, prefs: &ViewPrefs) -> Vec<Session
     sessions
 }
 
-/// One `claude` process runs one session at a time, so `/resume` leaves the id it
-/// replaced behind: no further events, and a pid still alive, so neither age nor
-/// liveness can retire it. Keeps one session per process — the one still being used.
+/// Sessions the process has moved on from: `/resume` starts a new id inside the same
+/// `claude`, and the one it left never emits again, so neither age nor liveness can
+/// retire it.
 ///
-/// Keyed on pid *and* cwd because pids recycle and the log is kept for thirty days;
-/// a pid reused by an unrelated project is a different process, not a resume. The
-/// ordering is total, so a tie cannot leave two winners.
-pub fn retain_current(sessions: &mut Vec<Session>) {
-    let rank = |session: &Session| (session.last_active, session.since, session.id.clone());
+/// Only a session whose *last* event is its own `SessionStart` can be retired — it
+/// started and did nothing. A session that ever reached waiting, your-turn, or a
+/// prompt is therefore untouchable, which matters because `/resume` can also switch
+/// back and forth: two live sessions genuinely interleave under one pid.
+pub fn superseded(events: &[Event]) -> std::collections::HashSet<SessionId> {
+    let mut last: HashMap<&SessionId, (Timestamp, bool)> = HashMap::new();
+    let mut process: HashMap<&SessionId, (u32, &str)> = HashMap::new();
 
-    let mut current: HashMap<(u32, String), (Timestamp, Timestamp, SessionId)> = HashMap::new();
-    for session in sessions.iter() {
-        if let Some(pid) = session.pid {
-            let key = (pid, session.cwd.clone());
-            let candidate = rank(session);
-            match current.get(&key) {
-                Some(best) if *best >= candidate => {}
-                _ => {
-                    current.insert(key, candidate);
-                }
-            }
+    for event in events {
+        let started = matches!(event, Event::SessionStart { .. });
+        let seen = last.entry(event.id()).or_insert((event.at(), started));
+        if event.at() >= seen.0 {
+            *seen = (event.at(), started);
+        }
+        if let Event::SessionStart {
+            id,
+            pid: Some(pid),
+            cwd,
+            ..
+        } = event
+        {
+            process.insert(id, (*pid, cwd.as_str()));
         }
     }
 
-    sessions.retain(|session| match session.pid {
-        Some(pid) => current.get(&(pid, session.cwd.clone())) == Some(&rank(session)),
-        None => true,
-    });
+    let mut newest: HashMap<(u32, &str), Timestamp> = HashMap::new();
+    for (id, (at, _)) in &last {
+        if let Some(key) = process.get(id) {
+            let seen = newest.entry(*key).or_insert(*at);
+            *seen = (*seen).max(*at);
+        }
+    }
+
+    last.iter()
+        .filter(|(id, (at, started))| {
+            *started
+                && process
+                    .get(*id)
+                    .and_then(|key| newest.get(key))
+                    .is_some_and(|moved_on| *moved_on > *at)
+        })
+        .map(|(id, _)| (*id).clone())
+        .collect()
 }
 
 /// Scope the list to the span the panel is showing. Applied after [`merge`], so it
@@ -569,6 +589,26 @@ mod tests {
                 at: 300,
             },
         ]
+    }
+
+    /// The assistant's tool_use record and the permission `Notification` it triggers
+    /// land in the same epoch second, so activity must not cancel a wait it precedes.
+    /// `merge` uses a strict `>` for the row; the lane has to agree.
+    #[test]
+    fn activity_in_the_same_second_does_not_cancel_the_wait_it_opened() {
+        let events = vec![Event::Notification {
+            id: "s1".into(),
+            at: 100,
+        }];
+        let activity = vec![("s1".to_string(), 100)];
+
+        let segments = timeline(&events, &activity, 100, 1_900);
+
+        assert_eq!(
+            waiting_share(&segments),
+            1.0,
+            "a real block must not read as zero waiting: {segments:?}"
+        );
     }
 
     /// The lane is painted from events alone, so a permission prompt kept painting
@@ -963,119 +1003,110 @@ mod tests {
         assert_eq!(newly_waiting(&HashMap::new(), &current).len(), 1);
     }
 
-    /// `/resume` starts a new session id inside the *same* `claude` process. The
-    /// session it replaced never fires another event, and its pid is still alive, so
-    /// nothing else in the pipeline can tell it is over — it sat in the panel as
-    /// Working forever.
+    fn started(id: &str, pid: u32, cwd: &str, at: Timestamp) -> Event {
+        Event::SessionStart {
+            id: id.into(),
+            cwd: cwd.into(),
+            pid: Some(pid),
+            at,
+            term: None,
+        }
+    }
+
     #[test]
-    fn resuming_supersedes_the_session_that_never_got_a_message() {
+    fn a_session_that_started_and_did_nothing_is_retired() {
         let events = vec![
-            Event::SessionStart {
-                id: "ghost".into(),
-                cwd: "/p".into(),
-                pid: Some(56478),
-                at: 100,
-                term: None,
-            },
-            Event::SessionStart {
-                id: "resumed".into(),
-                cwd: "/p".into(),
-                pid: Some(56478),
-                at: 110,
-                term: None,
-            },
+            started("ghost", 9, "/p", 100),
+            started("resumed", 9, "/p", 110),
             Event::UserPromptSubmit {
                 id: "resumed".into(),
                 at: 200,
             },
         ];
 
-        let mut sessions = fold_default(&events, 300);
-        retain_current(&mut sessions);
-        let ids: Vec<&str> = sessions.iter().map(|s| s.id.as_str()).collect();
+        let retired = superseded(&events);
 
-        assert_eq!(
-            ids,
-            vec!["resumed"],
-            "the replaced session must not survive"
+        assert_eq!(retired.len(), 1);
+        assert!(retired.contains("ghost"));
+    }
+
+    /// `/resume` switches back and forth, so two live sessions genuinely interleave
+    /// under one pid. Retiring whichever acted least recently would hide a real one.
+    #[test]
+    fn interleaved_sessions_are_both_kept() {
+        let events = vec![
+            started("a", 9, "/p", 100),
+            Event::UserPromptSubmit {
+                id: "a".into(),
+                at: 150,
+            },
+            started("b", 9, "/p", 200),
+            Event::UserPromptSubmit {
+                id: "b".into(),
+                at: 250,
+            },
+            Event::UserPromptSubmit {
+                id: "a".into(),
+                at: 300,
+            },
+            Event::Stop {
+                id: "b".into(),
+                at: 350,
+            },
+        ];
+
+        assert!(superseded(&events).is_empty());
+    }
+
+    /// The guarantee that makes this safe: a session blocked on you is never hidden,
+    /// whatever else its process went on to do.
+    #[test]
+    fn a_waiting_session_is_never_retired() {
+        let events = vec![
+            started("waiting", 9, "/p", 100),
+            Event::Notification {
+                id: "waiting".into(),
+                at: 150,
+            },
+            started("other", 9, "/p", 200),
+            Event::UserPromptSubmit {
+                id: "other".into(),
+                at: 900,
+            },
+        ];
+
+        assert!(superseded(&events).is_empty());
+    }
+
+    #[test]
+    fn the_session_the_process_is_actually_on_is_kept() {
+        let events = vec![
+            started("older", 9, "/p", 100),
+            Event::Stop {
+                id: "older".into(),
+                at: 150,
+            },
+            started("current", 9, "/p", 200),
+        ];
+
+        assert!(
+            superseded(&events).is_empty(),
+            "nothing acted after `current` started, so it is the live one"
         );
     }
 
     #[test]
-    fn a_resume_chain_keeps_only_the_session_still_being_used() {
-        // The real log's shape: one pid, several starts, and the one with the newest
-        // activity is the live one — even when it started before the others.
-        let start = |id: &str, at: Timestamp| Event::SessionStart {
-            id: id.into(),
-            cwd: "/p".into(),
-            pid: Some(9),
-            at,
-            term: None,
-        };
+    fn a_recycled_pid_in_another_project_is_not_the_same_process() {
         let events = vec![
-            start("a", 100),
-            start("b", 110),
+            started("old", 42, "/old-project", 100),
+            started("new", 42, "/new-project", 900),
             Event::UserPromptSubmit {
-                id: "b".into(),
-                at: 400,
-            },
-            start("c", 120),
-        ];
-
-        let mut sessions = fold_default(&events, 500);
-        retain_current(&mut sessions);
-        let ids: Vec<&str> = sessions.iter().map(|s| s.id.as_str()).collect();
-
-        assert_eq!(ids, vec!["b"]);
-    }
-
-    #[test]
-    fn two_processes_are_two_live_sessions_whatever_their_ages() {
-        // The rule must key on the process, never on time alone: parallel sessions in
-        // different terminals are the product's whole point.
-        let events = vec![
-            Event::SessionStart {
-                id: "older".into(),
-                cwd: "/a".into(),
-                pid: Some(1),
-                at: 100,
-                term: None,
-            },
-            Event::SessionStart {
-                id: "newer".into(),
-                cwd: "/b".into(),
-                pid: Some(2),
-                at: 500,
-                term: None,
+                id: "new".into(),
+                at: 950,
             },
         ];
 
-        let mut sessions = fold_default(&events, 600);
-        retain_current(&mut sessions);
-        assert_eq!(sessions.len(), 2);
-    }
-
-    #[test]
-    fn a_session_with_no_pid_is_never_superseded() {
-        // Hooks installed mid-session: no SessionStart, so no pid. It cannot be
-        // attributed to a process and must not be swept up by another one's resume.
-        let events = vec![
-            Event::UserPromptSubmit {
-                id: "pidless".into(),
-                at: 100,
-            },
-            Event::SessionStart {
-                id: "started".into(),
-                cwd: "/p".into(),
-                pid: Some(7),
-                at: 500,
-                term: None,
-            },
-        ];
-
-        let mut sessions = fold_default(&events, 600);
-        retain_current(&mut sessions);
-        assert_eq!(sessions.len(), 2);
+        assert!(superseded(&events).is_empty());
     }
 
     fn at(id: &str, last_active: Timestamp) -> Session {
@@ -1102,95 +1133,6 @@ mod tests {
 
         let ids: Vec<&str> = sessions.iter().map(|s| s.id.as_str()).collect();
         assert_eq!(ids, vec!["recent"]);
-    }
-
-    /// `fold` retires the replaced session, then `merge` finds no hook session with
-    /// that id and pushes the transcript-derived one straight back. Half the ghosts
-    /// in a real log have a transcript on disk, so the retirement has to survive it.
-    #[test]
-    fn a_retired_session_does_not_return_through_its_transcript() {
-        let events = vec![
-            Event::SessionStart {
-                id: "ghost".into(),
-                cwd: "/p".into(),
-                pid: Some(9),
-                at: 100,
-                term: None,
-            },
-            Event::SessionStart {
-                id: "resumed".into(),
-                cwd: "/p".into(),
-                pid: Some(9),
-                at: 110,
-                term: None,
-            },
-            Event::UserPromptSubmit {
-                id: "resumed".into(),
-                at: 200,
-            },
-        ];
-        let transcripts = vec![Session {
-            id: "ghost".into(),
-            cwd: "/p".into(),
-            pid: None,
-            state: SessionState::Idle,
-            since: 100,
-            last_active: 100,
-            title: Some("never sent".into()),
-            git_branch: None,
-            terminal: None,
-        }];
-
-        let mut merged = merge(fold_default(&events, 300), transcripts);
-        retain_current(&mut merged);
-
-        let ids: Vec<&str> = merged.iter().map(|s| s.id.as_str()).collect();
-        assert_eq!(ids, vec!["resumed"]);
-    }
-
-    /// pids recycle, and the log is retained for thirty days. Two unrelated sessions
-    /// weeks apart can land on the same pid; only a shared cwd makes them the same
-    /// `claude` process being resumed.
-    #[test]
-    fn a_recycled_pid_in_another_project_is_not_a_resume() {
-        let mut sessions = vec![
-            Session {
-                cwd: "/old-project".into(),
-                pid: Some(42),
-                ..at("older", 100)
-            },
-            Session {
-                cwd: "/new-project".into(),
-                pid: Some(42),
-                ..at("newer", 900)
-            },
-        ];
-
-        retain_current(&mut sessions);
-
-        assert_eq!(sessions.len(), 2, "different projects, different processes");
-    }
-
-    /// Both started in the same second and neither ever acted again. Exactly one
-    /// survives, or the ghost this rule exists to remove survives with it.
-    #[test]
-    fn two_sessions_tied_to_the_same_instant_resolve_to_one() {
-        let mut sessions = vec![
-            Session {
-                pid: Some(9),
-                cwd: "/p".into(),
-                ..at("a", 100)
-            },
-            Session {
-                pid: Some(9),
-                cwd: "/p".into(),
-                ..at("b", 100)
-            },
-        ];
-
-        retain_current(&mut sessions);
-
-        assert_eq!(sessions.len(), 1);
     }
 
     #[test]

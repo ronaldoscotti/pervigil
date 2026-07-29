@@ -151,7 +151,7 @@ under a real GUI launch), notifications, config, pin/dismiss, project visibility
 the hook-install card, **ten UI languages** (with RTL), launch-at-login,
 single-instance, the dismiss "read" mode, a **share-your-day** card, and
 **auto-updating, signed + notarized releases from CI** — on a pure core, now a crate
-of its own, with **170 tests** plus 20 on the frontend. A short demo is at the top;
+of its own, with **169 tests** plus 20 on the frontend. A short demo is at the top;
 the release pipeline is proven end-to-end — a tag produces signed mac/Windows/Linux
 bundles plus the updater manifest. Version bumps and tagging now go through
 release-please; that path ships its first release with 0.2.0.

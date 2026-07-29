@@ -33,6 +33,7 @@ export interface Snapshot {
   now: number;
   from: number;
   waiting: number;
+  waitingOutsideWindow: number;
   sessions: SessionView[];
   segments: Segment[];
   waitingShare: number;

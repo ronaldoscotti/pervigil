@@ -111,6 +111,17 @@ function refreshRow(node: HTMLElement, session: SessionView, now: number) {
   set(".row-cost", money(session.cost));
 }
 
+/** The tray counts what is blocked on you with no window at all, so a narrow span can
+ *  leave the badge pointing at rows the panel is not drawing. Say how many. */
+function renderOutsideWindow(list: HTMLElement, snapshot: Snapshot) {
+  list.querySelector(".outside-window")?.remove();
+  if (snapshot.waitingOutsideWindow === 0) return;
+  const note = document.createElement("div");
+  note.className = "outside-window";
+  note.textContent = t("waitingOutsideWindow", { n: snapshot.waitingOutsideWindow });
+  list.append(note);
+}
+
 function renderSessions(snapshot: Snapshot) {
   const list = el("sessions");
 
@@ -123,6 +134,7 @@ function renderSessions(snapshot: Snapshot) {
       (empty.querySelector("span") as HTMLElement).textContent = t("emptyBody");
       list.replaceChildren(empty);
     }
+    renderOutsideWindow(list, snapshot);
     sessionSig = "";
     return;
   }
@@ -135,6 +147,7 @@ function renderSessions(snapshot: Snapshot) {
       const node = list.querySelector<HTMLElement>(`[data-id="${CSS.escape(session.id)}"]`);
       if (node) refreshRow(node, session, snapshot.now);
     }
+    renderOutsideWindow(list, snapshot);
     return;
   }
 
@@ -143,6 +156,7 @@ function renderSessions(snapshot: Snapshot) {
   const scroll = list.scrollTop;
   list.replaceChildren(...snapshot.sessions.map((session) => row(session, snapshot.now)));
   list.scrollTop = scroll;
+  renderOutsideWindow(list, snapshot);
   if (focused) list.querySelector<HTMLElement>(`[data-id="${CSS.escape(focused)}"]`)?.focus();
 }
 

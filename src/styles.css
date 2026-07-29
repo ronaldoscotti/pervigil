@@ -1366,3 +1366,10 @@ body.mac .topbar {
 .spans button:focus-visible {
   outline: 1px solid rgba(244, 184, 96, 0.7);
 }
+
+.outside-window {
+  padding: 10px 16px 14px;
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+}

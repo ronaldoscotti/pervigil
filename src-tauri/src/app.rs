@@ -54,6 +54,10 @@ pub struct Snapshot {
     pub now: Timestamp,
     pub from: Timestamp,
     pub waiting: usize,
+    /// Blocked on you, but last active before the chosen span. The tray has no window
+    /// and still counts these, so the panel says how many it is not showing rather
+    /// than contradicting the badge.
+    pub waiting_outside_window: usize,
     pub sessions: Vec<SessionView>,
     pub segments: Vec<Segment>,
     pub waiting_share: f64,
@@ -269,9 +273,8 @@ impl App {
 
         let mut sessions = store::merge(store::fold(&events, to, &prefs), scan.sessions);
         retain_live(&mut sessions, &SystemProcesses);
-        // After `merge`: a retired session's transcript twin carries no pid, so the
-        // rule can only see it while the hook-derived pid is still attached.
-        store::retain_current(&mut sessions);
+        let retired = store::superseded(&events);
+        sessions.retain(|session| !retired.contains(&session.id));
         store::apply_dismissed(&mut sessions, &prefs);
         // Drop context-less ghosts: a hook fired (a Notification) but no cwd ever
         // arrived and no transcript backfilled one, so the row would be nameless.
@@ -318,6 +321,11 @@ impl App {
             today_cost,
             &self.strings.lock().expect("strings lock"),
         );
+
+        let waiting_live = sessions
+            .iter()
+            .filter(|s| s.state == SessionState::WaitingOnYou)
+            .count();
 
         // The span scopes the panel's list and nothing above it. The tray and the
         // notification baseline answer "what is blocked on you", which has no window —
@@ -370,6 +378,12 @@ impl App {
         Snapshot {
             now: to,
             from,
+            waiting_outside_window: waiting_live.saturating_sub(
+                sessions
+                    .iter()
+                    .filter(|s| s.state == SessionState::WaitingOnYou)
+                    .count(),
+            ),
             waiting: sessions
                 .iter()
                 .filter(|s| s.state == SessionState::WaitingOnYou)
