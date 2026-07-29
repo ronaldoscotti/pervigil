@@ -7,7 +7,7 @@ version = "0.1.1"
 description = "Cross-platform panel showing which Claude Code sessions are waiting on you"
 authors = ["Ronaldo Scotti"]
 edition = "2021"
-rust-version = "1.82"
+rust-version = "1.97"
 # The `record` shim is a second binary; without this, `cargo run` (and `tauri dev`)
 # can't tell which one is the app.
 default-run = "specola"

@@ -1,0 +1,5 @@
+# Pinned so a Rust release cannot change the build under us. Bumped deliberately,
+# with CI green, never by drifting `stable`.
+[toolchain]
+channel = "1.97.1"
+components = ["clippy", "rustfmt"]

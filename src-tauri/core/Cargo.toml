@@ -4,7 +4,7 @@ version = "0.1.1"
 description = "Specola's pure core: the event fold, pricing, and what the tray should say"
 authors = ["Ronaldo Scotti"]
 edition = "2021"
-rust-version = "1.82"
+rust-version = "1.97"
 
 # The boundary is this dependency list: no Tauri, no io, no platform.
 [dependencies]
