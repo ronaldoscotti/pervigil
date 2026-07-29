@@ -54,7 +54,7 @@ flowchart TD
     H["hook shim → specola record<br/>bundled CLI · atomic append · always exits 0"]
     E[("~/.specola/events.jsonl")]
     T[("~/.claude/projects/**/*.jsonl")]
-    C["pure Rust core<br/>fold(events, now, prefs) → sessions<br/>timeline(events) → lane"]
+    C["pure Rust core (own crate)<br/>fold(events, now, prefs) → sessions<br/>timeline(events, activity) → lane"]
     U["Tauri v2 panel + tray badge"]
 
     S -->|"SessionStart · Notification · Stop · UserPromptSubmit"| H
@@ -150,9 +150,11 @@ Built through **M10 and beyond** — click-to-focus (confirmed raising the windo
 under a real GUI launch), notifications, config, pin/dismiss, project visibility,
 the hook-install card, **ten UI languages** (with RTL), launch-at-login,
 single-instance, the dismiss "read" mode, a **share-your-day** card, and
-**auto-updating, signed + notarized releases from CI** — on a pure core with
-**139 tests**. A short demo is at the top; the release pipeline is proven end-to-end
-(a tag produces signed mac/Windows/Linux bundles plus the updater manifest).
+**auto-updating, signed + notarized releases from CI** — on a pure core, now a crate
+of its own, with **169 tests** plus 20 on the frontend. A short demo is at the top;
+the release pipeline is proven end-to-end — a tag produces signed mac/Windows/Linux
+bundles plus the updater manifest. Version bumps and tagging now go through
+release-please; that path ships its first release with 0.2.0.
 
 Verified honestly. The pure logic and the checkable side effects (clipboard copy,
 config and snippet round-trips, tier selection, the dismiss modes) are tested; three

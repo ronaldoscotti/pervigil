@@ -19,7 +19,11 @@ fn record() -> Option<()> {
 
     let at = SystemTime::now().duration_since(UNIX_EPOCH).ok()?.as_secs();
     let term = terminal();
-    let event = build_event(&kind, &payload, at, parent_pid(), term.clone())?;
+    // Named on stderr so the three causes are distinguishable to whoever is debugging
+    // a session that never appeared. Still exits 0 — stderr can't fail the turn.
+    let event = build_event(&kind, &payload, at, parent_pid(), term.clone())
+        .inspect_err(|why| eprintln!("specola record: {why}"))
+        .ok()?;
     let line = serde_json::to_string(&event).ok()?;
 
     let home = std::env::var_os("HOME").map(std::path::PathBuf::from)?;

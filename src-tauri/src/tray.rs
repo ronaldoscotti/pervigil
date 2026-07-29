@@ -1,5 +1,6 @@
 //! The tray, applied: assets, menu, clicks, and the clock that keeps it fresh.
 //! What the tray *says* is decided in [`crate::core::tray`] and only drawn here.
+//! Every ignored result below is a window-server call the user cannot act on.
 
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -10,8 +11,10 @@ use tauri::menu::{Menu, MenuEvent, MenuItemBuilder, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Manager, Theme};
 
-use crate::app::{self, App, Span};
-use crate::core::tray::TrayView;
+use crate::app::App;
+use crate::core::notify::Notice;
+use crate::core::span::Span;
+use crate::core::tray::{fallback, Fallback, TrayView};
 
 pub(crate) const TRAY_ID: &str = "specola";
 
@@ -123,8 +126,9 @@ pub(crate) fn apply(app: &AppHandle) {
     let mut shown = SHOWN.lock().expect("shown lock");
     if *shown != view.signature {
         if let Ok(menu) = menu(app, &view) {
-            let _ = tray.set_menu(Some(menu));
-            *shown = view.signature.clone();
+            if tray.set_menu(Some(menu)).is_ok() {
+                *shown = view.signature.clone();
+            }
         }
     }
 }
@@ -169,20 +173,17 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
 fn jump(app: &AppHandle, id: &str) {
     let state = app.state::<App>();
     let outcome = state.focus(id);
-    if outcome.raised {
-        return;
-    }
 
-    if state.notifications_on() {
-        app::fire(
+    match fallback(outcome.raised, state.notifications_on()) {
+        Fallback::Nothing => {}
+        Fallback::Notify => crate::commands::fire(
             app,
-            vec![app::Notice {
+            vec![Notice {
                 title: outcome.label,
                 body: outcome.resume.unwrap_or_default(),
             }],
-        );
-    } else {
-        show_panel(app);
+        ),
+        Fallback::OpenPanel => show_panel(app),
     }
 }
 
@@ -210,7 +211,7 @@ fn spawn_ticker(app: AppHandle) {
         }
         let state = app.state::<App>();
         state.snapshot(Span::Today, Local::now());
-        app::fire(&app, state.take_pending());
+        crate::commands::fire(&app, state.take_pending());
         apply(&app);
     });
 }

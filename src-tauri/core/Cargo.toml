@@ -1,0 +1,19 @@
+[package]
+name = "specola-core"
+# Not the shipped version — that lives in tauri.conf.json, which is what the
+# app reports and what release-please bumps. Neither crate is published, and a
+# version here would only drift against Cargo.lock.
+version = "0.1.1"
+description = "Specola's pure core: the event fold, pricing, and what the tray should say"
+authors = ["Ronaldo Scotti"]
+edition = "2021"
+rust-version = "1.97"
+
+# The boundary is this dependency list: no Tauri, no io, no platform.
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
+
+[dev-dependencies]
+proptest = "1"

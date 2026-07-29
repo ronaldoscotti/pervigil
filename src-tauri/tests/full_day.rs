@@ -57,7 +57,7 @@ fn one_project_can_hold_two_live_sessions() {
 
 #[test]
 fn the_lane_covers_the_whole_day_and_reports_a_waiting_share() {
-    let segments = timeline(&full_day(), DAY_START, NOW);
+    let segments = timeline(&full_day(), &[], DAY_START, NOW);
 
     assert_eq!(segments.first().unwrap().from, DAY_START);
     assert_eq!(segments.last().unwrap().to, NOW);

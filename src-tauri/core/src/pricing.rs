@@ -49,7 +49,10 @@ pub fn shipped() -> PriceTable {
 /// `None` for a model the table doesn't price — the panel shows `—` rather than a
 /// confidently wrong figure.
 pub fn cost(table: &PriceTable, model: &str, usage: &TokenUsage) -> Option<f64> {
-    let rate = table.models.get(model)?;
+    let rate = table
+        .models
+        .get(model)
+        .or_else(|| table.models.get(undated(model)))?;
     let billed = usage.input as f64 * rate.input
         + usage.output as f64 * rate.output
         + usage.cache_read as f64 * rate.cache_read
@@ -57,6 +60,15 @@ pub fn cost(table: &PriceTable, model: &str, usage: &TokenUsage) -> Option<f64> 
         + usage.cache_write_1h as f64 * rate.cache_write_1h;
 
     Some(billed / table.per_tokens)
+}
+
+/// Transcripts sometimes carry a model's release date (`claude-haiku-4-5-20251001`)
+/// where the table keys on the bare alias. Strips a trailing `-YYYYMMDD`.
+fn undated(model: &str) -> &str {
+    match model.rsplit_once('-') {
+        Some((head, tail)) if tail.len() == 8 && tail.bytes().all(|b| b.is_ascii_digit()) => head,
+        _ => model,
+    }
 }
 
 /// Total cost of entries falling inside `[from, to]`. Entries the table can't price
@@ -103,6 +115,45 @@ mod tests {
 
     fn near(a: f64, b: f64) -> bool {
         (a - b).abs() < 1e-9
+    }
+
+    /// The two ways a session showed `—` on a real machine: a model shipped after
+    /// the table was written, and a model id carrying its release date.
+    #[test]
+    fn prices_every_model_claude_code_currently_reports() {
+        let table = shipped();
+
+        for model in [
+            "claude-opus-5",
+            "claude-opus-4-8",
+            "claude-fable-5",
+            "claude-sonnet-5",
+            "claude-sonnet-4-6",
+            "claude-haiku-4-5",
+        ] {
+            assert!(
+                cost(&table, model, &real_turn()).is_some(),
+                "{model} is unpriced, so its sessions show an em dash"
+            );
+        }
+    }
+
+    #[test]
+    fn a_dated_model_id_prices_the_same_as_its_bare_alias() {
+        let table = shipped();
+
+        assert_eq!(
+            cost(&table, "claude-haiku-4-5-20251001", &real_turn()),
+            cost(&table, "claude-haiku-4-5", &real_turn()),
+        );
+    }
+
+    #[test]
+    fn a_model_the_table_does_not_know_stays_unpriced() {
+        let table = shipped();
+
+        assert_eq!(cost(&table, "<synthetic>", &real_turn()), None);
+        assert_eq!(cost(&table, "claude-from-the-future-9", &real_turn()), None);
     }
 
     #[test]

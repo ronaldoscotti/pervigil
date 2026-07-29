@@ -13,6 +13,27 @@ struct Hook {
     cwd: Option<String>,
 }
 
+/// Why a hook payload produced no event. Three different operational problems: a
+/// truncated pipe, a payload whose shape changed, and a hook kind we do not handle.
+#[derive(Debug, PartialEq, Eq)]
+pub enum IngestError {
+    Malformed(String),
+    NoSessionId,
+    UnknownKind(String),
+}
+
+impl std::fmt::Display for IngestError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IngestError::Malformed(why) => write!(f, "payload is not valid JSON: {why}"),
+            IngestError::NoSessionId => write!(f, "payload carries no session_id"),
+            IngestError::UnknownKind(kind) => write!(f, "unhandled hook kind: {kind}"),
+        }
+    }
+}
+
+impl std::error::Error for IngestError {}
+
 /// Turn a hook payload into an event. The kind comes from the argv the hook snippet
 /// supplies, so we never depend on the payload naming itself. `term` is captured from
 /// the shim's environment and only rides on `SessionStart`.
@@ -22,22 +43,23 @@ pub fn build_event(
     at: Timestamp,
     pid: Option<u32>,
     term: Terminal,
-) -> Option<Event> {
-    let hook: Hook = serde_json::from_str(payload).ok()?;
-    let id = hook.session_id?;
+) -> Result<Event, IngestError> {
+    let hook: Hook =
+        serde_json::from_str(payload).map_err(|e| IngestError::Malformed(e.to_string()))?;
+    let id = hook.session_id.ok_or(IngestError::NoSessionId)?;
 
     match kind {
-        "SessionStart" => Some(Event::SessionStart {
+        "SessionStart" => Ok(Event::SessionStart {
             id,
             cwd: hook.cwd.unwrap_or_default(),
             pid,
             at,
             term: term.some(),
         }),
-        "Notification" => Some(Event::Notification { id, at }),
-        "Stop" => Some(Event::Stop { id, at }),
-        "UserPromptSubmit" => Some(Event::UserPromptSubmit { id, at }),
-        _ => None,
+        "Notification" => Ok(Event::Notification { id, at }),
+        "Stop" => Ok(Event::Stop { id, at }),
+        "UserPromptSubmit" => Ok(Event::UserPromptSubmit { id, at }),
+        _ => Err(IngestError::UnknownKind(kind.to_string())),
     }
 }
 
@@ -90,10 +112,7 @@ mod tests {
             Terminal::default(),
         );
 
-        assert!(matches!(
-            event,
-            Some(Event::SessionStart { term: None, .. })
-        ));
+        assert!(matches!(event, Ok(Event::SessionStart { term: None, .. })));
     }
 
     #[test]
@@ -124,19 +143,50 @@ mod tests {
         );
     }
 
+    /// The three ways ingestion fails are three different operational problems: a
+    /// broken pipe, a hook payload that changed shape, and a hook we do not handle.
+    /// Collapsing them into `None` made them indistinguishable in a log.
     #[test]
-    fn an_unknown_kind_is_ignored_rather_than_fatal() {
-        assert!(build_event("Nonsense", PAYLOAD, 1, Some(1), Terminal::default()).is_none());
+    fn a_payload_that_is_not_json_says_so() {
+        let error = build_event("Stop", "not json at all", 1, Some(1), Terminal::default());
+
+        assert!(matches!(error, Err(IngestError::Malformed(_))));
     }
 
     #[test]
-    fn a_payload_without_a_session_id_is_ignored() {
-        assert!(build_event("Stop", r#"{"cwd":"/p"}"#, 1, Some(1), Terminal::default()).is_none());
+    fn a_payload_without_a_session_id_says_so() {
+        let error = build_event("Stop", r#"{"cwd":"/p"}"#, 1, Some(1), Terminal::default());
+
+        assert_eq!(error.unwrap_err(), IngestError::NoSessionId);
     }
 
     #[test]
-    fn a_payload_that_is_not_json_is_ignored() {
-        assert!(build_event("Stop", "not json at all", 1, Some(1), Terminal::default()).is_none());
+    fn an_unknown_kind_names_the_kind() {
+        let error = build_event("Nonsense", PAYLOAD, 1, Some(1), Terminal::default());
+
+        assert_eq!(
+            error.unwrap_err(),
+            IngestError::UnknownKind("Nonsense".into())
+        );
+    }
+
+    #[test]
+    fn the_three_causes_are_distinguishable_to_an_operator() {
+        let messages = [
+            build_event("Stop", "{", 1, None, Terminal::default()),
+            build_event("Stop", "{}", 1, None, Terminal::default()),
+            build_event("Nope", PAYLOAD, 1, None, Terminal::default()),
+        ]
+        .map(|r| r.unwrap_err().to_string());
+
+        assert_eq!(
+            messages
+                .iter()
+                .collect::<std::collections::HashSet<_>>()
+                .len(),
+            3,
+            "three causes must not read as one"
+        );
     }
 
     #[test]

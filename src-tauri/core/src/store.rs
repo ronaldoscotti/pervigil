@@ -21,7 +21,14 @@ const WAITING_TTL_SECS: Timestamp = 30 * 60;
 /// and hidden sessions still count. A `WaitingOnYou` state decays to idle after
 /// [`WAITING_TTL_SECS`] of silence, so a session that was notified and then died —
 /// no `Stop` ever — can't paint the whole window.
-pub fn timeline(events: &[Event], from: Timestamp, to: Timestamp) -> Vec<Segment> {
+/// `activity` is `(session, when)` per transcript record — the evidence a wait was
+/// answered, since approving a permission prompt fires no hook. See [`answered`].
+pub fn timeline(
+    events: &[Event],
+    activity: &[(SessionId, Timestamp)],
+    from: Timestamp,
+    to: Timestamp,
+) -> Vec<Segment> {
     let mut ticks: Vec<Tick> = Vec::new();
     for event in events.iter().filter(|event| event.at() <= to) {
         ticks.push(Tick::Event(event));
@@ -32,8 +39,12 @@ pub fn timeline(events: &[Event], from: Timestamp, to: Timestamp) -> Vec<Segment
             }
         }
     }
-    // Stable by time; a real event beats an expiry at the same instant.
-    ticks.sort_by_key(|tick| (tick.at(), tick.is_expire()));
+    for (id, at) in activity.iter().filter(|(_, at)| *at <= to) {
+        ticks.push(Tick::Active(id, *at));
+    }
+    // Activity is applied before the events of the same instant: the assistant record
+    // that triggers a permission prompt shares its second, and must not cancel it.
+    ticks.sort_by_key(|tick| (tick.at(), tick.rank()));
 
     let mut states: HashMap<&SessionId, (SessionState, Timestamp)> = HashMap::new();
     let mut segments: Vec<Segment> = Vec::new();
@@ -52,6 +63,13 @@ pub fn timeline(events: &[Event], from: Timestamp, to: Timestamp) -> Vec<Segment
                 };
                 states.insert(event.id(), (state_after(event), expiry));
             }
+            // Only a wait is cleared: a session that stopped must stay stopped.
+            Tick::Active(id, at) => {
+                let _ = at;
+                if matches!(states.get(id), Some((SessionState::WaitingOnYou, _))) {
+                    states.insert(id, (SessionState::Working, 0));
+                }
+            }
             // Ignore an expiry the session has already left or renotified past.
             Tick::Expire(id, expiry) => {
                 if states.get(id) == Some(&(SessionState::WaitingOnYou, *expiry)) {
@@ -67,6 +85,7 @@ pub fn timeline(events: &[Event], from: Timestamp, to: Timestamp) -> Vec<Segment
 
 enum Tick<'a> {
     Event(&'a Event),
+    Active(&'a SessionId, Timestamp),
     Expire(&'a SessionId, Timestamp),
 }
 
@@ -74,12 +93,16 @@ impl Tick<'_> {
     fn at(&self) -> Timestamp {
         match self {
             Tick::Event(event) => event.at(),
-            Tick::Expire(_, at) => *at,
+            Tick::Active(_, at) | Tick::Expire(_, at) => *at,
         }
     }
 
-    fn is_expire(&self) -> bool {
-        matches!(self, Tick::Expire(..))
+    fn rank(&self) -> u8 {
+        match self {
+            Tick::Active(..) => 0,
+            Tick::Event(_) => 1,
+            Tick::Expire(..) => 2,
+        }
     }
 }
 
@@ -136,6 +159,11 @@ pub fn merge(mut hooks: Vec<Session>, transcripts: Vec<Session>) -> Vec<Session>
     for transcript in transcripts {
         match hooks.iter_mut().find(|hook| hook.id == transcript.id) {
             Some(hook) => {
+                if answered(hook, &transcript) {
+                    hook.state = SessionState::Working;
+                    hook.since = transcript.last_active;
+                    hook.last_active = hook.last_active.max(transcript.last_active);
+                }
                 hook.title = hook.title.take().or(transcript.title);
                 hook.git_branch = hook.git_branch.take().or(transcript.git_branch);
                 // A hook session born from a Notification has no cwd; the transcript does.
@@ -147,6 +175,12 @@ pub fn merge(mut hooks: Vec<Session>, transcripts: Vec<Session>) -> Vec<Session>
         }
     }
     hooks
+}
+
+/// Approving a permission prompt fires no hook, so nothing clears the wait it opened.
+/// A transcript record written after it is proof the turn carried on.
+fn answered(hook: &Session, transcript: &Session) -> bool {
+    hook.state == SessionState::WaitingOnYou && transcript.last_active > hook.since
 }
 
 /// The list's whole order, in one place: waiting-on-you, then pinned, then recency.
@@ -263,6 +297,61 @@ pub fn fold(events: &[Event], _now: Timestamp, prefs: &ViewPrefs) -> Vec<Session
     sessions
 }
 
+/// Sessions the process has moved on from: `/resume` starts a new id inside the same
+/// `claude`, and the one it left never emits again, so neither age nor liveness can
+/// retire it.
+///
+/// Only a session whose *last* event is its own `SessionStart` can be retired — it
+/// started and did nothing. A session that ever reached waiting, your-turn, or a
+/// prompt is therefore untouchable, which matters because `/resume` can also switch
+/// back and forth: two live sessions genuinely interleave under one pid.
+pub fn superseded(events: &[Event]) -> std::collections::HashSet<SessionId> {
+    let mut last: HashMap<&SessionId, (Timestamp, bool)> = HashMap::new();
+    let mut process: HashMap<&SessionId, (u32, &str)> = HashMap::new();
+
+    for event in events {
+        let started = matches!(event, Event::SessionStart { .. });
+        let seen = last.entry(event.id()).or_insert((event.at(), started));
+        if event.at() >= seen.0 {
+            *seen = (event.at(), started);
+        }
+        if let Event::SessionStart {
+            id,
+            pid: Some(pid),
+            cwd,
+            ..
+        } = event
+        {
+            process.insert(id, (*pid, cwd.as_str()));
+        }
+    }
+
+    let mut newest: HashMap<(u32, &str), Timestamp> = HashMap::new();
+    for (id, (at, _)) in &last {
+        if let Some(key) = process.get(id) {
+            let seen = newest.entry(*key).or_insert(*at);
+            *seen = (*seen).max(*at);
+        }
+    }
+
+    last.iter()
+        .filter(|(id, (at, started))| {
+            *started
+                && process
+                    .get(*id)
+                    .and_then(|key| newest.get(key))
+                    .is_some_and(|moved_on| *moved_on > *at)
+        })
+        .map(|(id, _)| (*id).clone())
+        .collect()
+}
+
+/// Scope the list to the span the panel is showing. Applied after [`merge`], so it
+/// covers transcript-only sessions too.
+pub fn retain_within(sessions: &mut Vec<Session>, from: Timestamp) {
+    sessions.retain(|session| session.last_active >= from);
+}
+
 /// Resolve dismissed sessions per the chosen mode, until they act again: `Hide`
 /// removes them; `Read` keeps them but demotes to idle — a "mark as read". Applied
 /// after [`merge`] too, so it also covers transcript-only sessions — which never pass
@@ -289,10 +378,16 @@ mod tests {
         Event::SessionStart {
             id: id.into(),
             cwd: format!("/{id}"),
-            pid: Some(10),
+            pid: Some(pid_for(id)),
             at,
             term: None,
         }
+    }
+
+    fn pid_for(id: &str) -> u32 {
+        id.bytes().fold(7u32, |acc, byte| {
+            acc.wrapping_mul(31).wrapping_add(u32::from(byte))
+        })
     }
 
     fn fold_default(events: &[Event], now: Timestamp) -> Vec<Session> {
@@ -496,9 +591,74 @@ mod tests {
         ]
     }
 
+    /// The assistant's tool_use record and the permission `Notification` it triggers
+    /// land in the same epoch second, so activity must not cancel a wait it precedes.
+    /// `merge` uses a strict `>` for the row; the lane has to agree.
+    #[test]
+    fn activity_in_the_same_second_does_not_cancel_the_wait_it_opened() {
+        let events = vec![Event::Notification {
+            id: "s1".into(),
+            at: 100,
+        }];
+        let activity = vec![("s1".to_string(), 100)];
+
+        let segments = timeline(&events, &activity, 100, 1_900);
+
+        assert_eq!(
+            waiting_share(&segments),
+            1.0,
+            "a real block must not read as zero waiting: {segments:?}"
+        );
+    }
+
+    /// The lane is painted from events alone, so a permission prompt kept painting
+    /// amber for as long as the turn ran — the row said Working while the lane said
+    /// 86% waiting. Transcript activity ends the wait here too.
+    #[test]
+    fn transcript_activity_ends_a_wait_in_the_lane() {
+        let events = vec![Event::Notification {
+            id: "s1".into(),
+            at: 0,
+        }];
+        let activity = vec![("s1".to_string(), 100)];
+
+        let segments = timeline(&events, &activity, 0, 200);
+
+        assert!(
+            (waiting_share(&segments) - 0.5).abs() < 1e-9,
+            "waiting until the transcript moved, working after: {segments:?}"
+        );
+    }
+
+    #[test]
+    fn activity_before_the_wait_does_not_end_it() {
+        let events = vec![Event::Notification {
+            id: "s1".into(),
+            at: 100,
+        }];
+        let activity = vec![("s1".to_string(), 50)];
+
+        let segments = timeline(&events, &activity, 0, 200);
+
+        assert_eq!(waiting_share(&segments), 0.5, "the wait still stands");
+    }
+
+    #[test]
+    fn activity_never_revives_a_session_that_stopped() {
+        let events = vec![Event::Stop {
+            id: "s1".into(),
+            at: 0,
+        }];
+        let activity = vec![("s1".to_string(), 100)];
+
+        let segments = timeline(&events, &activity, 0, 200);
+
+        assert_eq!(waiting_share(&segments), 0.0);
+    }
+
     #[test]
     fn timeline_collapses_to_aggregate_segments() {
-        let segments = timeline(&two_session_window(), 0, 600);
+        let segments = timeline(&two_session_window(), &[], 0, 600);
 
         assert_eq!(segments.first().unwrap().state, SessionState::Working);
         assert_eq!(segments.last().unwrap().state, SessionState::WaitingOnYou);
@@ -507,7 +667,7 @@ mod tests {
 
     #[test]
     fn timeline_segments_are_contiguous_and_cover_the_window() {
-        let segments = timeline(&two_session_window(), 0, 600);
+        let segments = timeline(&two_session_window(), &[], 0, 600);
 
         assert_eq!(segments.first().unwrap().from, 0);
         assert_eq!(segments.last().unwrap().to, 600);
@@ -518,7 +678,7 @@ mod tests {
 
     #[test]
     fn empty_log_is_one_idle_segment() {
-        let segments = timeline(&[], 0, 600);
+        let segments = timeline(&[], &[], 0, 600);
 
         assert_eq!(
             segments,
@@ -532,7 +692,7 @@ mod tests {
 
     #[test]
     fn waiting_share_is_the_waiting_fraction_of_the_window() {
-        let segments = timeline(&two_session_window(), 0, 600);
+        let segments = timeline(&two_session_window(), &[], 0, 600);
 
         assert!((waiting_share(&segments) - 0.5).abs() < f64::EPSILON);
     }
@@ -546,7 +706,7 @@ mod tests {
             at: 0,
         }];
 
-        let segments = timeline(&events, 0, 10 * WAITING_TTL_SECS);
+        let segments = timeline(&events, &[], 0, 10 * WAITING_TTL_SECS);
 
         let share = waiting_share(&segments);
         assert!(
@@ -565,7 +725,7 @@ mod tests {
         }];
         let from = 5 * WAITING_TTL_SECS;
 
-        let segments = timeline(&events, from, from + WAITING_TTL_SECS);
+        let segments = timeline(&events, &[], from, from + WAITING_TTL_SECS);
 
         assert_eq!(waiting_share(&segments), 0.0);
     }
@@ -578,7 +738,7 @@ mod tests {
             at: 0,
         }];
 
-        let segments = timeline(&events, 0, WAITING_TTL_SECS);
+        let segments = timeline(&events, &[], 0, WAITING_TTL_SECS);
 
         assert_eq!(waiting_share(&segments), 1.0);
     }
@@ -598,7 +758,7 @@ mod tests {
             },
         ];
 
-        let segments = timeline(&events, 0, 2 * WAITING_TTL_SECS - 20);
+        let segments = timeline(&events, &[], 0, 2 * WAITING_TTL_SECS - 20);
 
         assert_eq!(waiting_share(&segments), 1.0);
     }
@@ -615,6 +775,77 @@ mod tests {
             git_branch: None,
             terminal: None,
         }
+    }
+
+    /// Claude Code fires `Notification` for a permission prompt, but approving it
+    /// fires nothing — the hook log has no event that clears the wait, so the row
+    /// stayed amber while Claude worked. Transcript records written after the
+    /// notification are proof the turn continued.
+    #[test]
+    fn transcript_activity_after_a_wait_means_the_prompt_was_answered() {
+        let hooks = vec![Session {
+            state: SessionState::WaitingOnYou,
+            since: 1_000,
+            last_active: 1_000,
+            ..session("s1", SessionState::WaitingOnYou, None, Some(10))
+        }];
+        let transcripts = vec![Session {
+            since: 1_224,
+            last_active: 1_224,
+            ..session("s1", SessionState::Idle, Some("working"), None)
+        }];
+
+        let merged = merge(hooks, transcripts);
+
+        assert_eq!(merged[0].state, SessionState::Working);
+        assert_eq!(
+            merged[0].last_active, 1_224,
+            "the transcript is the newest thing that happened"
+        );
+    }
+
+    #[test]
+    fn a_wait_with_no_transcript_activity_after_it_stays_waiting() {
+        let hooks = vec![Session {
+            state: SessionState::WaitingOnYou,
+            since: 2_000,
+            last_active: 2_000,
+            ..session("s1", SessionState::WaitingOnYou, None, Some(10))
+        }];
+        let transcripts = vec![Session {
+            since: 1_500,
+            last_active: 1_500,
+            ..session("s1", SessionState::Idle, Some("blocked"), None)
+        }];
+
+        let merged = merge(hooks, transcripts);
+
+        assert_eq!(
+            merged[0].state,
+            SessionState::WaitingOnYou,
+            "nothing happened after the prompt, so it is a real block"
+        );
+    }
+
+    #[test]
+    fn a_stopped_session_is_not_revived_by_its_own_final_records() {
+        // `Stop` is an honest end of turn. Trailing transcript writes must not drag
+        // it back to Working, or every finished session reads as busy.
+        let hooks = vec![Session {
+            state: SessionState::YourTurn,
+            since: 1_000,
+            last_active: 1_000,
+            ..session("s1", SessionState::YourTurn, None, Some(10))
+        }];
+        let transcripts = vec![Session {
+            since: 1_050,
+            last_active: 1_050,
+            ..session("s1", SessionState::Idle, Some("done"), None)
+        }];
+
+        let merged = merge(hooks, transcripts);
+
+        assert_eq!(merged[0].state, SessionState::YourTurn);
     }
 
     #[test]
@@ -699,7 +930,7 @@ mod tests {
             cwd: "/p".into(),
             pid: Some(10),
             at: 100,
-            term: Some(crate::core::terminal::Terminal {
+            term: Some(crate::terminal::Terminal {
                 tmux_pane: Some("%3".into()),
                 ..Default::default()
             }),
@@ -770,6 +1001,147 @@ mod tests {
         let current = vec![waiting("new")];
 
         assert_eq!(newly_waiting(&HashMap::new(), &current).len(), 1);
+    }
+
+    fn started(id: &str, pid: u32, cwd: &str, at: Timestamp) -> Event {
+        Event::SessionStart {
+            id: id.into(),
+            cwd: cwd.into(),
+            pid: Some(pid),
+            at,
+            term: None,
+        }
+    }
+
+    #[test]
+    fn a_session_that_started_and_did_nothing_is_retired() {
+        let events = vec![
+            started("ghost", 9, "/p", 100),
+            started("resumed", 9, "/p", 110),
+            Event::UserPromptSubmit {
+                id: "resumed".into(),
+                at: 200,
+            },
+        ];
+
+        let retired = superseded(&events);
+
+        assert_eq!(retired.len(), 1);
+        assert!(retired.contains("ghost"));
+    }
+
+    /// `/resume` switches back and forth, so two live sessions genuinely interleave
+    /// under one pid. Retiring whichever acted least recently would hide a real one.
+    #[test]
+    fn interleaved_sessions_are_both_kept() {
+        let events = vec![
+            started("a", 9, "/p", 100),
+            Event::UserPromptSubmit {
+                id: "a".into(),
+                at: 150,
+            },
+            started("b", 9, "/p", 200),
+            Event::UserPromptSubmit {
+                id: "b".into(),
+                at: 250,
+            },
+            Event::UserPromptSubmit {
+                id: "a".into(),
+                at: 300,
+            },
+            Event::Stop {
+                id: "b".into(),
+                at: 350,
+            },
+        ];
+
+        assert!(superseded(&events).is_empty());
+    }
+
+    /// The guarantee that makes this safe: a session blocked on you is never hidden,
+    /// whatever else its process went on to do.
+    #[test]
+    fn a_waiting_session_is_never_retired() {
+        let events = vec![
+            started("waiting", 9, "/p", 100),
+            Event::Notification {
+                id: "waiting".into(),
+                at: 150,
+            },
+            started("other", 9, "/p", 200),
+            Event::UserPromptSubmit {
+                id: "other".into(),
+                at: 900,
+            },
+        ];
+
+        assert!(superseded(&events).is_empty());
+    }
+
+    #[test]
+    fn the_session_the_process_is_actually_on_is_kept() {
+        let events = vec![
+            started("older", 9, "/p", 100),
+            Event::Stop {
+                id: "older".into(),
+                at: 150,
+            },
+            started("current", 9, "/p", 200),
+        ];
+
+        assert!(
+            superseded(&events).is_empty(),
+            "nothing acted after `current` started, so it is the live one"
+        );
+    }
+
+    #[test]
+    fn a_recycled_pid_in_another_project_is_not_the_same_process() {
+        let events = vec![
+            started("old", 42, "/old-project", 100),
+            started("new", 42, "/new-project", 900),
+            Event::UserPromptSubmit {
+                id: "new".into(),
+                at: 950,
+            },
+        ];
+
+        assert!(superseded(&events).is_empty());
+    }
+
+    fn at(id: &str, last_active: Timestamp) -> Session {
+        Session {
+            id: id.into(),
+            cwd: format!("/{id}"),
+            pid: None,
+            state: SessionState::Idle,
+            since: last_active,
+            last_active,
+            title: None,
+            git_branch: None,
+            terminal: None,
+        }
+    }
+
+    /// The span filter scoped the lane, the cost and the tokens, but never the list —
+    /// so "last 4 hours" showed the same rows as "today", some of them days old.
+    #[test]
+    fn the_window_drops_a_session_that_went_quiet_before_it() {
+        let mut sessions = vec![at("recent", 900), at("stale", 100)];
+
+        retain_within(&mut sessions, 500);
+
+        let ids: Vec<&str> = sessions.iter().map(|s| s.id.as_str()).collect();
+        assert_eq!(ids, vec!["recent"]);
+    }
+
+    #[test]
+    fn a_session_active_exactly_at_the_boundary_is_inside_the_window() {
+        let mut sessions = vec![at("edge", 500)];
+
+        retain_within(&mut sessions, 500);
+
+        assert_eq!(sessions.len(), 1);
     }
 
     #[test]

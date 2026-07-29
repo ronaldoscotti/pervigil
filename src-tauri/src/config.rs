@@ -160,6 +160,21 @@ mod tests {
         assert_eq!(prefs.dismissed.get("s2"), Some(&400));
     }
 
+    /// A settings write that fails must say so. Here the parent is an existing
+    /// *file*, so no directory can be created under it.
+    #[test]
+    fn a_save_that_cannot_write_reports_the_error() {
+        let blocker = temp_path("unwritable");
+        std::fs::create_dir_all(blocker.parent().unwrap()).unwrap();
+        std::fs::write(&blocker, "not a directory").unwrap();
+
+        let result = Config::default().save(&blocker.join("config.json"));
+
+        assert!(result.is_err(), "a lost setting must not read as saved");
+
+        std::fs::remove_dir_all(blocker.parent().unwrap()).ok();
+    }
+
     #[test]
     fn a_hidden_project_is_not_shown() {
         let mut config = Config::default();

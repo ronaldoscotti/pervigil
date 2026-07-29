@@ -132,6 +132,24 @@ pub fn tray_view(sessions: &[Session], today_cost: f64, words: &TrayStrings) -> 
     }
 }
 
+/// What a tray click should do when the window could not be raised. A silent
+/// clipboard copy is indistinguishable from a dead click, and a hidden panel has no
+/// toast to say otherwise — so either the OS says it, or the panel is opened so it can.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Fallback {
+    Nothing,
+    Notify,
+    OpenPanel,
+}
+
+pub fn fallback(raised: bool, notifications_on: bool) -> Fallback {
+    match (raised, notifications_on) {
+        (true, _) => Fallback::Nothing,
+        (false, true) => Fallback::Notify,
+        (false, false) => Fallback::OpenPanel,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -270,5 +288,21 @@ mod tests {
         let after = tray_view(&[waiting("b")], 0.0, &en());
 
         assert_ne!(before.signature, after.signature);
+    }
+
+    #[test]
+    fn a_raised_window_needs_no_follow_up() {
+        assert_eq!(fallback(true, true), Fallback::Nothing);
+        assert_eq!(fallback(true, false), Fallback::Nothing);
+    }
+
+    #[test]
+    fn a_copy_is_announced_by_the_os_when_alerts_are_on() {
+        assert_eq!(fallback(false, true), Fallback::Notify);
+    }
+
+    #[test]
+    fn with_alerts_off_the_panel_is_opened_so_its_toast_can_speak() {
+        assert_eq!(fallback(false, false), Fallback::OpenPanel);
     }
 }

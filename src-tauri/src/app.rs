@@ -2,14 +2,16 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use chrono::{DateTime, Duration, Local, TimeZone};
-use serde::{Deserialize, Serialize};
+use chrono::{DateTime, Local};
+use serde::Serialize;
 
 use crate::config::Config;
 use crate::core::event::{parse_log, SessionId, Timestamp};
+use crate::core::notify::{name, notices, Notice};
 use crate::core::pricing::{self, PriceTable, UsageEntry};
 use crate::core::prune::prune;
 use crate::core::session::{project, Session, SessionState};
+use crate::core::span::{bounds, start_of_day, Span};
 use crate::core::store::{self, Segment};
 use crate::core::terminal::Terminal;
 use crate::core::tray::{tray_view, TrayStrings, TrayView};
@@ -22,42 +24,6 @@ const LOG: &str = ".specola/events.jsonl";
 const PROJECTS: &str = ".claude/projects";
 const CONFIG: &str = ".specola/config.json";
 const SETTINGS: &str = ".claude/settings.json";
-
-/// The one filter in the UI. It scopes the lane, the cost readout, and how far back
-/// transcripts are read — the panel shows the window you picked, and nothing else.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-pub enum Span {
-    #[serde(rename = "4h")]
-    FourHours,
-    #[serde(rename = "today")]
-    Today,
-    #[serde(rename = "week")]
-    Week,
-}
-
-/// `[from, now]` in epoch seconds. Today is a local calendar boundary; the week is
-/// trailing, so its last day never falls off a reset.
-pub fn bounds(span: Span, now: DateTime<Local>) -> (Timestamp, Timestamp) {
-    let from = match span {
-        Span::FourHours => now - Duration::hours(4),
-        Span::Today => start_of_day(now),
-        Span::Week => now - Duration::days(7),
-    };
-
-    (
-        from.timestamp().max(0) as Timestamp,
-        now.timestamp().max(0) as Timestamp,
-    )
-}
-
-/// Local midnight — or, on a day whose clocks skip it, the first instant that exists.
-fn start_of_day(now: DateTime<Local>) -> DateTime<Local> {
-    let date = now.date_naive();
-    (0..24)
-        .filter_map(|hour| date.and_hms_opt(hour, 0, 0))
-        .find_map(|at| now.timezone().from_local_datetime(&at).earliest())
-        .unwrap_or(now)
-}
 
 /// One row of the panel. Everything the UI needs to draw it, and nothing it would
 /// have to compute for itself.
@@ -88,6 +54,10 @@ pub struct Snapshot {
     pub now: Timestamp,
     pub from: Timestamp,
     pub waiting: usize,
+    /// Blocked on you, but last active before the chosen span. The tray has no window
+    /// and still counts these, so the panel says how many it is not showing rather
+    /// than contradicting the badge.
+    pub waiting_outside_window: usize,
     pub sessions: Vec<SessionView>,
     pub segments: Vec<Segment>,
     pub waiting_share: f64,
@@ -129,14 +99,11 @@ pub struct FocusOutcome {
     pub error: Option<String>,
 }
 
-/// A native notification to fire — computed in `snapshot`, drained and shown by the
-/// command wrapper so the pure pipeline stays free of Tauri.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Notice {
-    pub title: String,
-    pub body: String,
-}
-
+/// # Lock ordering
+///
+/// Only `snapshot` takes more than one, in field order: `scanner` → `config` → `seen`
+/// → `pending` → `targets` → `tray` → `strings`. New code that needs two follows the
+/// same order or says why it cannot.
 pub struct App {
     home: PathBuf,
     prices: PriceTable,
@@ -162,7 +129,18 @@ pub struct App {
 
 impl App {
     pub fn new() -> Self {
-        let home = io::home().unwrap_or_default();
+        Self::at(io::home().unwrap_or_default())
+    }
+
+    pub fn home(&self) -> &Path {
+        &self.home
+    }
+
+    pub fn settings_path(&self) -> PathBuf {
+        self.home.join(SETTINGS)
+    }
+
+    pub fn at(home: PathBuf) -> Self {
         prune_log(&home);
         let config = Config::load(&home.join(CONFIG));
         Self {
@@ -181,47 +159,48 @@ impl App {
         }
     }
 
-    /// Mutate the config, persist it, and let the next snapshot reflect it.
-    fn update(&self, change: impl FnOnce(&mut Config)) {
+    /// Mutate the config, persist it, and let the next snapshot reflect it. The write
+    /// error is returned so a setting the disk dropped can't read as saved.
+    fn update(&self, change: impl FnOnce(&mut Config)) -> std::io::Result<()> {
         let mut config = self.config.lock().expect("config lock");
         change(&mut config);
-        let _ = config.save(&self.home.join(CONFIG));
+        config.save(&self.home.join(CONFIG))
     }
 
-    pub fn set_notifications(&self, on: bool) {
-        self.update(|config| config.notifications = on);
+    pub fn set_notifications(&self, on: bool) -> std::io::Result<()> {
+        self.update(|config| config.notifications = on)
     }
 
-    pub fn set_dismiss_read(&self, on: bool) {
-        self.update(|config| config.dismiss_read = on);
+    pub fn set_dismiss_read(&self, on: bool) -> std::io::Result<()> {
+        self.update(|config| config.dismiss_read = on)
     }
 
-    pub fn set_pinned(&self, id: &str, pinned: bool) {
+    pub fn set_pinned(&self, id: &str, pinned: bool) -> std::io::Result<()> {
         self.update(|config| {
             if pinned {
                 config.pinned.insert(id.to_string());
             } else {
                 config.pinned.remove(id);
             }
-        });
+        })
     }
 
-    pub fn set_project_hidden(&self, project: &str, hidden: bool) {
+    pub fn set_project_hidden(&self, project: &str, hidden: bool) -> std::io::Result<()> {
         self.update(|config| {
             if hidden {
                 config.hidden_projects.insert(project.to_string());
             } else {
                 config.hidden_projects.remove(project);
             }
-        });
+        })
     }
 
     /// Dismiss hides the session until it next acts (a later event un-hides it via
     /// `fold`). Anchored at `at`, which the command passes as now.
-    pub fn dismiss(&self, id: &str, at: Timestamp) {
+    pub fn dismiss(&self, id: &str, at: Timestamp) -> std::io::Result<()> {
         self.update(|config| {
             config.dismissed.insert(id.to_string(), at);
-        });
+        })
     }
 
     /// What the tray should currently show. Cheap: the work happened in `snapshot`.
@@ -269,12 +248,6 @@ impl App {
     /// doesn't alert on sessions that were already waiting. Off entirely when the
     /// user disabled notifications, but the baseline still advances so re-enabling
     /// doesn't replay history.
-    fn notify(&self, config: &Config, sessions: &[Session]) {
-        let mut seen = self.seen.lock().expect("seen lock");
-        let notices = notices(&mut seen, config, sessions);
-        self.pending.lock().expect("pending lock").extend(notices);
-    }
-
     /// Both inputs, folded into one view. Hooks give state, transcripts give cost,
     /// names, and any session hooks never saw; either can be missing.
     pub fn snapshot(&self, span: Span, now: DateTime<Local>) -> Snapshot {
@@ -300,6 +273,8 @@ impl App {
 
         let mut sessions = store::merge(store::fold(&events, to, &prefs), scan.sessions);
         retain_live(&mut sessions, &SystemProcesses);
+        let retired = store::superseded(&events);
+        sessions.retain(|session| !retired.contains(&session.id));
         store::apply_dismissed(&mut sessions, &prefs);
         // Drop context-less ghosts: a hook fired (a Notification) but no cwd ever
         // arrived and no transcript backfilled one, so the row would be nameless.
@@ -307,7 +282,12 @@ impl App {
         sessions.retain(|session| config.shows(&project(&session.cwd)));
         store::sort(&mut sessions, &prefs);
 
-        self.notify(&config, &sessions);
+        let queued = notices(
+            &mut self.seen.lock().expect("seen lock"),
+            config.notifications,
+            &sessions,
+        );
+        self.pending.lock().expect("pending lock").extend(queued);
 
         // The shim caches each session's terminal on every hook, so even a session
         // that never fired SessionStart (no event-borne terminal) is focusable.
@@ -341,6 +321,16 @@ impl App {
             today_cost,
             &self.strings.lock().expect("strings lock"),
         );
+
+        let waiting_live = sessions
+            .iter()
+            .filter(|s| s.state == SessionState::WaitingOnYou)
+            .count();
+
+        // The span scopes the panel's list and nothing above it. The tray and the
+        // notification baseline answer "what is blocked on you", which has no window —
+        // scoping them would blank the badge and replay notices on the next wider poll.
+        store::retain_within(&mut sessions, from);
 
         let projects: Vec<String> = sessions.iter().map(|s| project(&s.cwd)).collect();
         let sessions: Vec<SessionView> = sessions
@@ -376,11 +366,24 @@ impl App {
             })
             .collect();
 
-        let segments = store::timeline(&events, from, to);
+        // Transcript records are the only witness that a permission prompt was
+        // answered — no hook fires when it is.
+        let activity: Vec<(SessionId, Timestamp)> = scan
+            .usage
+            .iter()
+            .flat_map(|(id, entries)| entries.iter().map(move |e| (id.clone(), e.at)))
+            .collect();
+        let segments = store::timeline(&events, &activity, from, to);
 
         Snapshot {
             now: to,
             from,
+            waiting_outside_window: waiting_live.saturating_sub(
+                sessions
+                    .iter()
+                    .filter(|s| s.state == SessionState::WaitingOnYou)
+                    .count(),
+            ),
             waiting: sessions
                 .iter()
                 .filter(|s| s.state == SessionState::WaitingOnYou)
@@ -437,15 +440,6 @@ fn prune_log(home: &Path) {
     std::fs::write(&path, lines.join("\n") + "\n").ok();
 }
 
-/// The last tier of spec item 13: a session hooks saw but no transcript names still
-/// gets something to be called.
-fn name(session: &Session) -> String {
-    session
-        .title
-        .clone()
-        .unwrap_or_else(|| session.id.chars().take(8).collect())
-}
-
 /// The bundled `record` shim sits beside the app binary. Falls back to the bare name
 /// (assuming `PATH`) if the exe path can't be resolved — the snippet still reads
 /// sensibly and the user can correct it.
@@ -455,29 +449,6 @@ fn record_path() -> String {
         .and_then(|exe| exe.parent().map(|dir| dir.join("record")))
         .map(|path| path.to_string_lossy().into_owned())
         .unwrap_or_else(|| "record".to_string())
-}
-
-/// Advance the seen-state baseline and return a notice per session that just entered
-/// waiting. The first observation (`seen` is `None`) only primes — it never fires, so
-/// launch is silent. The baseline advances even when notifications are off, so
-/// re-enabling them doesn't replay a backlog.
-fn notices(
-    seen: &mut Option<HashMap<SessionId, SessionState>>,
-    config: &Config,
-    sessions: &[Session],
-) -> Vec<Notice> {
-    let notices = match (seen.as_ref(), config.notifications) {
-        (Some(previous), true) => store::newly_waiting(previous, sessions)
-            .into_iter()
-            .map(|session| Notice {
-                title: format!("{} — waiting on you", project(&session.cwd)),
-                body: name(session),
-            })
-            .collect(),
-        _ => Vec::new(),
-    };
-    *seen = Some(store::states(sessions));
-    notices
 }
 
 /// Try the chosen tier; if a precise raise fails (a stale pane, an unreachable app),
@@ -527,242 +498,9 @@ fn outcome(result: std::io::Result<Reach>, resume: String, label: &str) -> Focus
     }
 }
 
-#[tauri::command]
-pub fn snapshot(span: Span, app: tauri::State<'_, App>, handle: tauri::AppHandle) -> Snapshot {
-    // Stamped either side of the work: the first claims the clock, the second keeps
-    // it through a tick that ran longer than the lease.
-    crate::tray::panel_polled();
-    let snapshot = app.snapshot(span, Local::now());
-    crate::tray::apply(&handle);
-    fire(&handle, app.take_pending());
-    crate::tray::panel_polled();
-    snapshot
-}
-
-/// The panel owns the ten locales; the tray is built in Rust. This is how the words
-/// get there — at startup, and again whenever the language changes.
-#[tauri::command]
-pub fn set_tray_strings(words: crate::core::tray::TrayStrings, app: tauri::State<'_, App>) {
-    app.set_strings(words);
-}
-
-#[tauri::command]
-pub fn focus(id: String, app: tauri::State<'_, App>) -> FocusOutcome {
-    app.focus(&id)
-}
-
-#[tauri::command]
-pub fn set_notifications(on: bool, app: tauri::State<'_, App>) {
-    app.set_notifications(on);
-}
-
-#[tauri::command]
-pub fn set_dismiss_read(on: bool, app: tauri::State<'_, App>) {
-    app.set_dismiss_read(on);
-}
-
-#[tauri::command]
-pub fn set_pinned(id: String, pinned: bool, app: tauri::State<'_, App>) {
-    app.set_pinned(&id, pinned);
-}
-
-#[tauri::command]
-pub fn set_project_hidden(project: String, hidden: bool, app: tauri::State<'_, App>) {
-    app.set_project_hidden(&project, hidden);
-}
-
-#[tauri::command]
-pub fn dismiss(id: String, app: tauri::State<'_, App>) {
-    app.dismiss(&id, Local::now().timestamp().max(0) as Timestamp);
-}
-
-/// Open `~/.claude/settings.json` in the user's default editor for JSON — specola
-/// never edits it, so the fastest honest help is to take you there.
-#[tauri::command]
-pub fn open_settings(app: tauri::State<'_, App>) {
-    let path = app.home.join(SETTINGS);
-    let program = if cfg!(target_os = "macos") {
-        "open"
-    } else if cfg!(target_os = "windows") {
-        "explorer"
-    } else {
-        "xdg-open"
-    };
-    let _ = std::process::Command::new(program).arg(path).spawn();
-}
-
-/// Open a URL in the default browser — used by the About panel's website link.
-/// Restricted to http(s) so this webview-exposed command can't be coerced into
-/// opening a local file or app.
-#[tauri::command]
-pub fn open_url(url: String) {
-    if !allowed_url(&url) {
-        return;
-    }
-    let program = if cfg!(target_os = "macos") {
-        "open"
-    } else if cfg!(target_os = "windows") {
-        "explorer"
-    } else {
-        "xdg-open"
-    };
-    let _ = std::process::Command::new(program).arg(url).spawn();
-}
-
-/// Save the shared day card to Downloads and reveal it — the reliable path when the
-/// webview can't write an image to the clipboard. Returns the saved path.
-#[tauri::command]
-pub fn save_day_card(bytes: Vec<u8>, app: tauri::State<'_, App>) -> Result<String, String> {
-    let dir = app.home.join("Downloads");
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let path = dir.join("specola-day.png");
-    std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
-    #[cfg(target_os = "macos")]
-    let _ = std::process::Command::new("open")
-        .arg("-R")
-        .arg(&path)
-        .spawn();
-    Ok(path.to_string_lossy().into_owned())
-}
-
-fn allowed_url(url: &str) -> bool {
-    url.starts_with("https://") || url.starts_with("http://")
-}
-
-/// Toggle the panel's always-on-top. A watch instrument you keep in view, but yours
-/// to unpin when it's in the way.
-#[tauri::command]
-pub fn set_window_pinned(pinned: bool, window: tauri::WebviewWindow) {
-    let _ = window.set_always_on_top(pinned);
-}
-
-/// Show the queued notices. Best-effort: a notification that won't show must never
-/// disturb the panel.
-pub(crate) fn fire(handle: &tauri::AppHandle, notices: Vec<Notice>) {
-    use tauri_plugin_notification::NotificationExt;
-
-    for notice in notices {
-        let _ = handle
-            .notification()
-            .builder()
-            .title(notice.title)
-            .body(notice.body)
-            .show();
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use chrono::Timelike;
-
     use super::*;
-
-    fn now() -> DateTime<Local> {
-        Local::now()
-    }
-
-    #[test]
-    fn open_url_allows_only_web_schemes() {
-        assert!(allowed_url("https://ronaldoscotti.com"));
-        assert!(allowed_url("http://example.com"));
-        assert!(!allowed_url("file:///etc/passwd"));
-        assert!(!allowed_url("/Applications/Calculator.app"));
-        assert!(!allowed_url("-a Calculator"));
-    }
-
-    #[test]
-    fn four_hours_ends_now_and_starts_four_hours_back() {
-        let now = now();
-
-        let (from, to) = bounds(Span::FourHours, now);
-
-        assert_eq!(to, now.timestamp() as Timestamp);
-        assert_eq!(to - from, 4 * 60 * 60);
-    }
-
-    #[test]
-    fn today_starts_at_a_local_midnight_not_twenty_four_hours_ago() {
-        let now = now();
-
-        let (from, _) = bounds(Span::Today, now);
-
-        let start = Local.timestamp_opt(from as i64, 0).unwrap();
-        assert_eq!(start.date_naive(), now.date_naive());
-        assert_eq!((start.hour(), start.minute(), start.second()), (0, 0, 0));
-    }
-
-    #[test]
-    fn the_week_is_a_trailing_seven_days_whatever_the_weekday() {
-        let now = now();
-
-        let (from, to) = bounds(Span::Week, now);
-
-        assert_eq!(to - from, Duration::days(7).num_seconds() as Timestamp);
-    }
-
-    fn waiting_session(id: &str, project: &str) -> Session {
-        Session {
-            id: id.into(),
-            cwd: format!("/Users/x/{project}"),
-            pid: Some(1),
-            state: SessionState::WaitingOnYou,
-            since: 0,
-            last_active: 0,
-            title: Some("do the thing".into()),
-            git_branch: None,
-            terminal: None,
-        }
-    }
-
-    #[test]
-    fn the_first_snapshot_primes_silently() {
-        let mut seen = None;
-
-        let fired = notices(
-            &mut seen,
-            &Config::default(),
-            &[waiting_session("s1", "proj")],
-        );
-
-        assert!(
-            fired.is_empty(),
-            "launch must not shout about existing waits"
-        );
-        assert!(seen.is_some(), "but the baseline is now set");
-    }
-
-    #[test]
-    fn entering_waiting_after_priming_fires_a_notice() {
-        let mut seen = Some(HashMap::from([("s1".to_string(), SessionState::Working)]));
-
-        let fired = notices(
-            &mut seen,
-            &Config::default(),
-            &[waiting_session("s1", "proj")],
-        );
-
-        assert_eq!(fired.len(), 1);
-        assert_eq!(fired[0].title, "proj — waiting on you");
-        assert_eq!(fired[0].body, "do the thing");
-    }
-
-    #[test]
-    fn notifications_off_fires_nothing_but_still_advances_the_baseline() {
-        let mut seen = Some(HashMap::from([("s1".to_string(), SessionState::Working)]));
-        let off = Config {
-            notifications: false,
-            ..Config::default()
-        };
-
-        let fired = notices(&mut seen, &off, &[waiting_session("s1", "proj")]);
-
-        assert!(fired.is_empty());
-        assert_eq!(
-            seen.unwrap().get("s1"),
-            Some(&SessionState::WaitingOnYou),
-            "re-enabling must not replay this as new"
-        );
-    }
 
     /// Fails the precise tiers; only the clipboard floor works — like a Mac where a
     /// stale tmux pane id can't be selected but `pbcopy` still runs.
@@ -856,29 +594,26 @@ mod tests {
         assert_eq!(result.error.as_deref(), Some("boom"));
     }
 
+    /// The defect this pass exists for: a settings change the disk refused used to
+    /// return nothing, so the UI accepted it and the next launch lost it. Here the
+    /// home is a *file*, so `~/.specola/` can never be created under it.
     #[test]
-    fn a_session_no_transcript_names_falls_back_to_a_short_id() {
-        let session = Session {
-            id: "abcdef1234-5678".into(),
-            cwd: "/p".into(),
-            pid: Some(1),
-            state: SessionState::Working,
-            since: 0,
-            last_active: 0,
-            title: None,
-            git_branch: None,
-            terminal: None,
-        };
+    fn a_setting_the_disk_refuses_is_reported_not_swallowed() {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let home = std::env::temp_dir().join(format!("specola-app-{nanos}"));
+        std::fs::write(&home, "not a directory").unwrap();
 
-        assert_eq!(name(&session), "abcdef12");
-    }
+        let result = App::at(home.clone()).set_notifications(false);
 
-    #[test]
-    fn a_project_is_the_last_segment_of_its_path() {
-        assert_eq!(project("/Users/x/work/specola"), "specola");
-        assert_eq!(project("/Users/x/work/specola/"), "specola");
-        assert_eq!(project(r"C:\Users\x\specola"), "specola");
-        assert_eq!(project(""), "");
+        assert!(
+            result.is_err(),
+            "a setting that was not persisted must say so"
+        );
+
+        std::fs::remove_file(&home).ok();
     }
 
     /// Reads the real `~/.claude` and `~/.specola`, so it only means anything on a

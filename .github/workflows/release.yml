@@ -1,12 +1,19 @@
 name: Release
 
-# Signed, notarized, auto-updatable releases. Push a version tag (e.g. `v0.2.0`)
-# after bumping the version in tauri.conf.json. Never runs on fork pull requests,
-# so the signing secrets are never exposed to untrusted code.
+# Signed, notarized, auto-updatable releases. Normally called by the release-please
+# workflow when a release PR merges; `on: push: tags` stays as the manual escape
+# hatch. Never runs on fork pull requests, so signing secrets are never exposed to
+# untrusted code.
 on:
   push:
     tags:
       - "v*"
+  workflow_call:
+    inputs:
+      tag:
+        description: The version tag to build and publish.
+        required: true
+        type: string
 
 jobs:
   release:
@@ -38,6 +45,8 @@ jobs:
     continue-on-error: ${{ !matrix.gate }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Install Linux dependencies
         if: startsWith(matrix.platform, 'ubuntu')
@@ -90,9 +99,12 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "Specola ${{ github.ref_name }}"
-          releaseDraft: true
+          tagName: ${{ inputs.tag || github.ref_name }}
+          releaseName: "Specola ${{ inputs.tag || github.ref_name }}"
+          # Published straight away: a draft does not resolve at
+          # `releases/latest/download/latest.json`, so a drafted release is invisible
+          # to every installed client until someone clicks Publish.
+          releaseDraft: false
           # Must stay false: the updater endpoint is
           # `releases/latest/download/latest.json`, and GitHub's `latest`
           # resolution skips pre-releases — marking releases pre-release 404s
