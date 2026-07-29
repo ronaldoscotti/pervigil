@@ -8,5 +8,7 @@ pub mod prune;
 pub mod session;
 pub mod span;
 pub mod store;
+#[cfg(test)]
+mod store_props;
 pub mod terminal;
 pub mod tray;
