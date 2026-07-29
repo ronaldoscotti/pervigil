@@ -269,7 +269,9 @@ impl App {
 
         let mut sessions = store::merge(store::fold(&events, to, &prefs), scan.sessions);
         retain_live(&mut sessions, &SystemProcesses);
-        store::retain_within(&mut sessions, from);
+        // After `merge`: a retired session's transcript twin carries no pid, so the
+        // rule can only see it while the hook-derived pid is still attached.
+        store::retain_current(&mut sessions);
         store::apply_dismissed(&mut sessions, &prefs);
         // Drop context-less ghosts: a hook fired (a Notification) but no cwd ever
         // arrived and no transcript backfilled one, so the row would be nameless.
@@ -316,6 +318,11 @@ impl App {
             today_cost,
             &self.strings.lock().expect("strings lock"),
         );
+
+        // The span scopes the panel's list and nothing above it. The tray and the
+        // notification baseline answer "what is blocked on you", which has no window —
+        // scoping them would blank the badge and replay notices on the next wider poll.
+        store::retain_within(&mut sessions, from);
 
         let projects: Vec<String> = sessions.iter().map(|s| project(&s.cwd)).collect();
         let sessions: Vec<SessionView> = sessions

@@ -258,7 +258,6 @@ pub fn fold(events: &[Event], _now: Timestamp, prefs: &ViewPrefs) -> Vec<Session
         }
     }
 
-    retain_current(&mut sessions);
     apply_dismissed(&mut sessions, prefs);
     sort(&mut sessions, prefs);
     sessions
@@ -266,18 +265,30 @@ pub fn fold(events: &[Event], _now: Timestamp, prefs: &ViewPrefs) -> Vec<Session
 
 /// One `claude` process runs one session at a time, so `/resume` leaves the id it
 /// replaced behind: no further events, and a pid still alive, so neither age nor
-/// liveness can retire it. Keeps the newest-active session per pid; no pid, no claim.
-fn retain_current(sessions: &mut Vec<Session>) {
-    let mut newest: HashMap<u32, Timestamp> = HashMap::new();
+/// liveness can retire it. Keeps one session per process — the one still being used.
+///
+/// Keyed on pid *and* cwd because pids recycle and the log is kept for thirty days;
+/// a pid reused by an unrelated project is a different process, not a resume. The
+/// ordering is total, so a tie cannot leave two winners.
+pub fn retain_current(sessions: &mut Vec<Session>) {
+    let rank = |session: &Session| (session.last_active, session.since, session.id.clone());
+
+    let mut current: HashMap<(u32, String), (Timestamp, Timestamp, SessionId)> = HashMap::new();
     for session in sessions.iter() {
         if let Some(pid) = session.pid {
-            let seen = newest.entry(pid).or_insert(session.last_active);
-            *seen = (*seen).max(session.last_active);
+            let key = (pid, session.cwd.clone());
+            let candidate = rank(session);
+            match current.get(&key) {
+                Some(best) if *best >= candidate => {}
+                _ => {
+                    current.insert(key, candidate);
+                }
+            }
         }
     }
 
     sessions.retain(|session| match session.pid {
-        Some(pid) => newest.get(&pid) == Some(&session.last_active),
+        Some(pid) => current.get(&(pid, session.cwd.clone())) == Some(&rank(session)),
         None => true,
     });
 }
@@ -830,7 +841,8 @@ mod tests {
             },
         ];
 
-        let sessions = fold_default(&events, 300);
+        let mut sessions = fold_default(&events, 300);
+        retain_current(&mut sessions);
         let ids: Vec<&str> = sessions.iter().map(|s| s.id.as_str()).collect();
 
         assert_eq!(
@@ -861,7 +873,8 @@ mod tests {
             start("c", 120),
         ];
 
-        let sessions = fold_default(&events, 500);
+        let mut sessions = fold_default(&events, 500);
+        retain_current(&mut sessions);
         let ids: Vec<&str> = sessions.iter().map(|s| s.id.as_str()).collect();
 
         assert_eq!(ids, vec!["b"]);
@@ -888,7 +901,9 @@ mod tests {
             },
         ];
 
-        assert_eq!(fold_default(&events, 600).len(), 2);
+        let mut sessions = fold_default(&events, 600);
+        retain_current(&mut sessions);
+        assert_eq!(sessions.len(), 2);
     }
 
     #[test]
@@ -909,7 +924,9 @@ mod tests {
             },
         ];
 
-        assert_eq!(fold_default(&events, 600).len(), 2);
+        let mut sessions = fold_default(&events, 600);
+        retain_current(&mut sessions);
+        assert_eq!(sessions.len(), 2);
     }
 
     fn at(id: &str, last_active: Timestamp) -> Session {
@@ -936,6 +953,95 @@ mod tests {
 
         let ids: Vec<&str> = sessions.iter().map(|s| s.id.as_str()).collect();
         assert_eq!(ids, vec!["recent"]);
+    }
+
+    /// `fold` retires the replaced session, then `merge` finds no hook session with
+    /// that id and pushes the transcript-derived one straight back. Half the ghosts
+    /// in a real log have a transcript on disk, so the retirement has to survive it.
+    #[test]
+    fn a_retired_session_does_not_return_through_its_transcript() {
+        let events = vec![
+            Event::SessionStart {
+                id: "ghost".into(),
+                cwd: "/p".into(),
+                pid: Some(9),
+                at: 100,
+                term: None,
+            },
+            Event::SessionStart {
+                id: "resumed".into(),
+                cwd: "/p".into(),
+                pid: Some(9),
+                at: 110,
+                term: None,
+            },
+            Event::UserPromptSubmit {
+                id: "resumed".into(),
+                at: 200,
+            },
+        ];
+        let transcripts = vec![Session {
+            id: "ghost".into(),
+            cwd: "/p".into(),
+            pid: None,
+            state: SessionState::Idle,
+            since: 100,
+            last_active: 100,
+            title: Some("never sent".into()),
+            git_branch: None,
+            terminal: None,
+        }];
+
+        let mut merged = merge(fold_default(&events, 300), transcripts);
+        retain_current(&mut merged);
+
+        let ids: Vec<&str> = merged.iter().map(|s| s.id.as_str()).collect();
+        assert_eq!(ids, vec!["resumed"]);
+    }
+
+    /// pids recycle, and the log is retained for thirty days. Two unrelated sessions
+    /// weeks apart can land on the same pid; only a shared cwd makes them the same
+    /// `claude` process being resumed.
+    #[test]
+    fn a_recycled_pid_in_another_project_is_not_a_resume() {
+        let mut sessions = vec![
+            Session {
+                cwd: "/old-project".into(),
+                pid: Some(42),
+                ..at("older", 100)
+            },
+            Session {
+                cwd: "/new-project".into(),
+                pid: Some(42),
+                ..at("newer", 900)
+            },
+        ];
+
+        retain_current(&mut sessions);
+
+        assert_eq!(sessions.len(), 2, "different projects, different processes");
+    }
+
+    /// Both started in the same second and neither ever acted again. Exactly one
+    /// survives, or the ghost this rule exists to remove survives with it.
+    #[test]
+    fn two_sessions_tied_to_the_same_instant_resolve_to_one() {
+        let mut sessions = vec![
+            Session {
+                pid: Some(9),
+                cwd: "/p".into(),
+                ..at("a", 100)
+            },
+            Session {
+                pid: Some(9),
+                cwd: "/p".into(),
+                ..at("b", 100)
+            },
+        ];
+
+        retain_current(&mut sessions);
+
+        assert_eq!(sessions.len(), 1);
     }
 
     #[test]
