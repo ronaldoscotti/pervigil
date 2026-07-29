@@ -12,6 +12,7 @@ import type { FocusOutcome, SessionState, SessionView, Snapshot, Span } from "./
 import type { Lang } from "./i18n";
 import { RTL, detectLang, lang, setLang, t } from "./i18n";
 import { axisLabel, elapsed, formatTokens, money, structuralSignature } from "./format";
+import { UPDATE_CHECK_MS, dueForCheck } from "./updates";
 
 /** Injected at build time from package.json (see vite.config.ts). */
 declare const __APP_VERSION__: string;
@@ -513,10 +514,13 @@ function shareTo(base: string) {
 }
 
 let pendingUpdate: Update | null = null;
+let lastUpdateCheck = 0;
 
 /** Silent on launch: a found update surfaces as an About affordance, never an
  *  auto-install. No endpoint reachable (dev, offline) degrades to nothing. */
 async function checkForUpdates() {
+  if (!dueForCheck(Date.now(), lastUpdateCheck, pendingUpdate !== null)) return;
+  lastUpdateCheck = Date.now();
   try {
     const update = await check();
     if (!update) return;
@@ -678,7 +682,14 @@ window.addEventListener("DOMContentLoaded", () => {
   // scanner only reads the bytes appended since the last tick. Revisit if that changes.
   setInterval(poll, 1000);
   poll();
+
   checkForUpdates();
+  setInterval(checkForUpdates, UPDATE_CHECK_MS);
+  // The interval alone is not enough: a hidden tray window has its timers
+  // throttled, so a panel left closed for a day would never look.
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) checkForUpdates();
+  });
   isEnabled()
     .then((on) => el("autostart-switch").setAttribute("aria-checked", String(on)))
     .catch(console.error);
