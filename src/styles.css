@@ -194,6 +194,18 @@ body.mac .topbar {
   outline: 1px solid rgba(244, 184, 96, 0.7);
 }
 
+.chip-button[data-update]::after {
+  content: "";
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  margin-left: 5px;
+  vertical-align: 1px;
+  border-radius: 50%;
+  background: var(--waiting-soft);
+  opacity: 0.75;
+}
+
 .chip-icon {
   display: inline-flex;
   align-items: center;

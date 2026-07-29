@@ -132,6 +132,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "Update to v{version}",
     updateInstalling: "Downloading update…",
     updateFailed: "Update failed",
+    updatedTo: "Updated to v{version}",
     launchAtLogin: "Launch at login",
     general: "General",
     starOnGithub: "Star on GitHub",
@@ -203,6 +204,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "Atualizar para v{version}",
     updateInstalling: "Baixando atualização…",
     updateFailed: "Falha na atualização",
+    updatedTo: "Atualizado para v{version}",
     launchAtLogin: "Abrir ao iniciar sessão",
     general: "Geral",
     starOnGithub: "Estrela no GitHub",
@@ -274,6 +276,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "Actualizar a v{version}",
     updateInstalling: "Descargando actualización…",
     updateFailed: "Falló la actualización",
+    updatedTo: "Actualizado a v{version}",
     launchAtLogin: "Abrir al iniciar sesión",
     general: "General",
     starOnGithub: "Estrella en GitHub",
@@ -345,6 +348,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "Mettre à jour vers v{version}",
     updateInstalling: "Téléchargement de la mise à jour…",
     updateFailed: "Échec de la mise à jour",
+    updatedTo: "Mis à jour vers v{version}",
     launchAtLogin: "Lancer à la connexion",
     general: "Général",
     starOnGithub: "Étoile sur GitHub",
@@ -416,6 +420,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "Auf v{version} aktualisieren",
     updateInstalling: "Update wird heruntergeladen…",
     updateFailed: "Update fehlgeschlagen",
+    updatedTo: "Aktualisiert auf v{version}",
     launchAtLogin: "Beim Anmelden starten",
     general: "Allgemein",
     starOnGithub: "Stern auf GitHub",
@@ -487,6 +492,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "Обновить до v{version}",
     updateInstalling: "Загрузка обновления…",
     updateFailed: "Не удалось обновить",
+    updatedTo: "Обновлено до v{version}",
     launchAtLogin: "Запускать при входе",
     general: "Общие",
     starOnGithub: "Звезда на GitHub",
@@ -558,6 +564,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "更新到 v{version}",
     updateInstalling: "正在下载更新…",
     updateFailed: "更新失败",
+    updatedTo: "已更新至 v{version}",
     launchAtLogin: "登录时启动",
     general: "常规",
     starOnGithub: "在 GitHub 加星",
@@ -629,6 +636,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "v{version} に更新",
     updateInstalling: "アップデートをダウンロード中…",
     updateFailed: "アップデート失敗",
+    updatedTo: "v{version} に更新しました",
     launchAtLogin: "ログイン時に起動",
     general: "一般",
     starOnGithub: "GitHub でスター",
@@ -700,6 +708,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "v{version} में अपडेट करें",
     updateInstalling: "अपडेट डाउनलोड हो रहा है…",
     updateFailed: "अपडेट विफल",
+    updatedTo: "v{version} में अपडेट किया गया",
     launchAtLogin: "लॉगिन पर लॉन्च करें",
     general: "सामान्य",
     starOnGithub: "GitHub पर स्टार",
@@ -771,6 +780,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     installUpdate: "التحديث إلى v{version}",
     updateInstalling: "جارٍ تنزيل التحديث…",
     updateFailed: "فشل التحديث",
+    updatedTo: "تم التحديث إلى v{version}",
     launchAtLogin: "التشغيل عند تسجيل الدخول",
     general: "عام",
     starOnGithub: "نجمة على GitHub",
@@ -1332,6 +1342,9 @@ async function checkForUpdates() {
     const button = el("about-update");
     button.textContent = t("installUpdate", { version: update.version });
     button.hidden = false;
+    const settings = el("settings-toggle");
+    settings.dataset.update = "";
+    settings.title = t("installUpdate", { version: update.version });
   } catch (error) {
     console.error(error);
   }
@@ -1487,11 +1500,18 @@ window.addEventListener("DOMContentLoaded", () => {
     .then((on) => el("autostart-switch").setAttribute("aria-checked", String(on)))
     .catch(console.error);
 
+  // A relaunch after an update is otherwise indistinguishable from any other
+  // launch. Null means a fresh install, which has nothing to announce.
+  const previousVersion = localStorage.getItem("specola.version");
+  localStorage.setItem("specola.version", __APP_VERSION__);
+  const justUpdated = previousVersion !== null && previousVersion !== __APP_VERSION__;
+  if (justUpdated) toast(t("updatedTo", { version: __APP_VERSION__ }));
+
   // Referral loop: a single, dismissible nudge to share the day — only after the
   // tool has proven itself over a few launches, and only on a day with real activity.
   const launches = Number(localStorage.getItem("specola.launches") ?? "0") + 1;
   localStorage.setItem("specola.launches", String(launches));
-  if (launches >= 3 && localStorage.getItem("specola.shareNudged") !== "1") {
+  if (!justUpdated && launches >= 3 && localStorage.getItem("specola.shareNudged") !== "1") {
     setTimeout(() => {
       if ((lastSnapshot?.sessions.length ?? 0) > 0) {
         localStorage.setItem("specola.shareNudged", "1");
