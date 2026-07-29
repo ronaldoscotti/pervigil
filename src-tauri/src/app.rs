@@ -162,7 +162,10 @@ pub struct App {
 
 impl App {
     pub fn new() -> Self {
-        let home = io::home().unwrap_or_default();
+        Self::at(io::home().unwrap_or_default())
+    }
+
+    pub fn at(home: PathBuf) -> Self {
         prune_log(&home);
         let config = Config::load(&home.join(CONFIG));
         Self {
@@ -181,47 +184,48 @@ impl App {
         }
     }
 
-    /// Mutate the config, persist it, and let the next snapshot reflect it.
-    fn update(&self, change: impl FnOnce(&mut Config)) {
+    /// Mutate the config, persist it, and let the next snapshot reflect it. The write
+    /// error is returned so a setting the disk dropped can't read as saved.
+    fn update(&self, change: impl FnOnce(&mut Config)) -> std::io::Result<()> {
         let mut config = self.config.lock().expect("config lock");
         change(&mut config);
-        let _ = config.save(&self.home.join(CONFIG));
+        config.save(&self.home.join(CONFIG))
     }
 
-    pub fn set_notifications(&self, on: bool) {
-        self.update(|config| config.notifications = on);
+    pub fn set_notifications(&self, on: bool) -> std::io::Result<()> {
+        self.update(|config| config.notifications = on)
     }
 
-    pub fn set_dismiss_read(&self, on: bool) {
-        self.update(|config| config.dismiss_read = on);
+    pub fn set_dismiss_read(&self, on: bool) -> std::io::Result<()> {
+        self.update(|config| config.dismiss_read = on)
     }
 
-    pub fn set_pinned(&self, id: &str, pinned: bool) {
+    pub fn set_pinned(&self, id: &str, pinned: bool) -> std::io::Result<()> {
         self.update(|config| {
             if pinned {
                 config.pinned.insert(id.to_string());
             } else {
                 config.pinned.remove(id);
             }
-        });
+        })
     }
 
-    pub fn set_project_hidden(&self, project: &str, hidden: bool) {
+    pub fn set_project_hidden(&self, project: &str, hidden: bool) -> std::io::Result<()> {
         self.update(|config| {
             if hidden {
                 config.hidden_projects.insert(project.to_string());
             } else {
                 config.hidden_projects.remove(project);
             }
-        });
+        })
     }
 
     /// Dismiss hides the session until it next acts (a later event un-hides it via
     /// `fold`). Anchored at `at`, which the command passes as now.
-    pub fn dismiss(&self, id: &str, at: Timestamp) {
+    pub fn dismiss(&self, id: &str, at: Timestamp) -> std::io::Result<()> {
         self.update(|config| {
             config.dismissed.insert(id.to_string(), at);
-        });
+        })
     }
 
     /// What the tray should currently show. Cheap: the work happened in `snapshot`.
@@ -551,29 +555,37 @@ pub fn focus(id: String, app: tauri::State<'_, App>) -> FocusOutcome {
     app.focus(&id)
 }
 
+/// The settings commands return the persistence error so the panel can say the
+/// change did not stick, rather than showing a setting the disk never took.
 #[tauri::command]
-pub fn set_notifications(on: bool, app: tauri::State<'_, App>) {
-    app.set_notifications(on);
+pub fn set_notifications(on: bool, app: tauri::State<'_, App>) -> Result<(), String> {
+    app.set_notifications(on).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn set_dismiss_read(on: bool, app: tauri::State<'_, App>) {
-    app.set_dismiss_read(on);
+pub fn set_dismiss_read(on: bool, app: tauri::State<'_, App>) -> Result<(), String> {
+    app.set_dismiss_read(on).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn set_pinned(id: String, pinned: bool, app: tauri::State<'_, App>) {
-    app.set_pinned(&id, pinned);
+pub fn set_pinned(id: String, pinned: bool, app: tauri::State<'_, App>) -> Result<(), String> {
+    app.set_pinned(&id, pinned).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn set_project_hidden(project: String, hidden: bool, app: tauri::State<'_, App>) {
-    app.set_project_hidden(&project, hidden);
+pub fn set_project_hidden(
+    project: String,
+    hidden: bool,
+    app: tauri::State<'_, App>,
+) -> Result<(), String> {
+    app.set_project_hidden(&project, hidden)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn dismiss(id: String, app: tauri::State<'_, App>) {
-    app.dismiss(&id, Local::now().timestamp().max(0) as Timestamp);
+pub fn dismiss(id: String, app: tauri::State<'_, App>) -> Result<(), String> {
+    app.dismiss(&id, Local::now().timestamp().max(0) as Timestamp)
+        .map_err(|e| e.to_string())
 }
 
 /// Open `~/.claude/settings.json` in the user's default editor for JSON — specola
@@ -854,6 +866,28 @@ mod tests {
         assert!(!result.raised);
         assert_eq!(result.resume.as_deref(), Some("claude --resume s1"));
         assert_eq!(result.error.as_deref(), Some("boom"));
+    }
+
+    /// The defect this pass exists for: a settings change the disk refused used to
+    /// return nothing, so the UI accepted it and the next launch lost it. Here the
+    /// home is a *file*, so `~/.specola/` can never be created under it.
+    #[test]
+    fn a_setting_the_disk_refuses_is_reported_not_swallowed() {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let home = std::env::temp_dir().join(format!("specola-app-{nanos}"));
+        std::fs::write(&home, "not a directory").unwrap();
+
+        let result = App::at(home.clone()).set_notifications(false);
+
+        assert!(
+            result.is_err(),
+            "a setting that was not persisted must say so"
+        );
+
+        std::fs::remove_file(&home).ok();
     }
 
     #[test]

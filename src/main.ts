@@ -124,6 +124,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     pasteToResume: "{label} — paste to resume",
     focusUnavailable: "Focus unavailable — resume with: {resume}",
     focusFailed: "Focus failed",
+    settingNotSaved: "Setting not saved",
     snippetCopied: "Snippet copied — paste into settings.json",
     copyFailed: "Copy failed — select the snippet manually",
     hooksDetected: "Hooks detected ✓",
@@ -196,6 +197,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     pasteToResume: "{label} — cole para retomar",
     focusUnavailable: "Foco indisponível — retome com: {resume}",
     focusFailed: "Falha ao focar",
+    settingNotSaved: "Ajuste não salvo",
     snippetCopied: "Trecho copiado — cole no settings.json",
     copyFailed: "Falha ao copiar — selecione o trecho manualmente",
     hooksDetected: "Hooks detectados ✓",
@@ -268,6 +270,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     pasteToResume: "{label} — pega para reanudar",
     focusUnavailable: "Enfoque no disponible — reanuda con: {resume}",
     focusFailed: "Falló el enfoque",
+    settingNotSaved: "Ajuste no guardado",
     snippetCopied: "Fragmento copiado — pégalo en settings.json",
     copyFailed: "Falló la copia — selecciona el fragmento manualmente",
     hooksDetected: "Hooks detectados ✓",
@@ -340,6 +343,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     pasteToResume: "{label} — collez pour reprendre",
     focusUnavailable: "Focus indisponible — reprenez avec : {resume}",
     focusFailed: "Échec du focus",
+    settingNotSaved: "Réglage non enregistré",
     snippetCopied: "Extrait copié — collez dans settings.json",
     copyFailed: "Échec de la copie — sélectionnez l'extrait manuellement",
     hooksDetected: "Hooks détectés ✓",
@@ -412,6 +416,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     pasteToResume: "{label} — zum Fortsetzen einfügen",
     focusUnavailable: "Fokus nicht verfügbar — fortsetzen mit: {resume}",
     focusFailed: "Fokus fehlgeschlagen",
+    settingNotSaved: "Einstellung nicht gespeichert",
     snippetCopied: "Snippet kopiert — in settings.json einfügen",
     copyFailed: "Kopieren fehlgeschlagen — Snippet manuell auswählen",
     hooksDetected: "Hooks erkannt ✓",
@@ -484,6 +489,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     pasteToResume: "{label} — вставьте, чтобы возобновить",
     focusUnavailable: "Фокус недоступен — возобновите: {resume}",
     focusFailed: "Не удалось сфокусировать",
+    settingNotSaved: "Настройка не сохранена",
     snippetCopied: "Сниппет скопирован — вставьте в settings.json",
     copyFailed: "Не удалось скопировать — выделите сниппет вручную",
     hooksDetected: "Hooks обнаружены ✓",
@@ -556,6 +562,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     pasteToResume: "{label} — 粘贴以恢复",
     focusUnavailable: "无法聚焦 — 用此恢复：{resume}",
     focusFailed: "聚焦失败",
+    settingNotSaved: "设置未保存",
     snippetCopied: "代码段已复制 — 粘贴到 settings.json",
     copyFailed: "复制失败 — 请手动选择代码段",
     hooksDetected: "已检测到 hooks ✓",
@@ -628,6 +635,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     pasteToResume: "{label} — 貼り付けて再開",
     focusUnavailable: "フォーカス不可 — 再開: {resume}",
     focusFailed: "フォーカス失敗",
+    settingNotSaved: "設定を保存できません",
     snippetCopied: "スニペットをコピーしました — settings.json に貼り付け",
     copyFailed: "コピー失敗 — スニペットを手動で選択",
     hooksDetected: "hooks を検出 ✓",
@@ -700,6 +708,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     pasteToResume: "{label} — फिर से शुरू करने के लिए पेस्ट करें",
     focusUnavailable: "फोकस अनुपलब्ध — इससे फिर शुरू करें: {resume}",
     focusFailed: "फोकस विफल",
+    settingNotSaved: "सेटिंग सहेजी नहीं गई",
     snippetCopied: "स्निपेट कॉपी हुआ — settings.json में पेस्ट करें",
     copyFailed: "कॉपी विफल — स्निपेट मैन्युअली चुनें",
     hooksDetected: "hooks मिल गए ✓",
@@ -772,6 +781,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     pasteToResume: "{label} — الصق للاستئناف",
     focusUnavailable: "التركيز غير متاح — استأنف بـ: {resume}",
     focusFailed: "فشل التركيز",
+    settingNotSaved: "لم يتم حفظ الإعداد",
     snippetCopied: "تم نسخ المقتطف — الصقه في settings.json",
     copyFailed: "فشل النسخ — حدّد المقتطف يدويًا",
     hooksDetected: "تم اكتشاف hooks ✓",
@@ -1145,12 +1155,14 @@ async function jump(id: string) {
   }
 }
 
-/** A settings mutation: fire-and-forget, then re-poll so the change shows at once. */
+/** A settings mutation, then a re-poll so the change shows at once. A rejected
+ *  command means the config was not written — say so, or it reverts at next launch. */
 async function set(command: string, args: Record<string, unknown>) {
   try {
     await invoke(command, args);
   } catch (error) {
     console.error(error);
+    toast(t("settingNotSaved"));
   }
   poll();
 }

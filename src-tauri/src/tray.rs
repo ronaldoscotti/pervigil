@@ -1,5 +1,6 @@
 //! The tray, applied: assets, menu, clicks, and the clock that keeps it fresh.
 //! What the tray *says* is decided in [`crate::core::tray`] and only drawn here.
+//! Every ignored result below is a window-server call the user cannot act on.
 
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -123,8 +124,9 @@ pub(crate) fn apply(app: &AppHandle) {
     let mut shown = SHOWN.lock().expect("shown lock");
     if *shown != view.signature {
         if let Ok(menu) = menu(app, &view) {
-            let _ = tray.set_menu(Some(menu));
-            *shown = view.signature.clone();
+            if tray.set_menu(Some(menu)).is_ok() {
+                *shown = view.signature.clone();
+            }
         }
     }
 }
