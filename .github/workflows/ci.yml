@@ -8,6 +8,7 @@ on:
 jobs:
   # macOS is the tested target — this job gates merges.
   macos:
+    name: macos (gates merges)
     runs-on: macos-latest
     defaults:
       run:
@@ -26,6 +27,7 @@ jobs:
 
   # Architecturally supported, not yet a tested target — allowed to fail (see README).
   linux:
+    name: linux (non-blocking, untested target)
     runs-on: ubuntu-latest
     continue-on-error: true
     defaults:
@@ -45,6 +47,7 @@ jobs:
       - run: cargo test
 
   windows:
+    name: windows (non-blocking, untested target)
     runs-on: windows-latest
     continue-on-error: true
     defaults:

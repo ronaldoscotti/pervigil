@@ -23,7 +23,10 @@ docs, and reproduce it.
 | 5 | Implement | `superpowers:test-driven-development` | `src-tauri/` + 120 tests *(M0–M10 + post-launch)* | tests green |
 | 6 | QA | manual + `agent-browser` | screenshots / notes *(M6–M9 pass done)* | works as a user |
 | 7 | Code review | `code-review` skill + self | review notes *(not started)* | issues resolved |
-| 8 | PR | git | pull request *(not started)* | **colleague review** |
+| 8 | PR | git | pull request *(not started)* | review before merge — see [the gate that is not met](#the-gate-that-is-not-met) |
+
+Where each skill comes from and at what version: [the reproduction table in
+`CLAUDE.md`](../../CLAUDE.md#reproducing-the-workflow).
 
 ## Live status
 
@@ -55,6 +58,17 @@ this environment lacks. Tier selection, terminal capture, the clipboard path, an
 the click UI are all verified (`docs/qa/`). That status-accuracy is the whole
 point: the repo is proof precisely because it never claims a stage it hasn't
 reached.
+
+## The gate that is not met
+
+Stage 8 says **colleague review**, and no colleague has reviewed anything here.
+Specola has had one author: every pull request was opened, self-reviewed,
+AI-reviewed, and merged by the same person. What *is* true is the mechanism —
+work lands through pull requests, never a push to `main`, so the gate has
+somewhere to fire the day there is someone on the other side of it.
+
+Saying so is the point of this directory. A checklist that counts a
+self-approval as a colleague review makes every other row in it worth nothing.
 
 ## Reference
 

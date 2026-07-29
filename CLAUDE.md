@@ -25,10 +25,16 @@ inspectable, not asserted.
 6. **TDD** — `superpowers:test-driven-development`. Red → green → refactor. Only after the plan is approved.
 7. **QA as user + as QA engineer** — exercise the real deliverable; `agent-browser` for any UI (screenshots).
 8. **Code review** — run the `code-review` skill, then self-review. Iterate.
-9. **PR → colleague review** — human review before merge.
+9. **PR → review before merge** — self + AI review today; colleague review is the goal, see below.
 
 **Gates are real.** Do not skip a human-review gate to move faster. The proof
 this repo offers is that the gates were honored.
+
+**Stage 9 is aspirational here.** Specola has had a single author: every pull
+request so far was self-reviewed, AI-reviewed, and merged by the person who
+opened it. The mechanism is in place — work lands through PRs, never a push to
+`main` — but no colleague has reviewed one. That changes the day an outside
+reviewer approves a PR here; until then this paragraph stands.
 
 ## Scope discipline (the V2 lesson)
 
@@ -73,8 +79,34 @@ review.
 ## Git
 
 - Conventional-commit style, developer voice.
+- **A body is optional, a findable rationale is not.** About 40% of commits here
+  have no body, and that is allowed when the *why* already lives in a spec, plan,
+  or milestone doc the subject points at. What is not allowed is a subject that
+  promises a rationale — "with rationale", "because …" — over an empty body.
 - **No AI/Claude/Anthropic attribution** in commit messages, PR titles, or PR
   bodies. Commits read as written by the developer. (User standing rule.)
+
+## Reproducing the workflow
+
+The method leans on skills that are **not in this tree** — they live in the
+author's Claude Code configuration, and `.claude/` is not committed because it
+also carries machine-local settings. Naming them so the setup can be rebuilt:
+
+| Referenced as | Source | Version here |
+|---|---|---|
+| `superpowers:brainstorming` | `superpowers` plugin, marketplace `obra/superpowers-marketplace` | 3.2.3 |
+| `superpowers:writing-plans` | same plugin | 3.2.3 |
+| `superpowers:test-driven-development` | same plugin | 3.2.3 |
+| `code-review` | `code-review` plugin, marketplace `anthropics/claude-plugins-official` | tracks the marketplace |
+| `agent-browser` | the `agent-browser` npm CLI, driven by a thin local skill | latest |
+| `context7` | [Context7 MCP server](https://github.com/upstash/context7) | latest |
+
+```
+/plugin marketplace add obra/superpowers-marketplace
+/plugin install superpowers@superpowers-marketplace
+/plugin marketplace add anthropics/claude-plugins-official
+/plugin install code-review@claude-plugins-official
+```
 
 ## Current position
 
