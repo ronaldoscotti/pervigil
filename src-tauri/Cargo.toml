@@ -3,6 +3,9 @@ members = [".", "core"]
 
 [package]
 name = "specola"
+# Not the shipped version — that lives in tauri.conf.json, which is what the
+# app reports and what release-please bumps. Neither crate is published, and a
+# version here would only drift against Cargo.lock.
 version = "0.1.1"
 description = "Cross-platform panel showing which Claude Code sessions are waiting on you"
 authors = ["Ronaldo Scotti"]

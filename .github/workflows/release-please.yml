@@ -1,0 +1,35 @@
+name: Release Please
+
+# Accumulates conventional commits on `main` into a release pull request. Merging
+# that PR tags the version and calls the release workflow — the tag is never pushed
+# by hand, and the four version files can never drift apart.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      released: ${{ steps.release.outputs.release_created }}
+      tag: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  # A tag pushed with GITHUB_TOKEN does not start another workflow, so the build is
+  # called directly rather than left to `on: push: tags`.
+  build:
+    needs: prepare
+    if: needs.prepare.outputs.released == 'true'
+    uses: ./.github/workflows/release.yml
+    secrets: inherit
+    with:
+      tag: ${{ needs.prepare.outputs.tag }}

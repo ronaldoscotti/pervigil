@@ -1,5 +1,8 @@
 [package]
 name = "specola-core"
+# Not the shipped version — that lives in tauri.conf.json, which is what the
+# app reports and what release-please bumps. Neither crate is published, and a
+# version here would only drift against Cargo.lock.
 version = "0.1.1"
 description = "Specola's pure core: the event fold, pricing, and what the tray should say"
 authors = ["Ronaldo Scotti"]
