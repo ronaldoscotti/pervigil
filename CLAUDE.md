@@ -100,9 +100,12 @@ Releases are cut by **release-please**. Nothing is bumped or tagged by hand.
 Four things that are easy to get wrong:
 
 - `feat:` bumps the minor and `fix:` the patch. Nothing else bumps anything.
-- The release is **published, not drafted**. A draft does not resolve at
-  `releases/latest/download/latest.json`, so drafting one hides it from every
-  installed client.
+- The release is **drafted while the bundles build, then published by a final job**.
+  It becomes `latest` the moment it stops being a draft, and
+  `releases/latest/download/latest.json` is what every installed client updates
+  from — so publishing before the matrix finishes would expose a half-uploaded
+  release, and a failed job would leave that manifest incomplete. If a gating job
+  fails the draft is simply left behind and `latest` stays where it was.
 - A tag pushed with `GITHUB_TOKEN` does not start another workflow. That is why
   release-please calls `release.yml` directly rather than relying on
   `on: push: tags`, which stays only as the manual escape hatch.

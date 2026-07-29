@@ -101,10 +101,10 @@ jobs:
         with:
           tagName: ${{ inputs.tag || github.ref_name }}
           releaseName: "Specola ${{ inputs.tag || github.ref_name }}"
-          # Published straight away: a draft does not resolve at
-          # `releases/latest/download/latest.json`, so a drafted release is invisible
-          # to every installed client until someone clicks Publish.
-          releaseDraft: false
+          # Drafted until every bundle is uploaded — the `publish` job below flips
+          # it. A release published while jobs are still running is already `latest`,
+          # so a later failure would leave the updater manifest incomplete.
+          releaseDraft: true
           # Must stay false: the updater endpoint is
           # `releases/latest/download/latest.json`, and GitHub's `latest`
           # resolution skips pre-releases — marking releases pre-release 404s
@@ -153,3 +153,26 @@ jobs:
           args: >-
             --config src-tauri/tauri.bundle.conf.json
             ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
+
+  # `releases/latest/download/latest.json` is what every installed client updates
+  # from, and a release becomes `latest` the moment it stops being a draft. Publishing
+  # only after the matrix finishes means a half-uploaded release is never reachable:
+  # if a gating job fails, the draft is simply left behind and `latest` stays put.
+  publish:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: ${{ inputs.tag || github.ref_name }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Refuse to publish without an updater manifest
+        run: |
+          gh release view "$TAG" -R "$REPO" --json assets --jq '.assets[].name' > assets.txt
+          cat assets.txt
+          grep -qx 'latest.json' assets.txt
+
+      - name: Publish
+        run: gh release edit "$TAG" -R "$REPO" --draft=false --latest
