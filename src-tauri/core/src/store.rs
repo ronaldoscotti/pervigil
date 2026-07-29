@@ -21,7 +21,14 @@ const WAITING_TTL_SECS: Timestamp = 30 * 60;
 /// and hidden sessions still count. A `WaitingOnYou` state decays to idle after
 /// [`WAITING_TTL_SECS`] of silence, so a session that was notified and then died —
 /// no `Stop` ever — can't paint the whole window.
-pub fn timeline(events: &[Event], from: Timestamp, to: Timestamp) -> Vec<Segment> {
+/// `activity` is `(session, when)` per transcript record — the evidence a wait was
+/// answered, since approving a permission prompt fires no hook. See [`answered`].
+pub fn timeline(
+    events: &[Event],
+    activity: &[(SessionId, Timestamp)],
+    from: Timestamp,
+    to: Timestamp,
+) -> Vec<Segment> {
     let mut ticks: Vec<Tick> = Vec::new();
     for event in events.iter().filter(|event| event.at() <= to) {
         ticks.push(Tick::Event(event));
@@ -32,8 +39,11 @@ pub fn timeline(events: &[Event], from: Timestamp, to: Timestamp) -> Vec<Segment
             }
         }
     }
-    // Stable by time; a real event beats an expiry at the same instant.
-    ticks.sort_by_key(|tick| (tick.at(), tick.is_expire()));
+    for (id, at) in activity.iter().filter(|(_, at)| *at <= to) {
+        ticks.push(Tick::Active(id, *at));
+    }
+    // Stable by time; at one instant a real event wins, then activity, then expiry.
+    ticks.sort_by_key(|tick| (tick.at(), tick.rank()));
 
     let mut states: HashMap<&SessionId, (SessionState, Timestamp)> = HashMap::new();
     let mut segments: Vec<Segment> = Vec::new();
@@ -52,6 +62,13 @@ pub fn timeline(events: &[Event], from: Timestamp, to: Timestamp) -> Vec<Segment
                 };
                 states.insert(event.id(), (state_after(event), expiry));
             }
+            // Only a wait is cleared: a session that stopped must stay stopped.
+            Tick::Active(id, at) => {
+                let _ = at;
+                if matches!(states.get(id), Some((SessionState::WaitingOnYou, _))) {
+                    states.insert(id, (SessionState::Working, 0));
+                }
+            }
             // Ignore an expiry the session has already left or renotified past.
             Tick::Expire(id, expiry) => {
                 if states.get(id) == Some(&(SessionState::WaitingOnYou, *expiry)) {
@@ -67,6 +84,7 @@ pub fn timeline(events: &[Event], from: Timestamp, to: Timestamp) -> Vec<Segment
 
 enum Tick<'a> {
     Event(&'a Event),
+    Active(&'a SessionId, Timestamp),
     Expire(&'a SessionId, Timestamp),
 }
 
@@ -74,12 +92,16 @@ impl Tick<'_> {
     fn at(&self) -> Timestamp {
         match self {
             Tick::Event(event) => event.at(),
-            Tick::Expire(_, at) => *at,
+            Tick::Active(_, at) | Tick::Expire(_, at) => *at,
         }
     }
 
-    fn is_expire(&self) -> bool {
-        matches!(self, Tick::Expire(..))
+    fn rank(&self) -> u8 {
+        match self {
+            Tick::Event(_) => 0,
+            Tick::Active(..) => 1,
+            Tick::Expire(..) => 2,
+        }
     }
 }
 
@@ -136,6 +158,11 @@ pub fn merge(mut hooks: Vec<Session>, transcripts: Vec<Session>) -> Vec<Session>
     for transcript in transcripts {
         match hooks.iter_mut().find(|hook| hook.id == transcript.id) {
             Some(hook) => {
+                if answered(hook, &transcript) {
+                    hook.state = SessionState::Working;
+                    hook.since = transcript.last_active;
+                    hook.last_active = hook.last_active.max(transcript.last_active);
+                }
                 hook.title = hook.title.take().or(transcript.title);
                 hook.git_branch = hook.git_branch.take().or(transcript.git_branch);
                 // A hook session born from a Notification has no cwd; the transcript does.
@@ -147,6 +174,12 @@ pub fn merge(mut hooks: Vec<Session>, transcripts: Vec<Session>) -> Vec<Session>
         }
     }
     hooks
+}
+
+/// Approving a permission prompt fires no hook, so nothing clears the wait it opened.
+/// A transcript record written after it is proof the turn carried on.
+fn answered(hook: &Session, transcript: &Session) -> bool {
+    hook.state == SessionState::WaitingOnYou && transcript.last_active > hook.since
 }
 
 /// The list's whole order, in one place: waiting-on-you, then pinned, then recency.
@@ -538,9 +571,54 @@ mod tests {
         ]
     }
 
+    /// The lane is painted from events alone, so a permission prompt kept painting
+    /// amber for as long as the turn ran — the row said Working while the lane said
+    /// 86% waiting. Transcript activity ends the wait here too.
+    #[test]
+    fn transcript_activity_ends_a_wait_in_the_lane() {
+        let events = vec![Event::Notification {
+            id: "s1".into(),
+            at: 0,
+        }];
+        let activity = vec![("s1".to_string(), 100)];
+
+        let segments = timeline(&events, &activity, 0, 200);
+
+        assert!(
+            (waiting_share(&segments) - 0.5).abs() < 1e-9,
+            "waiting until the transcript moved, working after: {segments:?}"
+        );
+    }
+
+    #[test]
+    fn activity_before_the_wait_does_not_end_it() {
+        let events = vec![Event::Notification {
+            id: "s1".into(),
+            at: 100,
+        }];
+        let activity = vec![("s1".to_string(), 50)];
+
+        let segments = timeline(&events, &activity, 0, 200);
+
+        assert_eq!(waiting_share(&segments), 0.5, "the wait still stands");
+    }
+
+    #[test]
+    fn activity_never_revives_a_session_that_stopped() {
+        let events = vec![Event::Stop {
+            id: "s1".into(),
+            at: 0,
+        }];
+        let activity = vec![("s1".to_string(), 100)];
+
+        let segments = timeline(&events, &activity, 0, 200);
+
+        assert_eq!(waiting_share(&segments), 0.0);
+    }
+
     #[test]
     fn timeline_collapses_to_aggregate_segments() {
-        let segments = timeline(&two_session_window(), 0, 600);
+        let segments = timeline(&two_session_window(), &[], 0, 600);
 
         assert_eq!(segments.first().unwrap().state, SessionState::Working);
         assert_eq!(segments.last().unwrap().state, SessionState::WaitingOnYou);
@@ -549,7 +627,7 @@ mod tests {
 
     #[test]
     fn timeline_segments_are_contiguous_and_cover_the_window() {
-        let segments = timeline(&two_session_window(), 0, 600);
+        let segments = timeline(&two_session_window(), &[], 0, 600);
 
         assert_eq!(segments.first().unwrap().from, 0);
         assert_eq!(segments.last().unwrap().to, 600);
@@ -560,7 +638,7 @@ mod tests {
 
     #[test]
     fn empty_log_is_one_idle_segment() {
-        let segments = timeline(&[], 0, 600);
+        let segments = timeline(&[], &[], 0, 600);
 
         assert_eq!(
             segments,
@@ -574,7 +652,7 @@ mod tests {
 
     #[test]
     fn waiting_share_is_the_waiting_fraction_of_the_window() {
-        let segments = timeline(&two_session_window(), 0, 600);
+        let segments = timeline(&two_session_window(), &[], 0, 600);
 
         assert!((waiting_share(&segments) - 0.5).abs() < f64::EPSILON);
     }
@@ -588,7 +666,7 @@ mod tests {
             at: 0,
         }];
 
-        let segments = timeline(&events, 0, 10 * WAITING_TTL_SECS);
+        let segments = timeline(&events, &[], 0, 10 * WAITING_TTL_SECS);
 
         let share = waiting_share(&segments);
         assert!(
@@ -607,7 +685,7 @@ mod tests {
         }];
         let from = 5 * WAITING_TTL_SECS;
 
-        let segments = timeline(&events, from, from + WAITING_TTL_SECS);
+        let segments = timeline(&events, &[], from, from + WAITING_TTL_SECS);
 
         assert_eq!(waiting_share(&segments), 0.0);
     }
@@ -620,7 +698,7 @@ mod tests {
             at: 0,
         }];
 
-        let segments = timeline(&events, 0, WAITING_TTL_SECS);
+        let segments = timeline(&events, &[], 0, WAITING_TTL_SECS);
 
         assert_eq!(waiting_share(&segments), 1.0);
     }
@@ -640,7 +718,7 @@ mod tests {
             },
         ];
 
-        let segments = timeline(&events, 0, 2 * WAITING_TTL_SECS - 20);
+        let segments = timeline(&events, &[], 0, 2 * WAITING_TTL_SECS - 20);
 
         assert_eq!(waiting_share(&segments), 1.0);
     }
@@ -657,6 +735,77 @@ mod tests {
             git_branch: None,
             terminal: None,
         }
+    }
+
+    /// Claude Code fires `Notification` for a permission prompt, but approving it
+    /// fires nothing — the hook log has no event that clears the wait, so the row
+    /// stayed amber while Claude worked. Transcript records written after the
+    /// notification are proof the turn continued.
+    #[test]
+    fn transcript_activity_after_a_wait_means_the_prompt_was_answered() {
+        let hooks = vec![Session {
+            state: SessionState::WaitingOnYou,
+            since: 1_000,
+            last_active: 1_000,
+            ..session("s1", SessionState::WaitingOnYou, None, Some(10))
+        }];
+        let transcripts = vec![Session {
+            since: 1_224,
+            last_active: 1_224,
+            ..session("s1", SessionState::Idle, Some("working"), None)
+        }];
+
+        let merged = merge(hooks, transcripts);
+
+        assert_eq!(merged[0].state, SessionState::Working);
+        assert_eq!(
+            merged[0].last_active, 1_224,
+            "the transcript is the newest thing that happened"
+        );
+    }
+
+    #[test]
+    fn a_wait_with_no_transcript_activity_after_it_stays_waiting() {
+        let hooks = vec![Session {
+            state: SessionState::WaitingOnYou,
+            since: 2_000,
+            last_active: 2_000,
+            ..session("s1", SessionState::WaitingOnYou, None, Some(10))
+        }];
+        let transcripts = vec![Session {
+            since: 1_500,
+            last_active: 1_500,
+            ..session("s1", SessionState::Idle, Some("blocked"), None)
+        }];
+
+        let merged = merge(hooks, transcripts);
+
+        assert_eq!(
+            merged[0].state,
+            SessionState::WaitingOnYou,
+            "nothing happened after the prompt, so it is a real block"
+        );
+    }
+
+    #[test]
+    fn a_stopped_session_is_not_revived_by_its_own_final_records() {
+        // `Stop` is an honest end of turn. Trailing transcript writes must not drag
+        // it back to Working, or every finished session reads as busy.
+        let hooks = vec![Session {
+            state: SessionState::YourTurn,
+            since: 1_000,
+            last_active: 1_000,
+            ..session("s1", SessionState::YourTurn, None, Some(10))
+        }];
+        let transcripts = vec![Session {
+            since: 1_050,
+            last_active: 1_050,
+            ..session("s1", SessionState::Idle, Some("done"), None)
+        }];
+
+        let merged = merge(hooks, transcripts);
+
+        assert_eq!(merged[0].state, SessionState::YourTurn);
     }
 
     #[test]

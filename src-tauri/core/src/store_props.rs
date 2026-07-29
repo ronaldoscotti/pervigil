@@ -53,7 +53,7 @@ proptest! {
     ) {
         let to = from + width;
 
-        let segments = timeline(&events, from, to);
+        let segments = timeline(&events, &[], from, to);
 
         prop_assert!(!segments.is_empty());
         prop_assert_eq!(segments.first().unwrap().from, from);

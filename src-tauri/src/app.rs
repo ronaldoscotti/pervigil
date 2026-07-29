@@ -358,7 +358,14 @@ impl App {
             })
             .collect();
 
-        let segments = store::timeline(&events, from, to);
+        // Transcript records are the only witness that a permission prompt was
+        // answered — no hook fires when it is.
+        let activity: Vec<(SessionId, Timestamp)> = scan
+            .usage
+            .iter()
+            .flat_map(|(id, entries)| entries.iter().map(move |e| (id.clone(), e.at)))
+            .collect();
+        let segments = store::timeline(&events, &activity, from, to);
 
         Snapshot {
             now: to,
