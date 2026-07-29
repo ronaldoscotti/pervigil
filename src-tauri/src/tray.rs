@@ -11,7 +11,9 @@ use tauri::menu::{Menu, MenuEvent, MenuItemBuilder, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Manager, Theme};
 
-use crate::app::{self, App, Span};
+use crate::app::App;
+use crate::core::notify::Notice;
+use crate::core::span::Span;
 use crate::core::tray::TrayView;
 
 pub(crate) const TRAY_ID: &str = "specola";
@@ -176,9 +178,9 @@ fn jump(app: &AppHandle, id: &str) {
     }
 
     if state.notifications_on() {
-        app::fire(
+        crate::commands::fire(
             app,
-            vec![app::Notice {
+            vec![Notice {
                 title: outcome.label,
                 body: outcome.resume.unwrap_or_default(),
             }],
@@ -212,7 +214,7 @@ fn spawn_ticker(app: AppHandle) {
         }
         let state = app.state::<App>();
         state.snapshot(Span::Today, Local::now());
-        app::fire(&app, state.take_pending());
+        crate::commands::fire(&app, state.take_pending());
         apply(&app);
     });
 }

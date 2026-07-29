@@ -3474,6 +3474,7 @@ dependencies = [
  "libc",
  "serde",
  "serde_json",
+ "specola-core",
  "tauri",
  "tauri-build",
  "tauri-plugin-autostart",
@@ -3481,6 +3482,15 @@ dependencies = [
  "tauri-plugin-process",
  "tauri-plugin-single-instance",
  "tauri-plugin-updater",
+]
+
+[[package]]
+name = "specola-core"
+version = "0.1.1"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

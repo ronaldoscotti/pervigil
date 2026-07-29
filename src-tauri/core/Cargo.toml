@@ -1,0 +1,13 @@
+[package]
+name = "specola-core"
+version = "0.1.1"
+description = "Specola's pure core: the event fold, pricing, and what the tray should say"
+authors = ["Ronaldo Scotti"]
+edition = "2021"
+rust-version = "1.82"
+
+# The boundary is this dependency list: no Tauri, no io, no platform.
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }

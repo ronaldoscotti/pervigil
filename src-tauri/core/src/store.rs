@@ -724,7 +724,7 @@ mod tests {
             cwd: "/p".into(),
             pid: Some(10),
             at: 100,
-            term: Some(crate::core::terminal::Terminal {
+            term: Some(crate::terminal::Terminal {
                 tmux_pane: Some("%3".into()),
                 ..Default::default()
             }),
