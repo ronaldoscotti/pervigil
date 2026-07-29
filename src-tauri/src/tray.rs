@@ -14,7 +14,7 @@ use tauri::{AppHandle, Manager, Theme};
 use crate::app::App;
 use crate::core::notify::Notice;
 use crate::core::span::Span;
-use crate::core::tray::TrayView;
+use crate::core::tray::{fallback, Fallback, TrayView};
 
 pub(crate) const TRAY_ID: &str = "specola";
 
@@ -173,20 +173,17 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
 fn jump(app: &AppHandle, id: &str) {
     let state = app.state::<App>();
     let outcome = state.focus(id);
-    if outcome.raised {
-        return;
-    }
 
-    if state.notifications_on() {
-        crate::commands::fire(
+    match fallback(outcome.raised, state.notifications_on()) {
+        Fallback::Nothing => {}
+        Fallback::Notify => crate::commands::fire(
             app,
             vec![Notice {
                 title: outcome.label,
                 body: outcome.resume.unwrap_or_default(),
             }],
-        );
-    } else {
-        show_panel(app);
+        ),
+        Fallback::OpenPanel => show_panel(app),
     }
 }
 
