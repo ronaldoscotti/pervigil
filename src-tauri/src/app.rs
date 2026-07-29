@@ -269,6 +269,7 @@ impl App {
 
         let mut sessions = store::merge(store::fold(&events, to, &prefs), scan.sessions);
         retain_live(&mut sessions, &SystemProcesses);
+        store::retain_within(&mut sessions, from);
         store::apply_dismissed(&mut sessions, &prefs);
         // Drop context-less ghosts: a hook fired (a Notification) but no cwd ever
         // arrived and no transcript backfilled one, so the row would be nameless.

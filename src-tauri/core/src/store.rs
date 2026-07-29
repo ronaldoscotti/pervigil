@@ -282,6 +282,12 @@ fn retain_current(sessions: &mut Vec<Session>) {
     });
 }
 
+/// Scope the list to the span the panel is showing. Applied after [`merge`], so it
+/// covers transcript-only sessions too.
+pub fn retain_within(sessions: &mut Vec<Session>, from: Timestamp) {
+    sessions.retain(|session| session.last_active >= from);
+}
+
 /// Resolve dismissed sessions per the chosen mode, until they act again: `Hide`
 /// removes them; `Read` keeps them but demotes to idle — a "mark as read". Applied
 /// after [`merge`] too, so it also covers transcript-only sessions — which never pass
@@ -904,6 +910,41 @@ mod tests {
         ];
 
         assert_eq!(fold_default(&events, 600).len(), 2);
+    }
+
+    fn at(id: &str, last_active: Timestamp) -> Session {
+        Session {
+            id: id.into(),
+            cwd: format!("/{id}"),
+            pid: None,
+            state: SessionState::Idle,
+            since: last_active,
+            last_active,
+            title: None,
+            git_branch: None,
+            terminal: None,
+        }
+    }
+
+    /// The span filter scoped the lane, the cost and the tokens, but never the list —
+    /// so "last 4 hours" showed the same rows as "today", some of them days old.
+    #[test]
+    fn the_window_drops_a_session_that_went_quiet_before_it() {
+        let mut sessions = vec![at("recent", 900), at("stale", 100)];
+
+        retain_within(&mut sessions, 500);
+
+        let ids: Vec<&str> = sessions.iter().map(|s| s.id.as_str()).collect();
+        assert_eq!(ids, vec!["recent"]);
+    }
+
+    #[test]
+    fn a_session_active_exactly_at_the_boundary_is_inside_the_window() {
+        let mut sessions = vec![at("edge", 500)];
+
+        retain_within(&mut sessions, 500);
+
+        assert_eq!(sessions.len(), 1);
     }
 
     #[test]
