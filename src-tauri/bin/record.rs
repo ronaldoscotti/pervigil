@@ -19,7 +19,7 @@ fn record() -> Option<()> {
 
     let at = SystemTime::now().duration_since(UNIX_EPOCH).ok()?.as_secs();
     let term = terminal();
-    let event = build_event(&kind, &payload, at, parent_pid(), term.clone())?;
+    let event = build_event(&kind, &payload, at, parent_pid(), term.clone()).ok()?;
     let line = serde_json::to_string(&event).ok()?;
 
     let home = std::env::var_os("HOME").map(std::path::PathBuf::from)?;
