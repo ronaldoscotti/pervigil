@@ -86,6 +86,30 @@ review.
 - **No AI/Claude/Anthropic attribution** in commit messages, PR titles, or PR
   bodies. Commits read as written by the developer. (User standing rule.)
 
+## Releasing
+
+Releases are cut by **release-please**. Nothing is bumped or tagged by hand.
+
+1. Merge work into `main` with conventional-commit subjects — the subject *is* the
+   changelog line, so write it for a reader of `CHANGELOG.md`.
+2. release-please keeps a `chore: release X.Y.Z` PR open, accumulating those subjects
+   and bumping `package.json` and `src-tauri/tauri.conf.json`.
+3. Merging that PR tags the version and calls `release.yml`, which builds the signed
+   mac/Windows/Linux bundles and publishes the release.
+
+Four things that are easy to get wrong:
+
+- `feat:` bumps the minor and `fix:` the patch. Nothing else bumps anything.
+- The release is **published, not drafted**. A draft does not resolve at
+  `releases/latest/download/latest.json`, so drafting one hides it from every
+  installed client.
+- A tag pushed with `GITHUB_TOKEN` does not start another workflow. That is why
+  release-please calls `release.yml` directly rather than relying on
+  `on: push: tags`, which stays only as the manual escape hatch.
+- The two `Cargo.toml` versions are deliberately left alone: neither crate is
+  published, and release-please cannot update `Cargo.lock` beside them, so bumping
+  them would strand the lockfile.
+
 ## Reproducing the workflow
 
 The method leans on skills that are **not in this tree** — they live in the

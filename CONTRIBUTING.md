@@ -68,12 +68,17 @@ and small changes skip most of that — there's less to review, not a relaxed ba
 **Tests come first for anything with logic.** The heart of the project is
 `fold(events, now, prefs) -> sessions`: a pure function with no clock, no
 filesystem, and no GUI, so behavior is provable with fixtures instead of a UI
-harness. Keep it that way — platform effects live behind traits at the edges.
+harness. It lives in `specola-core`, a crate that depends on neither Tauri nor the
+`io`/`platform` modules — so the boundary is a compile error, not a review comment.
+Keep it that way; platform effects live behind traits at the edges.
 
 ## Conventions
 
 - **Commits**: Conventional Commits, imperative mood, English.
   `fix: keep the tray badge in sync after a dismiss`
+  The subject becomes a line in `CHANGELOG.md` — release-please builds the release
+  from these, so write it for someone reading the changelog. `feat:` bumps the minor
+  version, `fix:` the patch.
 - **Comments**: the exception, not the habit, and always in English. Docblocks on
   public functions; a non-obvious decision or known limit; an opaque regex or
   algorithm. Never section banners, narration of the next line, or commented-out
