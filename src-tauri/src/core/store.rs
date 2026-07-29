@@ -258,9 +258,28 @@ pub fn fold(events: &[Event], _now: Timestamp, prefs: &ViewPrefs) -> Vec<Session
         }
     }
 
+    retain_current(&mut sessions);
     apply_dismissed(&mut sessions, prefs);
     sort(&mut sessions, prefs);
     sessions
+}
+
+/// One `claude` process runs one session at a time, so `/resume` leaves the id it
+/// replaced behind: no further events, and a pid still alive, so neither age nor
+/// liveness can retire it. Keeps the newest-active session per pid; no pid, no claim.
+fn retain_current(sessions: &mut Vec<Session>) {
+    let mut newest: HashMap<u32, Timestamp> = HashMap::new();
+    for session in sessions.iter() {
+        if let Some(pid) = session.pid {
+            let seen = newest.entry(pid).or_insert(session.last_active);
+            *seen = (*seen).max(session.last_active);
+        }
+    }
+
+    sessions.retain(|session| match session.pid {
+        Some(pid) => newest.get(&pid) == Some(&session.last_active),
+        None => true,
+    });
 }
 
 /// Resolve dismissed sessions per the chosen mode, until they act again: `Hide`
@@ -289,10 +308,16 @@ mod tests {
         Event::SessionStart {
             id: id.into(),
             cwd: format!("/{id}"),
-            pid: Some(10),
+            pid: Some(pid_for(id)),
             at,
             term: None,
         }
+    }
+
+    fn pid_for(id: &str) -> u32 {
+        id.bytes().fold(7u32, |acc, byte| {
+            acc.wrapping_mul(31).wrapping_add(u32::from(byte))
+        })
     }
 
     fn fold_default(events: &[Event], now: Timestamp) -> Vec<Session> {
@@ -770,6 +795,115 @@ mod tests {
         let current = vec![waiting("new")];
 
         assert_eq!(newly_waiting(&HashMap::new(), &current).len(), 1);
+    }
+
+    /// `/resume` starts a new session id inside the *same* `claude` process. The
+    /// session it replaced never fires another event, and its pid is still alive, so
+    /// nothing else in the pipeline can tell it is over — it sat in the panel as
+    /// Working forever.
+    #[test]
+    fn resuming_supersedes_the_session_that_never_got_a_message() {
+        let events = vec![
+            Event::SessionStart {
+                id: "ghost".into(),
+                cwd: "/p".into(),
+                pid: Some(56478),
+                at: 100,
+                term: None,
+            },
+            Event::SessionStart {
+                id: "resumed".into(),
+                cwd: "/p".into(),
+                pid: Some(56478),
+                at: 110,
+                term: None,
+            },
+            Event::UserPromptSubmit {
+                id: "resumed".into(),
+                at: 200,
+            },
+        ];
+
+        let sessions = fold_default(&events, 300);
+        let ids: Vec<&str> = sessions.iter().map(|s| s.id.as_str()).collect();
+
+        assert_eq!(
+            ids,
+            vec!["resumed"],
+            "the replaced session must not survive"
+        );
+    }
+
+    #[test]
+    fn a_resume_chain_keeps_only_the_session_still_being_used() {
+        // The real log's shape: one pid, several starts, and the one with the newest
+        // activity is the live one — even when it started before the others.
+        let start = |id: &str, at: Timestamp| Event::SessionStart {
+            id: id.into(),
+            cwd: "/p".into(),
+            pid: Some(9),
+            at,
+            term: None,
+        };
+        let events = vec![
+            start("a", 100),
+            start("b", 110),
+            Event::UserPromptSubmit {
+                id: "b".into(),
+                at: 400,
+            },
+            start("c", 120),
+        ];
+
+        let sessions = fold_default(&events, 500);
+        let ids: Vec<&str> = sessions.iter().map(|s| s.id.as_str()).collect();
+
+        assert_eq!(ids, vec!["b"]);
+    }
+
+    #[test]
+    fn two_processes_are_two_live_sessions_whatever_their_ages() {
+        // The rule must key on the process, never on time alone: parallel sessions in
+        // different terminals are the product's whole point.
+        let events = vec![
+            Event::SessionStart {
+                id: "older".into(),
+                cwd: "/a".into(),
+                pid: Some(1),
+                at: 100,
+                term: None,
+            },
+            Event::SessionStart {
+                id: "newer".into(),
+                cwd: "/b".into(),
+                pid: Some(2),
+                at: 500,
+                term: None,
+            },
+        ];
+
+        assert_eq!(fold_default(&events, 600).len(), 2);
+    }
+
+    #[test]
+    fn a_session_with_no_pid_is_never_superseded() {
+        // Hooks installed mid-session: no SessionStart, so no pid. It cannot be
+        // attributed to a process and must not be swept up by another one's resume.
+        let events = vec![
+            Event::UserPromptSubmit {
+                id: "pidless".into(),
+                at: 100,
+            },
+            Event::SessionStart {
+                id: "started".into(),
+                cwd: "/p".into(),
+                pid: Some(7),
+                at: 500,
+                term: None,
+            },
+        ];
+
+        assert_eq!(fold_default(&events, 600).len(), 2);
     }
 
     #[test]
