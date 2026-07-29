@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "tauri": "tauri",
     "sidecar": "bash scripts/stage-sidecar.sh",
@@ -23,6 +25,7 @@
   "devDependencies": {
     "@tauri-apps/cli": "^2",
     "typescript": "~5.6.2",
-    "vite": "^6.0.3"
+    "vite": "^6.0.3",
+    "vitest": "^4.1.10"
   }
 }
