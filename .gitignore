@@ -33,3 +33,6 @@ cert.b64
 # Untracked launch working docs
 /LAUNCH-PLAN.md
 /DRAFTS-community.md
+
+# Local audit notes — kept out of the repo on purpose.
+AUDITORIA-*.md
