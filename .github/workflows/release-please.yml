@@ -18,11 +18,24 @@ jobs:
       released: ${{ steps.release.outputs.release_created }}
       tag: ${{ steps.release.outputs.tag_name }}
     steps:
-      - uses: googleapis/release-please-action@v4
+      - uses: googleapis/release-please-action@v5
         id: release
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      # release-please creates its own GitHub release, already published, the moment
+      # the release PR merges — so `latest` pointed at a version with no bundles for
+      # the whole build, and `release.yml`'s `releaseDraft: true` never applied because
+      # the release already existed. Hand it over as a draft; the `publish` job there
+      # flips it back once there is an updater manifest to stand behind.
+      - name: Hold the release as a draft until its bundles are uploaded
+        if: steps.release.outputs.release_created == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release edit "${{ steps.release.outputs.tag_name }}" \
+            -R "${{ github.repository }}" --draft=true
 
   # A tag pushed with GITHUB_TOKEN does not start another workflow, so the build is
   # called directly rather than left to `on: push: tags`.
