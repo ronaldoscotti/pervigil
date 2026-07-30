@@ -3,7 +3,7 @@
 
 use proptest::prelude::*;
 
-use super::event::{Event, Timestamp};
+use super::event::{Event, NotificationKind, SessionSource, Timestamp};
 use super::session::ViewPrefs;
 use super::store::{fold, timeline};
 
@@ -24,8 +24,21 @@ fn events() -> impl Strategy<Value = Vec<Event>> {
                             pid: Some(pid),
                             at,
                             term: None,
+                            source: match at % 3 {
+                                0 => Some(SessionSource::Opened),
+                                1 => Some(SessionSource::Compact),
+                                _ => None,
+                            },
                         },
-                        1 => Event::Notification { id, at },
+                        1 => Event::Notification {
+                            id,
+                            at,
+                            kind: match at % 3 {
+                                0 => Some(NotificationKind::Permission),
+                                1 => Some(NotificationKind::Idle),
+                                _ => None,
+                            },
+                        },
                         2 => Event::Stop { id, at },
                         _ => Event::UserPromptSubmit { id, at },
                     }

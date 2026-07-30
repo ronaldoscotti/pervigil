@@ -261,17 +261,22 @@ impl App {
         // a transcript quiet since this morning is still today's spend, and the
         // mtime gate would otherwise never open its file at all.
         let midnight = start_of_day(now).timestamp().max(0) as Timestamp;
+        // The scanner is shared by every span and outlives all of them, so what it may
+        // forget is bounded by the widest one — not by whichever span asked first.
+        let keep_since = bounds(Span::Week, now).0;
         let scan = self.scanner.lock().expect("scanner lock").scan(
             &self.home.join(PROJECTS),
             from,
             midnight,
+            keep_since,
         );
         let spent: Vec<&UsageEntry> = scan.usage.values().flatten().collect();
 
         let config = self.config.lock().expect("config lock").clone();
         let prefs = config.view_prefs();
 
-        let mut sessions = store::merge(store::fold(&events, to, &prefs), scan.sessions);
+        let mut sessions =
+            store::merge(store::fold(&events, to, &prefs), scan.sessions, scan.agents);
         retain_live(&mut sessions, &SystemProcesses);
         let retired = store::superseded(&events);
         sessions.retain(|session| !retired.contains(&session.id));
@@ -366,14 +371,9 @@ impl App {
             })
             .collect();
 
-        // Transcript records are the only witness that a permission prompt was
-        // answered — no hook fires when it is.
-        let activity: Vec<(SessionId, Timestamp)> = scan
-            .usage
-            .iter()
-            .flat_map(|(id, entries)| entries.iter().map(move |e| (id.clone(), e.at)))
-            .collect();
-        let segments = store::timeline(&events, &activity, from, to);
+        // Main-transcript records are the only witness that a permission prompt was
+        // answered — no hook fires when it is, and a background agent writes either way.
+        let segments = store::timeline(&events, &scan.activity, from, to);
 
         Snapshot {
             now: to,

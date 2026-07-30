@@ -4,13 +4,18 @@ use std::path::Path;
 
 use serde::Deserialize;
 
-use crate::core::event::{Event, Timestamp};
+use crate::core::event::{Event, NotificationKind, SessionSource, Timestamp};
 use crate::core::terminal::Terminal;
 
 #[derive(Deserialize)]
 struct Hook {
     session_id: Option<String>,
     cwd: Option<String>,
+    /// `permission_prompt`, `idle_prompt`, or whatever Claude Code adds next. Only
+    /// `Notification` carries it.
+    notification_type: Option<String>,
+    /// `startup`, `resume`, `clear` or `compact`. Only `SessionStart` carries it.
+    source: Option<String>,
 }
 
 /// Why a hook payload produced no event. Three different operational problems: a
@@ -55,8 +60,13 @@ pub fn build_event(
             pid,
             at,
             term: term.some(),
+            source: SessionSource::from_hook(hook.source.as_deref()),
         }),
-        "Notification" => Ok(Event::Notification { id, at }),
+        "Notification" => Ok(Event::Notification {
+            id,
+            at,
+            kind: NotificationKind::from_hook(hook.notification_type.as_deref()),
+        }),
         "Stop" => Ok(Event::Stop { id, at }),
         "UserPromptSubmit" => Ok(Event::UserPromptSubmit { id, at }),
         _ => Err(IngestError::UnknownKind(kind.to_string())),
@@ -98,8 +108,63 @@ mod tests {
                 pid: Some(42),
                 at: 1_000,
                 term: Some(term),
+                source: None,
             }
         );
+    }
+
+    #[test]
+    fn the_notification_type_decides_the_kind() {
+        let kind_of = |payload: &str| match build_event(
+            "Notification",
+            payload,
+            1,
+            None,
+            Terminal::default(),
+        ) {
+            Ok(Event::Notification { kind, .. }) => kind,
+            other => panic!("expected a notification, got {other:?}"),
+        };
+
+        assert_eq!(
+            kind_of(r#"{"session_id":"s1","notification_type":"idle_prompt"}"#),
+            Some(NotificationKind::Idle)
+        );
+        assert_eq!(
+            kind_of(r#"{"session_id":"s1","notification_type":"permission_prompt"}"#),
+            Some(NotificationKind::Permission)
+        );
+        assert_eq!(
+            kind_of(r#"{"session_id":"s1","notification_type":"something_new"}"#),
+            None,
+            "a type we do not know is recorded as unknown, not guessed at"
+        );
+        assert_eq!(kind_of(r#"{"session_id":"s1"}"#), None);
+    }
+
+    #[test]
+    fn how_the_session_started_is_recorded() {
+        let source_of = |payload: &str| match build_event(
+            "SessionStart",
+            payload,
+            1,
+            None,
+            Terminal::default(),
+        ) {
+            Ok(Event::SessionStart { source, .. }) => source,
+            other => panic!("expected a session start, got {other:?}"),
+        };
+
+        for opened in ["startup", "resume", "clear"] {
+            let payload = format!(r#"{{"session_id":"s1","source":"{opened}"}}"#);
+            assert_eq!(source_of(&payload), Some(SessionSource::Opened));
+        }
+        assert_eq!(
+            source_of(r#"{"session_id":"s1","source":"compact"}"#),
+            Some(SessionSource::Compact),
+            "compaction is the one source that happens mid-turn"
+        );
+        assert_eq!(source_of(r#"{"session_id":"s1"}"#), None);
     }
 
     #[test]
@@ -130,6 +195,7 @@ mod tests {
         assert_eq!(
             notification,
             Event::Notification {
+                kind: None,
                 id: "s1".into(),
                 at: 2_000
             }

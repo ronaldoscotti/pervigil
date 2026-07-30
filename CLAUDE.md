@@ -137,7 +137,7 @@ also carries machine-local settings. Naming them so the setup can be rebuilt:
 
 ## Current position
 
-Implementation through **M10 and beyond**: **169 Rust tests + 20 frontend tests
+Implementation through **M10 and beyond**: **194 Rust tests + 20 frontend tests
 green**. Signed + notarized macOS build; **auto-updating, signed releases from CI**
 (tag → mac/Windows/Linux bundles + updater manifest, proven end-to-end); ten UI
 languages with RTL; launch-at-login; single-instance; a dismiss "read" mode; and a
@@ -148,8 +148,9 @@ list rather than a convention. The toolchain is pinned; `cargo audit` and a
 frontend job run in CI.
 
 The core (M0–M10) followed the full spec→plan→TDD→review pipeline; the post-launch
-features used a faster TDD + agent-browser QA + reviewed-PR loop (a written spec only
-for the release/auto-update and audit-remediation work — no back-dated specs). Three
-OS-surface effects stay visually unverified on this box (tmux/iTerm2 raise, tray badge,
-notification banner). See `docs/plans/2026-07-23-pervigil-plan.md`,
-`docs/specs/2026-07-28-audit-remediation.md`, and `docs/method/README.md`.
+features used a faster TDD + agent-browser QA + reviewed-PR loop (a written spec for
+the release/auto-update, audit-remediation, and notification-kind work — no back-dated
+specs). Three OS-surface effects stay visually unverified on this box (tmux/iTerm2
+raise, tray badge, notification banner). See `docs/plans/2026-07-23-pervigil-plan.md`,
+`docs/specs/2026-07-28-audit-remediation.md`,
+`docs/specs/2026-07-29-notification-kind.md`, and `docs/method/README.md`.

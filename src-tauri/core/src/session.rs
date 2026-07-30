@@ -8,10 +8,12 @@ use super::terminal::Terminal;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SessionState {
     Working,
-    /// Claude explicitly needs you — a permission prompt or the away notification.
+    /// Claude explicitly needs an answer from you — a permission prompt, or any
+    /// notification whose kind this version does not recognise.
     WaitingOnYou,
-    /// The turn finished; a live session sits at its prompt, your move. Softer than
-    /// `WaitingOnYou`, which stays reserved for Claude's own notifications.
+    /// A live session sitting at its prompt, your move: the turn finished, or the idle
+    /// nudge that follows one. Softer than `WaitingOnYou`, which is reserved for Claude
+    /// actually waiting on an answer.
     YourTurn,
     Idle,
 }
