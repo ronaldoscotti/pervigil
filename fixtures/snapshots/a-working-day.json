@@ -1,0 +1,92 @@
+{
+  "cost": 0.04025,
+  "dismissRead": false,
+  "from": 1784985600,
+  "hidden": [],
+  "hookSnippet": "<snippet>",
+  "hooksInstalled": false,
+  "notifications": true,
+  "now": 1785000000,
+  "segments": [
+    {
+      "from": 1784985600,
+      "state": "Idle",
+      "to": 1784992000
+    },
+    {
+      "from": 1784992000,
+      "state": "Working",
+      "to": 1784992200
+    },
+    {
+      "from": 1784992200,
+      "state": "Idle",
+      "to": 1784998200
+    },
+    {
+      "from": 1784998200,
+      "state": "Working",
+      "to": 1784998260
+    },
+    {
+      "from": 1784998260,
+      "state": "WaitingOnYou",
+      "to": 1785000000
+    }
+  ],
+  "sessions": [
+    {
+      "branch": "main",
+      "cost": 0.0105,
+      "focus": "<focus>",
+      "id": "s-block",
+      "name": "fix the failing migration",
+      "pinned": false,
+      "project": "api",
+      "siblings": 2,
+      "since": 1784998260,
+      "state": "WaitingOnYou"
+    },
+    {
+      "branch": "main",
+      "cost": 0.00425,
+      "focus": "<focus>",
+      "id": "s-turn",
+      "name": "rewrite the readme intro",
+      "pinned": false,
+      "project": "docs",
+      "siblings": 1,
+      "since": 1784999300,
+      "state": "YourTurn"
+    },
+    {
+      "branch": "main",
+      "cost": 0.0025,
+      "focus": "<focus>",
+      "id": "s-quiet",
+      "name": "bump the toolchain",
+      "pinned": false,
+      "project": "api",
+      "siblings": 2,
+      "since": 1784992200,
+      "state": "YourTurn"
+    },
+    {
+      "branch": "main",
+      "cost": 0.023,
+      "focus": "<focus>",
+      "id": "s-work",
+      "name": "add the dark theme toggle",
+      "pinned": false,
+      "project": "web",
+      "siblings": 1,
+      "since": 1784999700,
+      "state": "Working"
+    }
+  ],
+  "todayCost": "<local midnight>",
+  "tokens": 1930,
+  "waiting": 1,
+  "waitingOutsideWindow": 0,
+  "waitingShare": 0.120833333
+}

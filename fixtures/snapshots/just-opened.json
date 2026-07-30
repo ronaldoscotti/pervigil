@@ -1,0 +1,36 @@
+{
+  "cost": -0.0,
+  "dismissRead": false,
+  "from": 1784985600,
+  "hidden": [],
+  "hookSnippet": "<snippet>",
+  "hooksInstalled": false,
+  "notifications": true,
+  "now": 1785000000,
+  "segments": [
+    {
+      "from": 1784985600,
+      "state": "Idle",
+      "to": 1785000000
+    }
+  ],
+  "sessions": [
+    {
+      "branch": "main",
+      "cost": null,
+      "focus": "<focus>",
+      "id": "s-open",
+      "name": "extract the ebook text",
+      "pinned": false,
+      "project": "bebe",
+      "siblings": 1,
+      "since": 1784998800,
+      "state": "Idle"
+    }
+  ],
+  "todayCost": "<local midnight>",
+  "tokens": 0,
+  "waiting": 0,
+  "waitingOutsideWindow": 0,
+  "waitingShare": 0.0
+}

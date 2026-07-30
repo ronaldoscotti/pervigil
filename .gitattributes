@@ -1,0 +1,3 @@
+# Goldens are compared byte for byte; CI runs that comparison on three operating
+# systems, though only macOS gates a merge.
+fixtures/snapshots/*.json text eol=lf

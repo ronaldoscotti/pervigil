@@ -59,6 +59,13 @@ describe("money", () => {
     expect(money(1.5)).toBe("$1.50");
     expect(money(12.345)).toBe("$12.35");
   });
+
+  it("drops the sign on negative zero", () => {
+    // A window with nothing priced arrives as -0.0: Rust's `Sum` for floats uses
+    // negative zero as its identity, and "-$0.00" in the footer would read as a refund.
+    // `toFixed` already drops it — this pins behaviour nothing in `money` asks for.
+    expect(money(-0)).toBe("$0.00");
+  });
 });
 
 describe("formatTokens", () => {

@@ -129,7 +129,9 @@ pub struct App {
 
 impl App {
     pub fn new() -> Self {
-        Self::at(io::home().unwrap_or_default())
+        let home = io::home().unwrap_or_default();
+        prune_log(&home);
+        Self::at(home)
     }
 
     pub fn home(&self) -> &Path {
@@ -140,8 +142,10 @@ impl App {
         self.home.join(SETTINGS)
     }
 
+    /// Rooted at a given home, and it leaves that home's log alone. Retention is
+    /// launch housekeeping and belongs to [`App::new`]: it prunes against the wall
+    /// clock, which would quietly rewrite any fixture written against a fixed one.
     pub fn at(home: PathBuf) -> Self {
-        prune_log(&home);
         let config = Config::load(&home.join(CONFIG));
         Self {
             config: Mutex::new(config),
@@ -614,6 +618,35 @@ mod tests {
         );
 
         std::fs::remove_file(&home).ok();
+    }
+
+    /// Construction used to prune against the wall clock, so a fixture written
+    /// against a fixed clock in the past emptied itself the day it aged past
+    /// retention — `tests/golden.rs` was 25 days from breaking with no commit to
+    /// blame. Retention is [`App::new`]'s job now, and this pins that.
+    #[test]
+    fn construction_leaves_an_old_log_alone() {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let home = std::env::temp_dir().join(format!("specola-retention-{nanos}"));
+        std::fs::create_dir_all(home.join(".specola")).unwrap();
+        let now = Local::now().timestamp().max(0) as Timestamp;
+        let ancient = now - crate::core::prune::RETENTION_SECS - 86_400;
+        let log = home.join(".specola/events.jsonl");
+        let written = format!(r#"{{"type":"Stop","id":"s","at":{ancient}}}"#) + "\n";
+        std::fs::write(&log, &written).unwrap();
+
+        let _app = App::at(home.clone());
+
+        assert_eq!(
+            std::fs::read_to_string(&log).unwrap(),
+            written,
+            "constructing an app must not rewrite the caller's log"
+        );
+
+        std::fs::remove_dir_all(&home).ok();
     }
 
     /// Reads the real `~/.claude` and `~/.specola`, so it only means anything on a

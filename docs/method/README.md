@@ -75,6 +75,11 @@ self-approval as a colleague review makes every other row in it worth nothing.
 - [`02-sota-alignment.md`](02-sota-alignment.md) — the method mapped against the
   2026 five-layer stack (SDD, evals, guardrails, observability, orchestration),
   marking honestly where this repo demonstrates each layer and where it doesn't.
+- [`03-error-handling.md`](03-error-handling.md) — one domain error type and no
+  error crate, written down so it reads as a choice rather than an oversight.
+- [`04-verification.md`](04-verification.md) — why a repo with 194 tests still
+  shipped a release nobody had looked at, and the golden-snapshot workflow that
+  closes it. Includes what goldens cannot cover and what covers that instead.
 
 ## Why a session monitor, built this way
 
