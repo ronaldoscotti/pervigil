@@ -86,9 +86,18 @@ to the machine. Two more of the same family, both caught by CI rather than by re
   would leave a fresh clone with `core.autocrlf` broken: `.gitattributes` pins the files
   to LF, and the comparison normalises anyway.
 
+- **Floats summed over a `HashMap` are not stable.** `cost_in_window` walks
+  `scan.usage`, and Rust randomises hash order per process, so a total's last bits move
+  between runs: `0.04025` one run, `0.04025000000000001` the next. This one did not need
+  a second machine at all — measured, it was **four failures in twenty local runs**, and
+  it survived review because the handful of runs done by hand happened to agree. Floats
+  are rounded to nine places before comparing; timestamps are integers and stay exact.
+
 The rule this leaves behind: before trusting a new golden, run it under a different
-timezone (`TZ=Pacific/Auckland cargo test --test golden`) and let CI see all three
-operating systems. Passing locally proves less here than in any other kind of test.
+timezone (`TZ=Pacific/Auckland cargo test --test golden`), run it *thirty times*, and let
+CI see all three operating systems. Passing locally, once, proves less here than in any
+other kind of test — a flaky golden is worse than none, because it teaches people to
+rerun CI instead of reading it.
 
 **`cost: -0.0` in a golden is not a defect.** Rust's `Sum` for floats uses `-0.0` as its
 identity, so a window with nothing priced sums to negative zero. `money()` drops the

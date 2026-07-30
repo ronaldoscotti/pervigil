@@ -154,6 +154,30 @@ fn redact(mut snapshot: serde_json::Value) -> serde_json::Value {
     snapshot
 }
 
+/// Money is summed over a `HashMap`'s iteration order, which Rust randomises per
+/// process, so the last bits of a total move from run to run: `0.04025` and
+/// `0.04025000000000001` are the same money. Rounded before comparing, because the
+/// alternative measured four failures in twenty runs — and a test that fails one run in
+/// five teaches people to rerun CI instead of reading it.
+///
+/// Only floats are touched; timestamps are integers and stay exact.
+fn round_floats(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Number(number) if number.is_f64() => {
+            if let Some(rounded) = number
+                .as_f64()
+                .map(|float| (float * 1e9).round() / 1e9)
+                .and_then(serde_json::Number::from_f64)
+            {
+                *number = rounded;
+            }
+        }
+        serde_json::Value::Array(items) => items.iter_mut().for_each(round_floats),
+        serde_json::Value::Object(fields) => fields.values_mut().for_each(round_floats),
+        _ => {}
+    }
+}
+
 fn goldens() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../fixtures/snapshots")
 }
@@ -161,7 +185,8 @@ fn goldens() -> PathBuf {
 fn check(name: &str, home: PathBuf, span: Span) {
     let now = Local.timestamp_opt(NOW, 0).single().expect("fixed clock");
     let snapshot = App::at(home.clone()).snapshot(span, now);
-    let actual = redact(serde_json::to_value(&snapshot).expect("snapshot should serialize"));
+    let mut actual = redact(serde_json::to_value(&snapshot).expect("snapshot should serialize"));
+    round_floats(&mut actual);
     let pretty = serde_json::to_string_pretty(&actual).unwrap() + "\n";
     let path = goldens().join(format!("{name}.json"));
 
