@@ -137,7 +137,7 @@ also carries machine-local settings. Naming them so the setup can be rebuilt:
 
 ## Current position
 
-Implementation through **M10 and beyond**: **192 Rust tests + 20 frontend tests
+Implementation through **M10 and beyond**: **194 Rust tests + 20 frontend tests
 green**. Signed + notarized macOS build; **auto-updating, signed releases from CI**
 (tag → mac/Windows/Linux bundles + updater manifest, proven end-to-end); ten UI
 languages with RTL; launch-at-login; single-instance; a dismiss "read" mode; and a

@@ -200,9 +200,29 @@ Transcripts are read from byte zero, so every entry a file ever held was kept an
 re-cloned into every snapshot, once a second, for as long as the app ran: **73,174
 entries against 1,212** with the floor applied.
 
-### Not fixed, with the number
+### The walk became a sweep
 
-The directory walk costs **1.26ms per poll**, of which ~0.1ms is probing session
-directories that have no agents (38 of 71 here do have them). Caching the negative
-probes would trade that 0.1ms for noticing a new agent late — which is the bug this
-spec was written for.
+The first measurement of this was a proxy that skipped the `stat` per file entry, and it
+was wrong by 4.5x. The real cost: `transcripts` spent **14ms of 15ms on `stat`** across
+740 candidate files — one per file per poll, at 1Hz, growing with every session ever
+created. The bare directory walk was 0.6ms of it.
+
+So the tree is now walked on a sweep (`SWEEP_EVERY`, ten polls) instead of every poll.
+Between sweeps the files that are being written are still re-read every poll — a file
+stays hot until it has gone `HOT_POLLS` without growing — and the rest are served from
+the cache they would have returned anyway.
+
+| | before | after |
+|---|---|---|
+| scanner, between sweeps | 5.76ms | **186µs** |
+| scanner, on a sweep | 5.76ms | 8.48ms (1 poll in 10) |
+| full `snapshot`, averaged | 8.26ms | **3.18ms** |
+
+What it costs: a session or an agent whose file nobody was already reading is discovered
+up to ten polls late, and only for its cost and title — state comes from the event log,
+which is one file and is read every poll regardless.
+
+The ~2ms left in a snapshot is the event log being parsed from scratch each poll, which
+predates this work. A filesystem watcher would take the sweep to zero at the price of a
+dependency and a thread; the `ponytail:` note at `src/main.ts` records that trade with
+these numbers so the next person does not have to measure it again.

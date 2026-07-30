@@ -692,8 +692,10 @@ window.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // ponytail: polling, not a filesystem watcher — the panel is ~10 rows and the
-  // scanner only reads the bytes appended since the last tick. Revisit if that changes.
+  // ponytail: polling, not a filesystem watcher. The scanner reads only the bytes
+  // appended since the last tick, and walks the tree on a sweep rather than every tick,
+  // so a poll costs ~186µs between sweeps and ~8.5ms on one. A watcher (FSEvents) would
+  // take that to zero and cost a dependency and a thread; revisit if the sweep does.
   setInterval(poll, 1000);
   poll();
 

@@ -11,9 +11,25 @@ use crate::core::store::Origin;
 
 use super::transcript::Transcript;
 
+/// How often the whole tree is walked, in polls. Between sweeps only files that have
+/// been growing are re-checked, so discovery of a brand-new session or agent is what
+/// this bounds — and only for its cost and title. State comes from the event log, which
+/// is one file and is read every poll regardless.
+const SWEEP_EVERY: u32 = 10;
+
+/// Polls a file may go without growing before it is left to the sweep. Records arrive
+/// every second or two while a session or an agent is working, but a slow tool call is
+/// quiet for longer, and demoting a live file would delay the appended bytes.
+const HOT_POLLS: u32 = 30;
+
 #[derive(Default)]
 struct Cached {
     consumed: u64,
+    /// Last mtime we saw. Between sweeps this stands in for a `stat` we deliberately
+    /// do not make.
+    mtime: Timestamp,
+    /// Consecutive polls this file did not grow.
+    quiet: u32,
     transcript: Transcript,
 }
 
@@ -34,18 +50,28 @@ impl Cached {
     }
 
     /// Reads only the bytes appended since the last poll, and only up to the last
-    /// complete line — a transcript is often mid-write when we look at it.
+    /// complete line — a transcript is often mid-write when we look at it. Tracks
+    /// whether the file is still growing, which is what keeps it off the sweep.
     fn absorb_appended(&mut self, path: &Path) {
+        self.quiet = self.quiet.saturating_add(1);
         let Ok(mut file) = File::open(path) else {
             return;
         };
-        let len = file.metadata().map_or(0, |meta| meta.len());
+        let (len, mtime) = match file.metadata() {
+            Ok(meta) => (meta.len(), modified_from(meta)),
+            Err(_) => (0, 0),
+        };
+        self.mtime = self.mtime.max(mtime);
         if len < self.consumed {
+            let kept = std::mem::take(&mut self.quiet);
             *self = Cached::default();
+            self.quiet = kept;
+            self.mtime = mtime;
         }
         if len == self.consumed || file.seek(SeekFrom::Start(self.consumed)).is_err() {
             return;
         }
+        self.quiet = 0;
 
         let mut appended = Vec::new();
         if file.read_to_end(&mut appended).is_err() {
@@ -83,6 +109,7 @@ pub struct Scan {
 #[derive(Default)]
 pub struct Scanner {
     files: HashMap<PathBuf, Cached>,
+    polls: u32,
 }
 
 impl Scanner {
@@ -91,6 +118,21 @@ impl Scanner {
     /// anything in either window.
     pub fn scan(&mut self, root: &Path, sessions_since: Timestamp, usage_since: Timestamp) -> Scan {
         let floor = usage_since.min(sessions_since);
+        // A `stat` per candidate file per poll was the whole cost of this walk — 14ms of
+        // 15ms over 740 files here, and that count grows with every session ever created.
+        // Between sweeps the files that are actually being written are re-read and the
+        // rest are served from cache, which is what they would have returned anyway.
+        let sweep = self.polls.is_multiple_of(SWEEP_EVERY);
+        self.polls = self.polls.wrapping_add(1);
+        let candidates: Vec<(PathBuf, Timestamp)> = if sweep {
+            transcripts(root, floor).into_iter().collect()
+        } else {
+            self.files
+                .iter()
+                .map(|(path, cached)| (path.clone(), cached.mtime))
+                .collect()
+        };
+
         let mut agents = Vec::new();
         let mut usage: HashMap<SessionId, Vec<UsageEntry>> = HashMap::new();
         let mut activity = Vec::new();
@@ -99,11 +141,14 @@ impl Scanner {
         let mut rows: HashMap<SessionId, Session> = HashMap::new();
         let mut listed: HashSet<SessionId> = HashSet::new();
 
-        for (path, modified) in transcripts(root, floor) {
+        for (path, modified) in candidates {
             let by_agent = is_agent_file(&path);
             let cached = self.files.entry(path.clone()).or_default();
-            cached.absorb_appended(&path);
+            if sweep || cached.quiet < HOT_POLLS {
+                cached.absorb_appended(&path);
+            }
             cached.forget_before(floor);
+            let modified = modified.max(cached.mtime);
 
             let Some(mut session) = cached.transcript.session() else {
                 continue;
@@ -251,6 +296,13 @@ mod tests {
         r#"{"type":"user","isSidechain":true,"agentId":"abc123","sessionId":"s1","cwd":"/Users/x/specola","gitBranch":"feat/timeline","timestamp":"2026-07-23T12:00:00.000Z"}"#,
         "\n",
         r#"{"type":"assistant","isSidechain":true,"agentId":"abc123","sessionId":"s1","timestamp":"2026-07-23T12:00:01.000Z","message":{"model":"claude-opus-4-8","usage":{"output_tokens":30}}}"#,
+        "\n",
+    );
+
+    const SECOND: &str = concat!(
+        r#"{"type":"user","sessionId":"s2","cwd":"/Users/x/other","timestamp":"2026-07-23T10:00:00.000Z"}"#,
+        "\n",
+        r#"{"type":"assistant","sessionId":"s2","timestamp":"2026-07-23T10:00:02.000Z","message":{"model":"claude-opus-4-8","usage":{"output_tokens":5}}}"#,
         "\n",
     );
 
@@ -464,6 +516,60 @@ mod tests {
             "stale usage is dropped, not re-cloned every poll"
         );
         assert!(scan.activity.is_empty());
+    }
+
+    /// The panel polls every second and the tree holds every session ever created, so
+    /// the walk is a sweep, not a per-poll cost. What that buys is paid for here: a file
+    /// nobody was already reading is found on the next sweep rather than instantly.
+    #[test]
+    fn a_file_that_appears_between_sweeps_is_found_on_the_next_one() {
+        let projects = TempProjects::new("sweep");
+        projects.append(FIRST);
+        let mut scanner = Scanner::default();
+
+        assert_eq!(
+            scanner.scan(&projects.0, 0, 0).usage.len(),
+            1,
+            "first poll sweeps"
+        );
+
+        projects.append_to(projects.0.join("a-project").join("s2.jsonl"), SECOND);
+
+        for poll in 1..SWEEP_EVERY {
+            assert_eq!(
+                scanner.scan(&projects.0, 0, 0).usage.len(),
+                1,
+                "poll {poll} serves the files it already knows"
+            );
+        }
+
+        assert_eq!(
+            scanner.scan(&projects.0, 0, 0).usage.len(),
+            2,
+            "and the sweep picks up the new one"
+        );
+    }
+
+    /// A file already being written is re-read every poll, sweep or not — the whole
+    /// point of the tiering is that live files never wait.
+    #[test]
+    fn a_growing_file_is_read_on_every_poll() {
+        let projects = TempProjects::new("hot");
+        projects.append(FIRST);
+        let mut scanner = Scanner::default();
+        scanner.scan(&projects.0, 0, 0);
+
+        for poll in 1..SWEEP_EVERY {
+            projects.append(concat!(
+                r#"{"type":"assistant","sessionId":"s1","timestamp":"2026-07-23T11:00:00.000Z","message":{"model":"claude-opus-4-8","usage":{"output_tokens":1}}}"#,
+                "\n",
+            ));
+            assert_eq!(
+                scanner.scan(&projects.0, 0, 0).usage["s1"].len(),
+                1 + poll as usize,
+                "poll {poll} must not wait for a sweep"
+            );
+        }
     }
 
     #[test]
