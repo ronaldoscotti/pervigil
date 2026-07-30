@@ -139,11 +139,13 @@ impl Home {
     }
 }
 
-/// Two fields are about the machine that ran the test, not about the day: the focus
-/// label follows the platform's capabilities, and the hook snippet carries an absolute
-/// path to the shim. Neither belongs in a file two operating systems compare.
+/// Three fields are about the machine that ran the test, not about the day. The focus
+/// label follows the platform's capabilities and the hook snippet carries an absolute
+/// path to the shim; `todayCost` is counted from *local* midnight, so it moves with the
+/// runner's timezone. None of them belongs in a file two machines compare.
 fn redact(mut snapshot: serde_json::Value) -> serde_json::Value {
     snapshot["hookSnippet"] = serde_json::json!("<snippet>");
+    snapshot["todayCost"] = serde_json::json!("<local midnight>");
     if let Some(sessions) = snapshot["sessions"].as_array_mut() {
         for session in sessions {
             session["focus"] = serde_json::json!("<focus>");
@@ -167,9 +169,13 @@ fn check(name: &str, home: PathBuf, span: Span) {
         std::fs::create_dir_all(goldens()).unwrap();
         std::fs::write(&path, &pretty).unwrap();
     } else {
-        let expected = std::fs::read_to_string(&path).unwrap_or_else(|_| {
-            panic!("no golden at {path:?} — run with UPDATE_GOLDENS=1 and read the diff")
-        });
+        // Git may check the file out with CRLF; the comparison is about the day, not
+        // about which platform cloned the repo.
+        let expected = std::fs::read_to_string(&path)
+            .unwrap_or_else(|_| {
+                panic!("no golden at {path:?} — run with UPDATE_GOLDENS=1 and read the diff")
+            })
+            .replace("\r\n", "\n");
         assert_eq!(
             pretty, expected,
             "snapshot changed for {name}; if you meant it, UPDATE_GOLDENS=1 and read the diff"
@@ -265,5 +271,7 @@ fn a_working_day() {
         .transcript("-Users-x-api", "s-quiet", "bump the toolchain", -7810, 80)
         .build();
 
-    check("a-working-day", home, Span::Today);
+    // `FourHours` on purpose: `Today` starts at *local* midnight, which is a different
+    // instant on every runner. Every event above is inside four hours.
+    check("a-working-day", home, Span::FourHours);
 }

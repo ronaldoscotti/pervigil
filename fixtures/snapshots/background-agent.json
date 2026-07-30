@@ -38,7 +38,7 @@
       "state": "YourTurn"
     }
   ],
-  "todayCost": 0.08075,
+  "todayCost": "<local midnight>",
   "tokens": 3350,
   "waiting": 0,
   "waitingOutsideWindow": 0,

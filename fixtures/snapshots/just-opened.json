@@ -28,7 +28,7 @@
       "state": "Idle"
     }
   ],
-  "todayCost": -0.0,
+  "todayCost": "<local midnight>",
   "tokens": 0,
   "waiting": 0,
   "waitingOutsideWindow": 0,

@@ -70,9 +70,25 @@ constant, so `since`, the lane's bounds and the elapsed columns are deterministi
 Fixture files' real mtimes are always *later* than the fixed clock, which is what keeps
 them clearing the scanner's window gate.
 
-**Two fields are redacted.** The `focus` label follows the platform's capabilities, and
-`hookSnippet` carries an absolute path to the bundled shim. Neither describes the day,
-and two operating systems have to compare the same file.
+**Three fields are redacted, and the third was found the hard way.** `focus` follows the
+platform's capabilities and `hookSnippet` carries an absolute path to the shim. The third
+is `todayCost`, which is counted from *local* midnight and therefore moves with the
+runner's timezone — it passed on a laptop at UTC−3 and failed in CI at UTC.
+
+That is the trap in this technique: a golden captures everything, including what belongs
+to the machine. Two more of the same family, both caught by CI rather than by review:
+
+- **Any span whose floor is local midnight is not portable.** `Span::Today` put local
+  midnight into `from` and into the lane's first segment. The goldens use `Span::FourHours`,
+  whose floor is `now - 4h` and the same instant everywhere.
+- **Line endings.** Git checked the files out as CRLF on Windows while the test wrote LF,
+  so all four failed there and nowhere else. Fixed in two places, because either alone
+  would leave a fresh clone with `core.autocrlf` broken: `.gitattributes` pins the files
+  to LF, and the comparison normalises anyway.
+
+The rule this leaves behind: before trusting a new golden, run it under a different
+timezone (`TZ=Pacific/Auckland cargo test --test golden`) and let CI see all three
+operating systems. Passing locally proves less here than in any other kind of test.
 
 **`cost: -0.0` in a golden is not a defect.** Rust's `Sum` for floats uses `-0.0` as its
 identity, so a window with nothing priced sums to negative zero. `money()` drops the

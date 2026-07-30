@@ -1,0 +1,2 @@
+# Goldens are compared byte for byte across three operating systems.
+fixtures/snapshots/*.json text eol=lf

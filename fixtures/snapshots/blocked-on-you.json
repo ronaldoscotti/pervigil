@@ -38,7 +38,7 @@
       "state": "WaitingOnYou"
     }
   ],
-  "todayCost": 0.0105,
+  "todayCost": "<local midnight>",
   "tokens": 500,
   "waiting": 1,
   "waitingOutsideWindow": 0,
