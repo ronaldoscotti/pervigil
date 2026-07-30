@@ -97,7 +97,7 @@ Releases are cut by **release-please**. Nothing is bumped or tagged by hand.
 3. Merging that PR tags the version and calls `release.yml`, which builds the signed
    mac/Windows/Linux bundles and publishes the release.
 
-Four things that are easy to get wrong:
+Five things that are easy to get wrong:
 
 - `feat:` bumps the minor and `fix:` the patch. Nothing else bumps anything.
 - The release is **drafted while the bundles build, then published by a final job**.
@@ -106,6 +106,13 @@ Four things that are easy to get wrong:
   from — so publishing before the matrix finishes would expose a half-uploaded
   release, and a failed job would leave that manifest incomplete. If a gating job
   fails the draft is simply left behind and `latest` stays where it was.
+- **Two things create that release, and only one of them is `release.yml`.**
+  release-please publishes its own, already public, the instant the release PR
+  merges — which silently defeats `releaseDraft: true`, because tauri-action then
+  finds an existing release instead of creating a draft. v0.2.0 shipped that way and
+  sat as `latest` with no assets for the length of the build. `release-please.yml`
+  now drafts it back in the same job that creates it. Anything that touches either
+  workflow has to keep both halves of that hand-off intact.
 - A tag pushed with `GITHUB_TOKEN` does not start another workflow. That is why
   release-please calls `release.yml` directly rather than relying on
   `on: push: tags`, which stays only as the manual escape hatch.
