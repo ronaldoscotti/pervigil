@@ -5,6 +5,29 @@ use super::terminal::Terminal;
 pub type SessionId = String;
 pub type Timestamp = u64;
 
+/// Why Claude Code raised a notification. It fires for two reasons that look the same
+/// in the log and mean opposite things to a panel: it needs an answer from you, or the
+/// main loop has simply been idle for a minute.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NotificationKind {
+    /// A permission prompt, an elicitation — anything only you can resolve.
+    Permission,
+    /// The "waiting for your input" nudge, 60s after the main loop went quiet.
+    Idle,
+}
+
+impl NotificationKind {
+    /// Maps the hook payload's `notification_type`. Anything unrecognised — a type
+    /// Claude Code adds later, a missing field — is treated as needing you: the panel
+    /// may cry wolf, but it must never sit on a real block.
+    pub fn from_hook(notification_type: Option<&str>) -> Self {
+        match notification_type {
+            Some("idle_prompt") => Self::Idle,
+            _ => Self::Permission,
+        }
+    }
+}
+
 /// One line of the append-only event log, written by the `record` shim.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -24,6 +47,10 @@ pub enum Event {
     Notification {
         id: SessionId,
         at: Timestamp,
+        /// `None` on every line written before the shim recorded it, which counts as
+        /// [`NotificationKind::Permission`] — see `store::answered`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        kind: Option<NotificationKind>,
     },
     Stop {
         id: SessionId,
@@ -87,6 +114,7 @@ mod tests {
             Event::Notification {
                 id: "s1".into(),
                 at: 20,
+                kind: Some(NotificationKind::Idle),
             },
             Event::Stop {
                 id: "s1".into(),

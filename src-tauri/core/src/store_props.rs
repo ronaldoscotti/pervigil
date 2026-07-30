@@ -3,7 +3,7 @@
 
 use proptest::prelude::*;
 
-use super::event::{Event, Timestamp};
+use super::event::{Event, NotificationKind, Timestamp};
 use super::session::ViewPrefs;
 use super::store::{fold, timeline};
 
@@ -25,7 +25,11 @@ fn events() -> impl Strategy<Value = Vec<Event>> {
                             at,
                             term: None,
                         },
-                        1 => Event::Notification { id, at },
+                        1 => Event::Notification {
+                            id,
+                            at,
+                            kind: Some(NotificationKind::Permission),
+                        },
                         2 => Event::Stop { id, at },
                         _ => Event::UserPromptSubmit { id, at },
                     }

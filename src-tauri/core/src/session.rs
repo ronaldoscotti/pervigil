@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
-use super::event::{SessionId, Timestamp};
+use super::event::{NotificationKind, SessionId, Timestamp};
 use super::terminal::Terminal;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -32,6 +32,9 @@ pub struct Session {
     /// Where it runs, for click-to-focus. `None` for transcript-derived sessions and
     /// sessions started before the shim captured it.
     pub terminal: Option<Terminal>,
+    /// Which notification opened the current wait. Meaningless unless `state` is
+    /// `WaitingOnYou`, and `None` for a log line written before the shim recorded it.
+    pub wait: Option<NotificationKind>,
 }
 
 /// What the dismiss (check) action does to a session.

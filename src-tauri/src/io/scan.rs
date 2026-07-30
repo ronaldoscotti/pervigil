@@ -7,6 +7,7 @@ use std::time::UNIX_EPOCH;
 use crate::core::event::{SessionId, Timestamp};
 use crate::core::pricing::UsageEntry;
 use crate::core::session::Session;
+use crate::core::store::Origin;
 
 use super::transcript::Transcript;
 
@@ -56,8 +57,9 @@ pub struct Scan {
     /// Every session's spend, agents included: an agent bills to the session that
     /// spawned it.
     pub usage: HashMap<SessionId, Vec<UsageEntry>>,
-    /// Main-transcript record times, which are the only proof a wait was answered.
-    pub main_activity: Vec<(SessionId, Timestamp)>,
+    /// Record times, each tagged with the file it came from: what may end a wait
+    /// depends on that — see [`crate::core::store::timeline`].
+    pub activity: Vec<(SessionId, Timestamp, Origin)>,
 }
 
 /// Incremental reader over `~/.claude/projects/**/*.jsonl`. Those files are
@@ -76,7 +78,7 @@ impl Scanner {
         let mut sessions = Vec::new();
         let mut agents = Vec::new();
         let mut usage: HashMap<SessionId, Vec<UsageEntry>> = HashMap::new();
-        let mut main_activity = Vec::new();
+        let mut activity = Vec::new();
 
         for (path, modified) in transcripts(root, usage_since.min(sessions_since)) {
             let by_agent = is_agent_file(&path);
@@ -90,15 +92,18 @@ impl Scanner {
                 .entry(session.id.clone())
                 .or_default()
                 .extend(cached.transcript.usage.iter().cloned());
-            if !by_agent {
-                main_activity.extend(
-                    cached
-                        .transcript
-                        .usage
-                        .iter()
-                        .map(|entry| (session.id.clone(), entry.at)),
-                );
-            }
+            let origin = if by_agent {
+                Origin::Agent
+            } else {
+                Origin::Main
+            };
+            activity.extend(
+                cached
+                    .transcript
+                    .usage
+                    .iter()
+                    .map(|entry| (session.id.clone(), entry.at, origin)),
+            );
             if modified < sessions_since {
                 continue;
             }
@@ -116,7 +121,7 @@ impl Scanner {
             sessions,
             agents,
             usage,
-            main_activity,
+            activity,
         }
     }
 }
@@ -298,6 +303,7 @@ mod tests {
             title: Some("Run the migration".into()),
             git_branch: None,
             terminal: None,
+            wait: None,
         };
 
         let scan = Scanner::default().scan(&projects.0, 0, 0);
@@ -317,7 +323,7 @@ mod tests {
     }
 
     #[test]
-    fn an_agents_file_yields_a_nameless_row_and_no_main_activity() {
+    fn an_agents_file_yields_a_nameless_row_and_tagged_activity() {
         let projects = TempProjects::new("origin");
         projects.append(FIRST);
         projects.append_subagent(SUBAGENT);
@@ -331,10 +337,17 @@ mod tests {
             scan.agents[0].title, None,
             "an agent file offers only the branch, which must not name the row"
         );
+        // read_dir has no order and the lane sorts its own ticks, so only the contents
+        // are asserted.
+        let mut activity = scan.activity.clone();
+        activity.sort_by_key(|(_, at, _)| *at);
         assert_eq!(
-            scan.main_activity,
-            vec![("s1".to_string(), 1784800801)],
-            "the lane's evidence a wait was answered is the main transcript alone"
+            activity,
+            vec![
+                ("s1".to_string(), 1784800801, Origin::Main),
+                ("s1".to_string(), 1784808001, Origin::Agent)
+            ],
+            "the lane is told which file each record came from"
         );
         assert_eq!(scan.usage["s1"].len(), 2, "cost still counts both");
     }

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use super::event::{Event, SessionId, Timestamp};
+use super::event::{Event, NotificationKind, SessionId, Timestamp};
 use super::session::{DismissMode, Session, SessionState, ViewPrefs};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -21,32 +21,33 @@ const WAITING_TTL_SECS: Timestamp = 30 * 60;
 /// and hidden sessions still count. A `WaitingOnYou` state decays to idle after
 /// [`WAITING_TTL_SECS`] of silence, so a session that was notified and then died —
 /// no `Stop` ever — can't paint the whole window.
-/// `activity` is `(session, when)` per transcript record — the evidence a wait was
-/// answered, since approving a permission prompt fires no hook. See [`answered`].
+/// `activity` is `(session, when, where-from)` per transcript record — the evidence a
+/// wait was answered, since approving a permission prompt fires no hook. What counts
+/// as evidence depends on the notification: see [`answered`], which the lane mirrors.
 pub fn timeline(
     events: &[Event],
-    activity: &[(SessionId, Timestamp)],
+    activity: &[(SessionId, Timestamp, Origin)],
     from: Timestamp,
     to: Timestamp,
 ) -> Vec<Segment> {
     let mut ticks: Vec<Tick> = Vec::new();
     for event in events.iter().filter(|event| event.at() <= to) {
         ticks.push(Tick::Event(event));
-        if let Event::Notification { id, at } = event {
+        if let Event::Notification { id, at, .. } = event {
             let expiry = at + WAITING_TTL_SECS;
             if expiry <= to {
                 ticks.push(Tick::Expire(id, expiry));
             }
         }
     }
-    for (id, at) in activity.iter().filter(|(_, at)| *at <= to) {
-        ticks.push(Tick::Active(id, *at));
+    for (id, at, origin) in activity.iter().filter(|(_, at, _)| *at <= to) {
+        ticks.push(Tick::Active(id, *at, *origin));
     }
     // Activity is applied before the events of the same instant: the assistant record
     // that triggers a permission prompt shares its second, and must not cancel it.
     ticks.sort_by_key(|tick| (tick.at(), tick.rank()));
 
-    let mut states: HashMap<&SessionId, (SessionState, Timestamp)> = HashMap::new();
+    let mut states: HashMap<&SessionId, Wait> = HashMap::new();
     let mut segments: Vec<Segment> = Vec::new();
     let mut cursor = from;
 
@@ -57,23 +58,33 @@ pub fn timeline(
         }
         match tick {
             Tick::Event(event) => {
-                let expiry = match event {
-                    Event::Notification { at, .. } => at + WAITING_TTL_SECS,
-                    _ => 0,
+                let (expiry, kind) = match event {
+                    Event::Notification { at, kind, .. } => (at + WAITING_TTL_SECS, *kind),
+                    _ => (0, None),
                 };
-                states.insert(event.id(), (state_after(event), expiry));
+                states.insert(
+                    event.id(),
+                    Wait {
+                        state: state_after(event),
+                        expiry,
+                        kind,
+                    },
+                );
             }
-            // Only a wait is cleared: a session that stopped must stay stopped.
-            Tick::Active(id, at) => {
-                let _ = at;
-                if matches!(states.get(id), Some((SessionState::WaitingOnYou, _))) {
-                    states.insert(id, (SessionState::Working, 0));
+            // Only a wait is cleared, and only by evidence that speaks for you: a
+            // session that stopped must stay stopped.
+            Tick::Active(id, _, origin) => {
+                if states.get(id).is_some_and(|wait| wait.ends_on(*origin)) {
+                    states.insert(id, Wait::working());
                 }
             }
             // Ignore an expiry the session has already left or renotified past.
             Tick::Expire(id, expiry) => {
-                if states.get(id) == Some(&(SessionState::WaitingOnYou, *expiry)) {
-                    states.insert(id, (SessionState::Idle, 0));
+                let waiting = |wait: &Wait| {
+                    wait.state == SessionState::WaitingOnYou && wait.expiry == *expiry
+                };
+                if states.get(id).is_some_and(waiting) {
+                    states.insert(id, Wait::idle());
                 }
             }
         }
@@ -83,9 +94,41 @@ pub fn timeline(
     segments
 }
 
+/// One session's state inside the lane, with what it would take to leave it.
+struct Wait {
+    state: SessionState,
+    expiry: Timestamp,
+    kind: Option<NotificationKind>,
+}
+
+impl Wait {
+    fn working() -> Self {
+        Self {
+            state: SessionState::Working,
+            expiry: 0,
+            kind: None,
+        }
+    }
+
+    fn idle() -> Self {
+        Self {
+            state: SessionState::Idle,
+            expiry: 0,
+            kind: None,
+        }
+    }
+
+    /// Mirrors [`answered`]: only a wait, and an agent's records answer the idle nudge
+    /// alone.
+    fn ends_on(&self, origin: Origin) -> bool {
+        self.state == SessionState::WaitingOnYou
+            && (origin == Origin::Main || self.kind == Some(NotificationKind::Idle))
+    }
+}
+
 enum Tick<'a> {
     Event(&'a Event),
-    Active(&'a SessionId, Timestamp),
+    Active(&'a SessionId, Timestamp, Origin),
     Expire(&'a SessionId, Timestamp),
 }
 
@@ -93,7 +136,7 @@ impl Tick<'_> {
     fn at(&self) -> Timestamp {
         match self {
             Tick::Event(event) => event.at(),
-            Tick::Active(_, at) | Tick::Expire(_, at) => *at,
+            Tick::Active(_, at, _) | Tick::Expire(_, at) => *at,
         }
     }
 
@@ -129,8 +172,8 @@ fn state_after(event: &Event) -> SessionState {
     }
 }
 
-fn aggregate(states: &HashMap<&SessionId, (SessionState, Timestamp)>) -> SessionState {
-    let any = |target| states.values().any(|(state, _)| *state == target);
+fn aggregate(states: &HashMap<&SessionId, Wait>) -> SessionState {
+    let any = |target| states.values().any(|wait| wait.state == target);
     if any(SessionState::WaitingOnYou) {
         SessionState::WaitingOnYou
     } else if any(SessionState::Working) {
@@ -174,8 +217,10 @@ pub fn merge(
     hooks
 }
 
-#[derive(PartialEq)]
-enum Origin {
+/// Which file a transcript record came from. A session's own transcript speaks for
+/// you; a background agent's speaks only for itself. See [`answered`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Origin {
     Main,
     Agent,
 }
@@ -203,12 +248,15 @@ fn absorb(hooks: &mut Vec<Session>, transcript: Session, origin: Origin) {
 
 /// Approving a permission prompt fires no hook, so nothing clears the wait it opened.
 /// A record written after it in the session's *own* transcript is proof the turn
-/// carried on. A background agent's records are not: it writes whether you answered
-/// or walked away, so reading them as an answer would hide a real block.
+/// carried on. A background agent's records are not: it writes whether you answered or
+/// walked away, so reading them as an answer to a `Permission` notification would hide
+/// a real block. They do answer the `Idle` nudge, which claims nothing more than that
+/// the main loop went quiet — a working agent is proof enough that it is not your move.
 fn answered(hook: &Session, transcript: &Session, origin: Origin) -> bool {
-    origin == Origin::Main
-        && hook.state == SessionState::WaitingOnYou
-        && transcript.last_active > hook.since
+    if hook.state != SessionState::WaitingOnYou || transcript.last_active <= hook.since {
+        return false;
+    }
+    origin == Origin::Main || hook.wait == Some(NotificationKind::Idle)
 }
 
 /// The list's whole order, in one place: waiting-on-you, then pinned, then recency.
@@ -269,6 +317,7 @@ fn ensure(sessions: &mut Vec<Session>, id: &SessionId, at: Timestamp) {
             title: None,
             git_branch: None,
             terminal: None,
+            wait: None,
         });
     }
 }
@@ -310,8 +359,11 @@ pub fn fold(events: &[Event], _now: Timestamp, prefs: &ViewPrefs) -> Vec<Session
                     session.last_active = *at;
                 }
             }
-            Event::Notification { id, at } => {
-                transition(&mut sessions, id, SessionState::WaitingOnYou, *at)
+            Event::Notification { id, at, kind } => {
+                transition(&mut sessions, id, SessionState::WaitingOnYou, *at);
+                if let Some(session) = sessions.iter_mut().find(|s| &s.id == id) {
+                    session.wait = *kind;
+                }
             }
             Event::Stop { id, at } => transition(&mut sessions, id, SessionState::YourTurn, *at),
             Event::UserPromptSubmit { id, at } => {
@@ -429,6 +481,7 @@ mod tests {
             Event::Notification {
                 id: "s1".into(),
                 at: 200,
+                kind: None,
             },
         ];
 
@@ -462,6 +515,7 @@ mod tests {
             Event::Notification {
                 id: "waiting".into(),
                 at: 500,
+                kind: None,
             },
             start("your-turn", 110),
             Event::Stop {
@@ -484,6 +538,7 @@ mod tests {
             Event::Notification {
                 id: "s1".into(),
                 at: 200,
+                kind: None,
             },
             Event::UserPromptSubmit {
                 id: "s1".into(),
@@ -507,6 +562,7 @@ mod tests {
             Event::Notification {
                 id: "s2".into(),
                 at: 200,
+                kind: None,
             },
             start("s3", 120),
         ];
@@ -566,6 +622,7 @@ mod tests {
             Event::Notification {
                 id: "s1".into(),
                 at: 300,
+                kind: None,
             },
         ];
         let prefs = ViewPrefs {
@@ -591,6 +648,7 @@ mod tests {
             Event::Notification {
                 id: "s1".into(),
                 at: 500,
+                kind: None,
             },
         ];
         let prefs = ViewPrefs {
@@ -615,6 +673,7 @@ mod tests {
             Event::Notification {
                 id: "s2".into(),
                 at: 300,
+                kind: None,
             },
         ]
     }
@@ -627,8 +686,9 @@ mod tests {
         let events = vec![Event::Notification {
             id: "s1".into(),
             at: 100,
+            kind: None,
         }];
-        let activity = vec![("s1".to_string(), 100)];
+        let activity = vec![("s1".to_string(), 100, Origin::Main)];
 
         let segments = timeline(&events, &activity, 100, 1_900);
 
@@ -647,8 +707,9 @@ mod tests {
         let events = vec![Event::Notification {
             id: "s1".into(),
             at: 0,
+            kind: None,
         }];
-        let activity = vec![("s1".to_string(), 100)];
+        let activity = vec![("s1".to_string(), 100, Origin::Main)];
 
         let segments = timeline(&events, &activity, 0, 200);
 
@@ -663,8 +724,9 @@ mod tests {
         let events = vec![Event::Notification {
             id: "s1".into(),
             at: 100,
+            kind: None,
         }];
-        let activity = vec![("s1".to_string(), 50)];
+        let activity = vec![("s1".to_string(), 50, Origin::Main)];
 
         let segments = timeline(&events, &activity, 0, 200);
 
@@ -677,7 +739,7 @@ mod tests {
             id: "s1".into(),
             at: 0,
         }];
-        let activity = vec![("s1".to_string(), 100)];
+        let activity = vec![("s1".to_string(), 100, Origin::Main)];
 
         let segments = timeline(&events, &activity, 0, 200);
 
@@ -732,6 +794,7 @@ mod tests {
         let events = vec![Event::Notification {
             id: "dead".into(),
             at: 0,
+            kind: None,
         }];
 
         let segments = timeline(&events, &[], 0, 10 * WAITING_TTL_SECS);
@@ -750,6 +813,7 @@ mod tests {
         let events = vec![Event::Notification {
             id: "dead".into(),
             at: 0,
+            kind: None,
         }];
         let from = 5 * WAITING_TTL_SECS;
 
@@ -764,6 +828,7 @@ mod tests {
         let events = vec![Event::Notification {
             id: "s1".into(),
             at: 0,
+            kind: None,
         }];
 
         let segments = timeline(&events, &[], 0, WAITING_TTL_SECS);
@@ -779,10 +844,12 @@ mod tests {
             Event::Notification {
                 id: "s1".into(),
                 at: 0,
+                kind: None,
             },
             Event::Notification {
                 id: "s1".into(),
                 at: WAITING_TTL_SECS - 10,
+                kind: None,
             },
         ];
 
@@ -802,6 +869,7 @@ mod tests {
             title: title.map(str::to_string),
             git_branch: None,
             terminal: None,
+            wait: None,
         }
     }
 
@@ -874,6 +942,101 @@ mod tests {
         let merged = merge(hooks, transcripts, Vec::new());
 
         assert_eq!(merged[0].state, SessionState::YourTurn);
+    }
+
+    fn blocked(kind: Option<NotificationKind>, since: Timestamp) -> Vec<Session> {
+        vec![Session {
+            state: SessionState::WaitingOnYou,
+            wait: kind,
+            since,
+            last_active: since,
+            ..session("s1", SessionState::WaitingOnYou, None, Some(10))
+        }]
+    }
+
+    fn agent_row(at: Timestamp) -> Vec<Session> {
+        vec![Session {
+            since: at,
+            last_active: at,
+            ..session("s1", SessionState::Idle, None, None)
+        }]
+    }
+
+    /// The reported bug. The prompt went to a background agent, the main loop returned
+    /// to its own prompt, and the 60s "waiting for your input" nudge followed. Nothing
+    /// is blocked on you — an agent is working.
+    #[test]
+    fn an_idle_nudge_is_ended_by_a_background_agents_records() {
+        let merged = merge(
+            blocked(Some(NotificationKind::Idle), 1_000),
+            Vec::new(),
+            agent_row(1_060),
+        );
+
+        assert_eq!(merged[0].state, SessionState::Working);
+    }
+
+    #[test]
+    fn a_permission_prompt_is_not_ended_by_a_background_agents_records() {
+        let merged = merge(
+            blocked(Some(NotificationKind::Permission), 1_000),
+            Vec::new(),
+            agent_row(1_060),
+        );
+
+        assert_eq!(
+            merged[0].state,
+            SessionState::WaitingOnYou,
+            "the agent writes whether or not you answered"
+        );
+    }
+
+    /// The log retains 30 days, so lines written before the shim recorded a kind stay
+    /// readable for a month. They must not be the one case that hides a block.
+    #[test]
+    fn a_notification_with_no_recorded_kind_counts_as_a_block() {
+        let merged = merge(blocked(None, 1_000), Vec::new(), agent_row(1_060));
+
+        assert_eq!(merged[0].state, SessionState::WaitingOnYou);
+    }
+
+    #[test]
+    fn fold_records_which_notification_opened_the_wait() {
+        let events = vec![Event::Notification {
+            id: "s1".into(),
+            at: 100,
+            kind: Some(NotificationKind::Idle),
+        }];
+
+        let sessions = fold_default(&events, 200);
+
+        assert_eq!(sessions[0].state, SessionState::WaitingOnYou);
+        assert_eq!(sessions[0].wait, Some(NotificationKind::Idle));
+    }
+
+    #[test]
+    fn the_lane_agrees_with_the_row_about_who_may_end_a_wait() {
+        let nudge = vec![Event::Notification {
+            id: "s1".into(),
+            at: 0,
+            kind: Some(NotificationKind::Idle),
+        }];
+        let prompt = vec![Event::Notification {
+            id: "s1".into(),
+            at: 0,
+            kind: Some(NotificationKind::Permission),
+        }];
+        let by_agent = vec![("s1".to_string(), 100, Origin::Agent)];
+
+        assert!(
+            (waiting_share(&timeline(&nudge, &by_agent, 0, 200)) - 0.5).abs() < 1e-9,
+            "an agent working ends the nudge halfway"
+        );
+        assert_eq!(
+            waiting_share(&timeline(&prompt, &by_agent, 0, 200)),
+            1.0,
+            "but it never ends a real block"
+        );
     }
 
     #[test]
@@ -954,6 +1117,7 @@ mod tests {
             Event::Notification {
                 id: "s1".into(),
                 at: 200,
+                kind: None,
             },
         ];
 
@@ -1130,6 +1294,7 @@ mod tests {
             Event::Notification {
                 id: "waiting".into(),
                 at: 150,
+                kind: None,
             },
             started("other", 9, "/p", 200),
             Event::UserPromptSubmit {
@@ -1183,6 +1348,7 @@ mod tests {
             title: None,
             git_branch: None,
             terminal: None,
+            wait: None,
         }
     }
 

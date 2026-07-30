@@ -369,7 +369,7 @@ impl App {
 
         // Main-transcript records are the only witness that a permission prompt was
         // answered — no hook fires when it is, and a background agent writes either way.
-        let segments = store::timeline(&events, &scan.main_activity, from, to);
+        let segments = store::timeline(&events, &scan.activity, from, to);
 
         Snapshot {
             now: to,
