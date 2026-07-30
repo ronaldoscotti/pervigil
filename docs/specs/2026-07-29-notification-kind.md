@@ -164,3 +164,45 @@ Red first, one test per claim. What was written:
 9. End to end through `App::snapshot`, against a temp `HOME`: the reported agent
    session (`tests/background_agent.rs`) and the reported resumed session
    (`tests/opened_session.rs`).
+
+## Limits closed after review
+
+Three things this design first shipped as documented gaps. All are fixed.
+
+### An agent's word expires
+
+An agent that finishes fires no hook of its own, so one last record left the row green
+for the rest of the day — the failure `WAITING_TTL_SECS` exists to prevent, on the
+other colour. `AGENT_TTL_SECS` is **10 minutes**, taken from the real distribution
+rather than a guess:
+
+| agent transcripts | inter-record gap | per-file worst quiet stretch |
+|---|---|---|
+| 601 files, 54k gaps | p50 1s, p95 17s, p99 68s | p50 66s, p95 596s |
+
+209 of 601 files have a stretch over two minutes and 63 over five, so anything tighter
+would flap while a slow tool call runs. Past the bound the row falls back to what the
+hooks said, and the lane decays to idle on the same constant. The common case never
+reaches it: when an agent finishes, the main loop wakes and fires its own hook.
+
+### A session known only through its agent keeps its own row
+
+When only an agent's file passed the window floor, the row came from that file — which
+carries neither a title nor a cwd by design — and was then dropped as context-less.
+The session disappeared from the panel while it was working. `transcripts` now reads a
+session's own transcript whenever one of its agents moved, whatever its mtime says, and
+the row always comes from there. Keyed by path, so it cannot double-read a file the
+walk already found.
+
+### Retained usage is bounded by the window floor
+
+Transcripts are read from byte zero, so every entry a file ever held was kept and
+re-cloned into every snapshot, once a second, for as long as the app ran: **73,174
+entries against 1,212** with the floor applied.
+
+### Not fixed, with the number
+
+The directory walk costs **1.26ms per poll**, of which ~0.1ms is probing session
+directories that have no agents (38 of 71 here do have them). Caching the negative
+probes would trade that 0.1ms for noticing a new agent late — which is the bug this
+spec was written for.

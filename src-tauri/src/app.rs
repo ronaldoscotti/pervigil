@@ -271,8 +271,12 @@ impl App {
         let config = self.config.lock().expect("config lock").clone();
         let prefs = config.view_prefs();
 
-        let mut sessions =
-            store::merge(store::fold(&events, to, &prefs), scan.sessions, scan.agents);
+        let mut sessions = store::merge(
+            store::fold(&events, to, &prefs),
+            scan.sessions,
+            scan.agents,
+            to,
+        );
         retain_live(&mut sessions, &SystemProcesses);
         let retired = store::superseded(&events);
         sessions.retain(|session| !retired.contains(&session.id));

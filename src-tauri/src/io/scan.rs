@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::{DirEntry, File};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
@@ -18,6 +18,21 @@ struct Cached {
 }
 
 impl Cached {
+    /// Usage older than the widest window a caller can ask for is dead weight: it is
+    /// re-cloned into every snapshot, and the panel polls every second for as long as
+    /// the app runs. The entries arrive in time order, so the common case is one
+    /// comparison.
+    fn forget_before(&mut self, floor: Timestamp) {
+        if self
+            .transcript
+            .usage
+            .first()
+            .is_some_and(|entry| entry.at < floor)
+        {
+            self.transcript.usage.retain(|entry| entry.at >= floor);
+        }
+    }
+
     /// Reads only the bytes appended since the last poll, and only up to the last
     /// complete line — a transcript is often mid-write when we look at it.
     fn absorb_appended(&mut self, path: &Path) {
@@ -75,15 +90,20 @@ impl Scanner {
     /// untouched since the lower one are skipped — append-only, so they cannot hold
     /// anything in either window.
     pub fn scan(&mut self, root: &Path, sessions_since: Timestamp, usage_since: Timestamp) -> Scan {
-        let mut sessions = Vec::new();
+        let floor = usage_since.min(sessions_since);
         let mut agents = Vec::new();
         let mut usage: HashMap<SessionId, Vec<UsageEntry>> = HashMap::new();
         let mut activity = Vec::new();
+        // Every session's own row, whether or not its transcript is the file that moved,
+        // and the ids something moved for.
+        let mut rows: HashMap<SessionId, Session> = HashMap::new();
+        let mut listed: HashSet<SessionId> = HashSet::new();
 
-        for (path, modified) in transcripts(root, usage_since.min(sessions_since)) {
+        for (path, modified) in transcripts(root, floor) {
             let by_agent = is_agent_file(&path);
             let cached = self.files.entry(path.clone()).or_default();
             cached.absorb_appended(&path);
+            cached.forget_before(floor);
 
             let Some(mut session) = cached.transcript.session() else {
                 continue;
@@ -104,22 +124,32 @@ impl Scanner {
                     .iter()
                     .map(|entry| (session.id.clone(), entry.at, origin)),
             );
-            if modified < sessions_since {
-                continue;
+
+            let inside = modified >= sessions_since;
+            if inside {
+                listed.insert(session.id.clone());
             }
             if by_agent {
                 // An agent file describes the agent, not the session: its title would be
                 // the branch, and its cwd is often a subdirectory the agent was pointed
                 // at — 33 of 200 files on this machine — which `project()` would turn
-                // into a project that does not exist. Both come from the session's own
-                // transcript or its hook, or the row is dropped as context-less.
+                // into a project that does not exist. Both belong to the session.
                 session.title = None;
                 session.cwd = String::new();
-                agents.push(session);
+                if inside {
+                    agents.push(session);
+                }
             } else {
-                sessions.push(session);
+                rows.insert(session.id.clone(), session);
             }
         }
+
+        // A session is listed when anything of it moved inside the window — its own
+        // transcript or an agent's — and the row always comes from its own transcript,
+        // which `transcripts` reads for exactly that reason even when only an agent
+        // moved. Failing that the hook log supplies the row, or the session is dropped
+        // as context-less rather than shown under an invented project.
+        let sessions: Vec<Session> = listed.iter().filter_map(|id| rows.remove(id)).collect();
 
         Scan {
             sessions,
@@ -134,8 +164,8 @@ impl Scanner {
 /// `<session>/subagents/agent-*.jsonl` per background or Task-tool agent. Those files
 /// carry the parent's `sessionId` and are read too: nothing else witnesses a session
 /// whose main loop went quiet while an agent it dispatched is still working.
-fn transcripts(root: &Path, since: Timestamp) -> Vec<(PathBuf, Timestamp)> {
-    let mut paths = Vec::new();
+fn transcripts(root: &Path, since: Timestamp) -> HashMap<PathBuf, Timestamp> {
+    let mut paths = HashMap::new();
     let Ok(projects) = std::fs::read_dir(root) else {
         return paths;
     };
@@ -145,10 +175,23 @@ fn transcripts(root: &Path, since: Timestamp) -> Vec<(PathBuf, Timestamp)> {
             continue;
         };
         for entry in entries.flatten() {
-            if entry.file_type().is_ok_and(|kind| kind.is_dir()) {
-                push_jsonl(&entry.path().join("subagents"), since, &mut paths);
-            } else {
+            if !entry.file_type().is_ok_and(|kind| kind.is_dir()) {
                 paths.extend(jsonl(&entry, since));
+                continue;
+            }
+            let session = entry.path();
+            let before = paths.len();
+            push_jsonl(&session.join("subagents"), since, &mut paths);
+            if paths.len() > before {
+                // An agent moved, so the session is live whatever its own transcript's
+                // mtime says — and that transcript is the only file that knows the row's
+                // name and cwd. A long agent run spanning midnight would otherwise leave
+                // a session with no row at all. Keyed by path, so this cannot duplicate
+                // a file the walk already found.
+                let own = session.with_extension("jsonl");
+                if let Ok(meta) = std::fs::metadata(&own) {
+                    paths.insert(own, modified_from(meta));
+                }
             }
         }
     }
@@ -165,7 +208,7 @@ fn is_agent_file(path: &Path) -> bool {
         .is_some_and(|dir| dir == "subagents")
 }
 
-fn push_jsonl(dir: &Path, since: Timestamp, paths: &mut Vec<(PathBuf, Timestamp)>) {
+fn push_jsonl(dir: &Path, since: Timestamp, paths: &mut HashMap<PathBuf, Timestamp>) {
     let Ok(files) = std::fs::read_dir(dir) else {
         return;
     };
@@ -180,9 +223,11 @@ fn jsonl(entry: &DirEntry, since: Timestamp) -> Option<(PathBuf, Timestamp)> {
 }
 
 fn modified_at(entry: &DirEntry) -> Timestamp {
-    entry
-        .metadata()
-        .and_then(|meta| meta.modified())
+    entry.metadata().map(modified_from).unwrap_or(0)
+}
+
+fn modified_from(meta: std::fs::Metadata) -> Timestamp {
+    meta.modified()
         .ok()
         .and_then(|at| at.duration_since(UNIX_EPOCH).ok())
         .map_or(0, |age| age.as_secs())
@@ -234,6 +279,17 @@ mod tests {
             let dir = self.0.join("a-project").join("s1").join("subagents");
             std::fs::create_dir_all(&dir).unwrap();
             self.append_to(dir.join("agent-abc123.jsonl"), contents);
+        }
+
+        /// A temp file is always modified "now", so the mtime gate can only be
+        /// exercised by backdating it on purpose.
+        fn backdate(&self, path: PathBuf, at: Timestamp) {
+            let file = std::fs::OpenOptions::new().write(true).open(path).unwrap();
+            file.set_times(
+                std::fs::FileTimes::new()
+                    .set_modified(UNIX_EPOCH + std::time::Duration::from_secs(at)),
+            )
+            .unwrap();
         }
 
         fn append_to(&self, path: PathBuf, contents: &str) {
@@ -310,7 +366,8 @@ mod tests {
         };
 
         let scan = Scanner::default().scan(&projects.0, 0, 0);
-        let merged = crate::core::store::merge(vec![waiting], scan.sessions, scan.agents);
+        let merged =
+            crate::core::store::merge(vec![waiting], scan.sessions, scan.agents, 1784808100);
 
         assert_eq!(merged.len(), 1, "the agent must not open a second row");
         assert_eq!(merged[0].state, SessionState::WaitingOnYou);
@@ -357,6 +414,56 @@ mod tests {
             "the lane is told which file each record came from"
         );
         assert_eq!(scan.usage["s1"].len(), 2, "cost still counts both");
+    }
+
+    /// The mtime gate skips a file that cannot hold anything in the window — but a
+    /// session whose agent is the only thing writing still needs its own transcript,
+    /// because that is the only file that knows the row's name and cwd.
+    #[test]
+    fn a_session_known_only_through_its_agent_still_gets_its_own_row() {
+        let projects = TempProjects::new("agent-only");
+        projects.append(FIRST);
+        projects.append(concat!(
+            r#"{"type":"last-prompt","sessionId":"s1","lastPrompt":"run the migration"}"#,
+            "\n"
+        ));
+        projects.append_subagent(SUBAGENT);
+        // Only the agent's file is inside the window: the session's own transcript has
+        // not been touched since before the floor — a long agent run spanning midnight.
+        let floor = 1784808000;
+        projects.backdate(projects.transcript(), floor - 60 * 60);
+
+        // Both floors: below either of them the walk would not open the file at all.
+        let scan = Scanner::default().scan(&projects.0, floor, floor);
+
+        assert_eq!(scan.sessions.len(), 1, "the session is listed");
+        assert_eq!(
+            scan.sessions[0].title.as_deref(),
+            Some("run the migration"),
+            "named by its own transcript, not by the agent's file"
+        );
+        assert_eq!(scan.sessions[0].cwd, "/Users/x/specola");
+    }
+
+    #[test]
+    fn usage_older_than_the_floor_is_not_kept_or_re_cloned() {
+        let projects = TempProjects::new("forget");
+        projects.append(FIRST);
+        let mut scanner = Scanner::default();
+
+        assert_eq!(scanner.scan(&projects.0, 0, 0).usage["s1"].len(), 1);
+
+        // A later poll whose floors are both past that entry must not carry it around:
+        // the panel polls every second for as long as the app runs.
+        let scan = scanner.scan(&projects.0, 1784800802, 1784800802);
+
+        assert!(
+            scan.usage
+                .get("s1")
+                .is_none_or(|entries| entries.is_empty()),
+            "stale usage is dropped, not re-cloned every poll"
+        );
+        assert!(scan.activity.is_empty());
     }
 
     #[test]
