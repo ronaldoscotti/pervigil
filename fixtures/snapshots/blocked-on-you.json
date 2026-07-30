@@ -1,0 +1,46 @@
+{
+  "cost": 0.0105,
+  "dismissRead": false,
+  "from": 1784985600,
+  "hidden": [],
+  "hookSnippet": "<snippet>",
+  "hooksInstalled": false,
+  "notifications": true,
+  "now": 1785000000,
+  "segments": [
+    {
+      "from": 1784985600,
+      "state": "Idle",
+      "to": 1784999400
+    },
+    {
+      "from": 1784999400,
+      "state": "Working",
+      "to": 1784999430
+    },
+    {
+      "from": 1784999430,
+      "state": "WaitingOnYou",
+      "to": 1785000000
+    }
+  ],
+  "sessions": [
+    {
+      "branch": "main",
+      "cost": 0.0105,
+      "focus": "<focus>",
+      "id": "s-block",
+      "name": "run the migration",
+      "pinned": false,
+      "project": "api",
+      "siblings": 1,
+      "since": 1784999430,
+      "state": "WaitingOnYou"
+    }
+  ],
+  "todayCost": 0.0105,
+  "tokens": 500,
+  "waiting": 1,
+  "waitingOutsideWindow": 0,
+  "waitingShare": 0.03958333333333333
+}

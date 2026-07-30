@@ -229,7 +229,10 @@ function renderHooks(snapshot: Snapshot) {
   el("sessions").after(card);
 }
 
-function render(snapshot: Snapshot, span: Span) {
+/** Exported for `render.test.ts`, which drives it against the committed golden
+ *  snapshots — the same files `src-tauri/tests/golden.rs` pins. Nothing else imports
+ *  this module; the app enters through the `DOMContentLoaded` listener below. */
+export function render(snapshot: Snapshot, span: Span) {
   const waiting = el("waiting");
   waiting.textContent = String(snapshot.waiting);
   waiting.classList.toggle("quiet", snapshot.waiting === 0);

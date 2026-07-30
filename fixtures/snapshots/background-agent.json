@@ -1,0 +1,46 @@
+{
+  "cost": 0.08075,
+  "dismissRead": false,
+  "from": 1784985600,
+  "hidden": [],
+  "hookSnippet": "<snippet>",
+  "hooksInstalled": false,
+  "notifications": true,
+  "now": 1785000000,
+  "segments": [
+    {
+      "from": 1784985600,
+      "state": "Idle",
+      "to": 1784999400
+    },
+    {
+      "from": 1784999400,
+      "state": "Working",
+      "to": 1784999460
+    },
+    {
+      "from": 1784999460,
+      "state": "Idle",
+      "to": 1785000000
+    }
+  ],
+  "sessions": [
+    {
+      "branch": "main",
+      "cost": 0.08075,
+      "focus": "<focus>",
+      "id": "s-agent",
+      "name": "review the diff",
+      "pinned": false,
+      "project": "web",
+      "siblings": 1,
+      "since": 1784999460,
+      "state": "YourTurn"
+    }
+  ],
+  "todayCost": 0.08075,
+  "tokens": 3350,
+  "waiting": 0,
+  "waitingOutsideWindow": 0,
+  "waitingShare": 0.0
+}
