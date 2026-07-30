@@ -86,10 +86,14 @@ pub fn timeline(
                 );
             }
             Tick::Active(id, at, origin) => {
-                if states
-                    .get(id)
-                    .is_some_and(|wait| wait.moves_to_working(*origin))
-                {
+                let wait = states.get(id);
+                let starts = wait.is_some_and(|wait| wait.moves_to_working(*origin));
+                // An agent that keeps writing keeps its own `Working` alive. Without
+                // this the first record's expiry stood, and the lane blinked idle for
+                // one gap every `AGENT_TTL_SECS` of continuous work.
+                let extends =
+                    *origin == Origin::Agent && wait.is_some_and(|wait| wait.is_an_agents_work());
+                if starts || extends {
                     // An agent's word is good for `AGENT_TTL_SECS`; answering a prompt
                     // yourself needs no expiry, like any other event-borne `Working`.
                     let expiry = match origin {
@@ -133,6 +137,13 @@ impl Wait {
             state: SessionState::Idle,
             expiry: 0,
         }
+    }
+
+    /// Whether this `Working` is one an agent's records inferred, and so the one whose
+    /// clock they may push out. Only they carry an expiry: a `Working` the main loop
+    /// earned never decays, and must not start.
+    fn is_an_agents_work(&self) -> bool {
+        self.state == SessionState::Working && self.expiry != 0
     }
 
     /// The lane's half of [`moves_to_working`]. It paints three states and has no
@@ -1107,6 +1118,53 @@ mod tests {
         assert_eq!(
             stale[0].last_active, wrote_at,
             "the records still happened, so recency keeps them"
+        );
+    }
+
+    /// The lane replays ticks, so an agent-inferred `Working` only refreshed its expiry
+    /// on the edge out of `Idle`: the first record's expiry still matched ten minutes
+    /// later and demoted a session that had been writing the whole time.
+    #[test]
+    fn a_working_agent_does_not_blink_idle_every_ten_minutes() {
+        let stopped = vec![Event::Stop {
+            id: "s1".into(),
+            at: 0,
+        }];
+        let writing: Vec<_> = (1..=20)
+            .map(|minute| ("s1".to_string(), minute * 60, Origin::Agent))
+            .collect();
+
+        let segments = timeline(&stopped, &writing, 0, 20 * 60);
+
+        let blink: Vec<_> = segments
+            .iter()
+            .filter(|s| s.state == SessionState::Idle && s.from >= 60)
+            .collect();
+        assert!(
+            blink.is_empty(),
+            "an agent writing every minute is never idle: {segments:?}"
+        );
+    }
+
+    #[test]
+    fn an_agents_records_never_put_a_clock_on_work_the_main_loop_is_doing() {
+        let prompt = vec![Event::UserPromptSubmit {
+            id: "s1".into(),
+            at: 0,
+        }];
+        let one_record = vec![("s1".to_string(), 10, Origin::Agent)];
+        let window = AGENT_TTL_SECS * 3;
+
+        let segments = timeline(&prompt, &one_record, 0, window);
+
+        assert_eq!(
+            segments,
+            vec![Segment {
+                state: SessionState::Working,
+                from: 0,
+                to: window
+            }],
+            "the turn is still running; only an agent's own Working decays"
         );
     }
 
