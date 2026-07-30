@@ -88,6 +88,10 @@ impl Scanner {
     }
 }
 
+/// A project holds one `<session>.jsonl` per session and, beside it,
+/// `<session>/subagents/agent-*.jsonl` per background or Task-tool agent. Those files
+/// carry the parent's `sessionId` and are read too: nothing else witnesses a session
+/// whose main loop went quiet while an agent it dispatched is still working.
 fn transcripts(root: &Path, since: Timestamp) -> Vec<(PathBuf, Timestamp)> {
     let mut paths = Vec::new();
     let Ok(projects) = std::fs::read_dir(root) else {
@@ -95,19 +99,31 @@ fn transcripts(root: &Path, since: Timestamp) -> Vec<(PathBuf, Timestamp)> {
     };
 
     for project in projects.flatten() {
-        let Ok(files) = std::fs::read_dir(project.path()) else {
+        let project = project.path();
+        push_jsonl(&project, since, &mut paths);
+
+        let Ok(entries) = std::fs::read_dir(&project) else {
             continue;
         };
-        for file in files.flatten() {
-            let path = file.path();
-            let modified = modified_at(&file);
-            if path.extension().is_some_and(|ext| ext == "jsonl") && modified >= since {
-                paths.push((path, modified));
-            }
+        for entry in entries.flatten() {
+            push_jsonl(&entry.path().join("subagents"), since, &mut paths);
         }
     }
 
     paths
+}
+
+fn push_jsonl(dir: &Path, since: Timestamp, paths: &mut Vec<(PathBuf, Timestamp)>) {
+    let Ok(files) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for file in files.flatten() {
+        let path = file.path();
+        let modified = modified_at(&file);
+        if path.extension().is_some_and(|ext| ext == "jsonl") && modified >= since {
+            paths.push((path, modified));
+        }
+    }
 }
 
 fn modified_at(entry: &DirEntry) -> Timestamp {
@@ -124,11 +140,19 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::*;
+    use crate::core::session::SessionState;
 
     const FIRST: &str = concat!(
         r#"{"type":"user","sessionId":"s1","cwd":"/Users/x/specola","timestamp":"2026-07-23T10:00:00.000Z"}"#,
         "\n",
         r#"{"type":"assistant","sessionId":"s1","timestamp":"2026-07-23T10:00:01.000Z","message":{"model":"claude-opus-4-8","usage":{"output_tokens":10}}}"#,
+        "\n",
+    );
+
+    const SUBAGENT: &str = concat!(
+        r#"{"type":"user","isSidechain":true,"agentId":"abc123","sessionId":"s1","cwd":"/Users/x/specola","gitBranch":"feat/timeline","timestamp":"2026-07-23T12:00:00.000Z"}"#,
+        "\n",
+        r#"{"type":"assistant","isSidechain":true,"agentId":"abc123","sessionId":"s1","timestamp":"2026-07-23T12:00:01.000Z","message":{"model":"claude-opus-4-8","usage":{"output_tokens":30}}}"#,
         "\n",
     );
 
@@ -150,11 +174,21 @@ mod tests {
         }
 
         fn append(&self, contents: &str) {
+            self.append_to(self.transcript(), contents);
+        }
+
+        fn append_subagent(&self, contents: &str) {
+            let dir = self.0.join("a-project").join("s1").join("subagents");
+            std::fs::create_dir_all(&dir).unwrap();
+            self.append_to(dir.join("agent-abc123.jsonl"), contents);
+        }
+
+        fn append_to(&self, path: PathBuf, contents: &str) {
             use std::io::Write;
             let mut file = std::fs::OpenOptions::new()
                 .create(true)
                 .append(true)
-                .open(self.transcript())
+                .open(path)
                 .unwrap();
             file.write_all(contents.as_bytes()).unwrap();
         }
@@ -177,6 +211,59 @@ mod tests {
         assert_eq!(scan.sessions[0].id, "s1");
         assert_eq!(scan.sessions[0].cwd, "/Users/x/specola");
         assert_eq!(scan.usage["s1"].len(), 1);
+    }
+
+    #[test]
+    fn a_subagent_transcript_counts_as_activity_of_the_session_that_spawned_it() {
+        let projects = TempProjects::new("subagents");
+        projects.append(FIRST);
+        projects.append_subagent(SUBAGENT);
+
+        let scan = Scanner::default().scan(&projects.0, 0, 0);
+
+        assert_eq!(
+            scan.usage["s1"].len(),
+            2,
+            "a background agent's spend is its parent session's spend"
+        );
+        assert_eq!(
+            scan.sessions.iter().map(|s| s.last_active).max(),
+            Some(1784808001),
+            "the agent's records are the only witness that the session is still working"
+        );
+    }
+
+    /// The reported bug: `/code-review` goes to the background, the main loop returns
+    /// to the prompt, Claude Code's idle notification fires 60s later — and the panel
+    /// says "waiting on you" while the agent is still churning.
+    #[test]
+    fn a_session_whose_background_agent_is_still_working_is_not_waiting_on_you() {
+        let projects = TempProjects::new("still-working");
+        projects.append(FIRST);
+        projects.append_subagent(SUBAGENT);
+        let notified_at = 1784808000;
+        let waiting = Session {
+            id: "s1".into(),
+            cwd: "/Users/x/specola".into(),
+            pid: Some(7),
+            state: SessionState::WaitingOnYou,
+            since: notified_at,
+            last_active: notified_at,
+            title: Some("Run the migration".into()),
+            git_branch: None,
+            terminal: None,
+        };
+
+        let scan = Scanner::default().scan(&projects.0, 0, 0);
+        let merged = crate::core::store::merge(vec![waiting], scan.sessions);
+
+        assert_eq!(merged.len(), 1, "the agent must not open a second row");
+        assert_eq!(merged[0].state, SessionState::Working);
+        assert_eq!(
+            merged[0].title.as_deref(),
+            Some("Run the migration"),
+            "the row keeps its name"
+        );
     }
 
     #[test]

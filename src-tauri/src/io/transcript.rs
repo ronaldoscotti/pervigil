@@ -14,6 +14,7 @@ struct Line {
     cwd: Option<String>,
     git_branch: Option<String>,
     timestamp: Option<String>,
+    is_sidechain: Option<bool>,
     ai_title: Option<String>,
     last_prompt: Option<String>,
     message: Option<AssistantMessage>,
@@ -71,6 +72,7 @@ pub struct Transcript {
     ai_title: Option<String>,
     last_prompt: Option<String>,
     last_active: Timestamp,
+    sidechain: bool,
     pub usage: Vec<UsageEntry>,
 }
 
@@ -89,6 +91,7 @@ impl Transcript {
         if let Some(branch) = record.git_branch.filter(|b| b != "HEAD" && !b.is_empty()) {
             self.git_branch = Some(branch);
         }
+        self.sidechain |= record.is_sidechain.unwrap_or(false);
         self.ai_title = record.ai_title.or_else(|| self.ai_title.take());
         self.last_prompt = record.last_prompt.or_else(|| self.last_prompt.take());
 
@@ -130,8 +133,13 @@ impl Transcript {
     /// The transcript's share of spec item 13's tiers: Claude Code's own title, else
     /// the last prompt, else the branch. The short-id floor is the caller's, because
     /// hook-only sessions have no transcript to reach it through. Never
-    /// authoritative — a title lags its session.
+    /// authoritative — a title lags its session. A subagent file names nothing: it
+    /// would only offer the branch, and merging by id is order-dependent, so it could
+    /// beat the real transcript's title to the row.
     fn name(&self) -> Option<String> {
+        if self.sidechain {
+            return None;
+        }
         self.ai_title
             .clone()
             .or_else(|| self.last_prompt.as_deref().map(one_line))
@@ -216,6 +224,19 @@ mod tests {
 
     fn name_of(contents: &str) -> Option<String> {
         parse(contents).session().unwrap().title
+    }
+
+    #[test]
+    fn a_subagent_transcript_lends_no_name_to_its_session() {
+        let contents = r#"{"type":"user","isSidechain":true,"sessionId":"abcdef1234","cwd":"/p","gitBranch":"feat/x","timestamp":"2026-07-23T10:00:00.000Z"}"#;
+
+        let session = parse(contents).session().unwrap();
+
+        assert_eq!(
+            session.title, None,
+            "a branch name from a subagent file must not outrank the real transcript's title"
+        );
+        assert_eq!(session.cwd, "/p", "but its context still counts");
     }
 
     #[test]
