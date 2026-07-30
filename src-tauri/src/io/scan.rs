@@ -49,7 +49,15 @@ impl Cached {
 /// One poll's worth of transcript-derived state.
 pub struct Scan {
     pub sessions: Vec<Session>,
+    /// Rows read from background-agent files, under the same session ids as
+    /// `sessions`. Kept apart because they are not evidence about you — see
+    /// [`crate::core::store::merge`].
+    pub agents: Vec<Session>,
+    /// Every session's spend, agents included: an agent bills to the session that
+    /// spawned it.
     pub usage: HashMap<SessionId, Vec<UsageEntry>>,
+    /// Main-transcript record times, which are the only proof a wait was answered.
+    pub main_activity: Vec<(SessionId, Timestamp)>,
 }
 
 /// Incremental reader over `~/.claude/projects/**/*.jsonl`. Those files are
@@ -66,25 +74,50 @@ impl Scanner {
     /// anything in either window.
     pub fn scan(&mut self, root: &Path, sessions_since: Timestamp, usage_since: Timestamp) -> Scan {
         let mut sessions = Vec::new();
+        let mut agents = Vec::new();
         let mut usage: HashMap<SessionId, Vec<UsageEntry>> = HashMap::new();
+        let mut main_activity = Vec::new();
 
         for (path, modified) in transcripts(root, usage_since.min(sessions_since)) {
+            let by_agent = is_agent_file(&path);
             let cached = self.files.entry(path.clone()).or_default();
             cached.absorb_appended(&path);
 
-            let Some(session) = cached.transcript.session() else {
+            let Some(mut session) = cached.transcript.session() else {
                 continue;
             };
             usage
                 .entry(session.id.clone())
                 .or_default()
                 .extend(cached.transcript.usage.iter().cloned());
-            if modified >= sessions_since {
+            if !by_agent {
+                main_activity.extend(
+                    cached
+                        .transcript
+                        .usage
+                        .iter()
+                        .map(|entry| (session.id.clone(), entry.at)),
+                );
+            }
+            if modified < sessions_since {
+                continue;
+            }
+            if by_agent {
+                // An agent file has no title of its own and would offer the branch
+                // name; the session's real transcript must name the row.
+                session.title = None;
+                agents.push(session);
+            } else {
                 sessions.push(session);
             }
         }
 
-        Scan { sessions, usage }
+        Scan {
+            sessions,
+            agents,
+            usage,
+            main_activity,
+        }
     }
 }
 
@@ -99,31 +132,42 @@ fn transcripts(root: &Path, since: Timestamp) -> Vec<(PathBuf, Timestamp)> {
     };
 
     for project in projects.flatten() {
-        let project = project.path();
-        push_jsonl(&project, since, &mut paths);
-
-        let Ok(entries) = std::fs::read_dir(&project) else {
+        let Ok(entries) = std::fs::read_dir(project.path()) else {
             continue;
         };
         for entry in entries.flatten() {
-            push_jsonl(&entry.path().join("subagents"), since, &mut paths);
+            if entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+                push_jsonl(&entry.path().join("subagents"), since, &mut paths);
+            } else {
+                paths.extend(jsonl(&entry, since));
+            }
         }
     }
 
     paths
 }
 
+/// Background-agent transcripts live in a `subagents` directory and nothing else does.
+/// Read from the path, not from the records: an `isSidechain` line has appeared inside
+/// a main transcript before, and one such line must not reclassify the whole file.
+fn is_agent_file(path: &Path) -> bool {
+    path.parent()
+        .and_then(Path::file_name)
+        .is_some_and(|dir| dir == "subagents")
+}
+
 fn push_jsonl(dir: &Path, since: Timestamp, paths: &mut Vec<(PathBuf, Timestamp)>) {
     let Ok(files) = std::fs::read_dir(dir) else {
         return;
     };
-    for file in files.flatten() {
-        let path = file.path();
-        let modified = modified_at(&file);
-        if path.extension().is_some_and(|ext| ext == "jsonl") && modified >= since {
-            paths.push((path, modified));
-        }
-    }
+    paths.extend(files.flatten().filter_map(|file| jsonl(&file, since)));
+}
+
+fn jsonl(entry: &DirEntry, since: Timestamp) -> Option<(PathBuf, Timestamp)> {
+    let path = entry.path();
+    let modified = modified_at(entry);
+    (path.extension().is_some_and(|ext| ext == "jsonl") && modified >= since)
+        .then_some((path, modified))
 }
 
 fn modified_at(entry: &DirEntry) -> Timestamp {
@@ -227,18 +271,20 @@ mod tests {
             "a background agent's spend is its parent session's spend"
         );
         assert_eq!(
-            scan.sessions.iter().map(|s| s.last_active).max(),
+            scan.agents.iter().map(|s| s.last_active).max(),
             Some(1784808001),
             "the agent's records are the only witness that the session is still working"
         );
     }
 
-    /// The reported bug: `/code-review` goes to the background, the main loop returns
-    /// to the prompt, Claude Code's idle notification fires 60s later — and the panel
-    /// says "waiting on you" while the agent is still churning.
+    /// A permission prompt is answered in the main loop, so only the main transcript
+    /// can prove it was. An agent runs whether you are at the keyboard or not, and
+    /// letting its records clear the wait hides a real block — the one thing the panel
+    /// exists to show. Part B of the spec relaxes this for the idle nudge, which is a
+    /// different notification, not different evidence.
     #[test]
-    fn a_session_whose_background_agent_is_still_working_is_not_waiting_on_you() {
-        let projects = TempProjects::new("still-working");
+    fn an_agents_records_never_clear_a_wait() {
+        let projects = TempProjects::new("still-blocked");
         projects.append(FIRST);
         projects.append_subagent(SUBAGENT);
         let notified_at = 1784808000;
@@ -255,15 +301,42 @@ mod tests {
         };
 
         let scan = Scanner::default().scan(&projects.0, 0, 0);
-        let merged = crate::core::store::merge(vec![waiting], scan.sessions);
+        let merged = crate::core::store::merge(vec![waiting], scan.sessions, scan.agents);
 
         assert_eq!(merged.len(), 1, "the agent must not open a second row");
-        assert_eq!(merged[0].state, SessionState::Working);
+        assert_eq!(merged[0].state, SessionState::WaitingOnYou);
+        assert_eq!(
+            merged[0].last_active, 1784808001,
+            "but its recency is still the agent's"
+        );
         assert_eq!(
             merged[0].title.as_deref(),
             Some("Run the migration"),
             "the row keeps its name"
         );
+    }
+
+    #[test]
+    fn an_agents_file_yields_a_nameless_row_and_no_main_activity() {
+        let projects = TempProjects::new("origin");
+        projects.append(FIRST);
+        projects.append_subagent(SUBAGENT);
+
+        let scan = Scanner::default().scan(&projects.0, 0, 0);
+
+        assert_eq!(scan.sessions.len(), 1, "one row from the main transcript");
+        assert_eq!(scan.sessions[0].last_active, 1784800801);
+        assert_eq!(scan.agents.len(), 1, "and one from the agent's file");
+        assert_eq!(
+            scan.agents[0].title, None,
+            "an agent file offers only the branch, which must not name the row"
+        );
+        assert_eq!(
+            scan.main_activity,
+            vec![("s1".to_string(), 1784800801)],
+            "the lane's evidence a wait was answered is the main transcript alone"
+        );
+        assert_eq!(scan.usage["s1"].len(), 2, "cost still counts both");
     }
 
     #[test]

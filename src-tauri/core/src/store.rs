@@ -153,37 +153,62 @@ fn extend(segments: &mut Vec<Segment>, state: SessionState, from: Timestamp, to:
     segments.push(Segment { state, from, to });
 }
 
-/// Union both discovery sources by session id. Hooks win on state and pid;
+/// Union every discovery source by session id. Hooks win on state and pid;
 /// transcripts add the title, the freshest recency, and any session hooks never saw.
 /// Does not sort.
-pub fn merge(mut hooks: Vec<Session>, transcripts: Vec<Session>) -> Vec<Session> {
+///
+/// `agents` are the rows read from a session's background-agent files. They carry the
+/// same session id and count for recency and cost, but they are kept apart because
+/// they are not evidence about you: see [`answered`].
+pub fn merge(
+    mut hooks: Vec<Session>,
+    transcripts: Vec<Session>,
+    agents: Vec<Session>,
+) -> Vec<Session> {
     for transcript in transcripts {
-        match hooks.iter_mut().find(|hook| hook.id == transcript.id) {
-            Some(hook) => {
-                // Recency, unlike state, takes whichever source is fresher: hook events
-                // are sparse, and a session can own several transcript files.
-                hook.last_active = hook.last_active.max(transcript.last_active);
-                if answered(hook, &transcript) {
-                    hook.state = SessionState::Working;
-                    hook.since = transcript.last_active;
-                }
-                hook.title = hook.title.take().or(transcript.title);
-                hook.git_branch = hook.git_branch.take().or(transcript.git_branch);
-                // A hook session born from a Notification has no cwd; the transcript does.
-                if hook.cwd.is_empty() {
-                    hook.cwd = transcript.cwd;
-                }
-            }
-            None => hooks.push(transcript),
-        }
+        absorb(&mut hooks, transcript, Origin::Main);
+    }
+    for agent in agents {
+        absorb(&mut hooks, agent, Origin::Agent);
     }
     hooks
 }
 
+#[derive(PartialEq)]
+enum Origin {
+    Main,
+    Agent,
+}
+
+fn absorb(hooks: &mut Vec<Session>, transcript: Session, origin: Origin) {
+    match hooks.iter_mut().find(|hook| hook.id == transcript.id) {
+        Some(hook) => {
+            // Recency, unlike state, takes whichever source is fresher: hook events
+            // are sparse, and a session can own several transcript files.
+            hook.last_active = hook.last_active.max(transcript.last_active);
+            if answered(hook, &transcript, origin) {
+                hook.state = SessionState::Working;
+                hook.since = transcript.last_active;
+            }
+            hook.title = hook.title.take().or(transcript.title);
+            hook.git_branch = hook.git_branch.take().or(transcript.git_branch);
+            // A hook session born from a Notification has no cwd; the transcript does.
+            if hook.cwd.is_empty() {
+                hook.cwd = transcript.cwd;
+            }
+        }
+        None => hooks.push(transcript),
+    }
+}
+
 /// Approving a permission prompt fires no hook, so nothing clears the wait it opened.
-/// A transcript record written after it is proof the turn carried on.
-fn answered(hook: &Session, transcript: &Session) -> bool {
-    hook.state == SessionState::WaitingOnYou && transcript.last_active > hook.since
+/// A record written after it in the session's *own* transcript is proof the turn
+/// carried on. A background agent's records are not: it writes whether you answered
+/// or walked away, so reading them as an answer would hide a real block.
+fn answered(hook: &Session, transcript: &Session, origin: Origin) -> bool {
+    origin == Origin::Main
+        && hook.state == SessionState::WaitingOnYou
+        && transcript.last_active > hook.since
 }
 
 /// The list's whole order, in one place: waiting-on-you, then pinned, then recency.
@@ -798,7 +823,7 @@ mod tests {
             ..session("s1", SessionState::Idle, Some("working"), None)
         }];
 
-        let merged = merge(hooks, transcripts);
+        let merged = merge(hooks, transcripts, Vec::new());
 
         assert_eq!(merged[0].state, SessionState::Working);
         assert_eq!(
@@ -821,7 +846,7 @@ mod tests {
             ..session("s1", SessionState::Idle, Some("blocked"), None)
         }];
 
-        let merged = merge(hooks, transcripts);
+        let merged = merge(hooks, transcripts, Vec::new());
 
         assert_eq!(
             merged[0].state,
@@ -846,7 +871,7 @@ mod tests {
             ..session("s1", SessionState::Idle, Some("done"), None)
         }];
 
-        let merged = merge(hooks, transcripts);
+        let merged = merge(hooks, transcripts, Vec::new());
 
         assert_eq!(merged[0].state, SessionState::YourTurn);
     }
@@ -868,7 +893,7 @@ mod tests {
             ..session("s1", SessionState::Idle, None, None)
         };
 
-        let mut merged = merge(Vec::new(), vec![main, agent]);
+        let mut merged = merge(Vec::new(), vec![main], vec![agent]);
 
         assert_eq!(merged.len(), 1, "one session, not one row per file");
         assert_eq!(merged[0].last_active, 43_200);
@@ -890,7 +915,7 @@ mod tests {
     fn a_transcript_only_session_survives_the_merge() {
         let transcripts = vec![session("t1", SessionState::Idle, Some("Fix login"), None)];
 
-        let merged = merge(Vec::new(), transcripts);
+        let merged = merge(Vec::new(), transcripts, Vec::new());
 
         assert_eq!(merged.len(), 1);
         assert_eq!(merged[0].state, SessionState::Idle);
@@ -908,7 +933,7 @@ mod tests {
             None,
         )];
 
-        let merged = merge(hooks, transcripts);
+        let merged = merge(hooks, transcripts, Vec::new());
 
         assert_eq!(merged.len(), 1, "same id must not duplicate");
         assert_eq!(merged[0].state, SessionState::WaitingOnYou);
@@ -950,7 +975,7 @@ mod tests {
         }];
         let transcripts = vec![session("s1", SessionState::Idle, Some("Fix login"), None)];
 
-        let merged = merge(hooks, transcripts);
+        let merged = merge(hooks, transcripts, Vec::new());
 
         assert_eq!(merged.len(), 1);
         assert_eq!(merged[0].cwd, "/s1", "cwd comes from the transcript");

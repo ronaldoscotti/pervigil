@@ -271,7 +271,8 @@ impl App {
         let config = self.config.lock().expect("config lock").clone();
         let prefs = config.view_prefs();
 
-        let mut sessions = store::merge(store::fold(&events, to, &prefs), scan.sessions);
+        let mut sessions =
+            store::merge(store::fold(&events, to, &prefs), scan.sessions, scan.agents);
         retain_live(&mut sessions, &SystemProcesses);
         let retired = store::superseded(&events);
         sessions.retain(|session| !retired.contains(&session.id));
@@ -366,14 +367,9 @@ impl App {
             })
             .collect();
 
-        // Transcript records are the only witness that a permission prompt was
-        // answered — no hook fires when it is.
-        let activity: Vec<(SessionId, Timestamp)> = scan
-            .usage
-            .iter()
-            .flat_map(|(id, entries)| entries.iter().map(move |e| (id.clone(), e.at)))
-            .collect();
-        let segments = store::timeline(&events, &activity, from, to);
+        // Main-transcript records are the only witness that a permission prompt was
+        // answered — no hook fires when it is, and a background agent writes either way.
+        let segments = store::timeline(&events, &scan.main_activity, from, to);
 
         Snapshot {
             now: to,
