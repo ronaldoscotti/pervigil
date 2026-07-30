@@ -169,7 +169,34 @@ Red first, one test per claim. What was written:
 
 Three things this design first shipped as documented gaps. All are fixed.
 
-### An agent's word expires
+### An agent's records never speak for the session's state — decided 2026-07-30
+
+The first version of this let an agent's records move a `YourTurn` or `Idle` session to
+`Working`, bounded by a TTL. Review flagged it as a widening of "a session that stopped
+must stay stopped" through a channel that did not exist before, and asked for a
+conscious decision. The decision was to drop it.
+
+So the rule is one line on both surfaces: **a record in the session's own transcript can
+end a wait; an agent's records never speak for the session's state.** They still carry
+its recency and its spend — an agent bills to the session that spawned it — but `Stop`
+means the turn ended, whatever an agent beside it is doing.
+
+A session running a background agent therefore reads `YourTurn`: your move, nothing
+blocked on you, which was the reported complaint. It does not read `Working`, because
+the agent is working and the session is not.
+
+What this deleted, all of it existing only to bound the widening: `AGENT_TTL_SECS`, the
+expiry refresh on the lane's `Working`, `Wait::working_until`, `Wait::is_an_agents_work`,
+the `now` argument threaded into `merge`, and four tests. Net 179 lines removed against
+52 added. It also removed a whole bug class — the row recomputes from a clock and the
+lane replays ticks, so an agent-inferred `Working` had to be kept in step on two
+different mechanisms, and it was not: the lane blinked idle for one gap every ten
+minutes of continuous agent work before that was caught.
+
+### An agent's word expires (removed)
+
+*Superseded by the decision above; kept for the record of what the bound was and why it
+existed.*
 
 An agent that finishes fires no hook of its own, so one last record left the row green
 for the rest of the day — the failure `WAITING_TTL_SECS` exists to prevent, on the

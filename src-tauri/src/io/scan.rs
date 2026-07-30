@@ -418,8 +418,7 @@ mod tests {
         };
 
         let scan = Scanner::default().scan(&projects.0, 0, 0);
-        let merged =
-            crate::core::store::merge(vec![waiting], scan.sessions, scan.agents, 1784808100);
+        let merged = crate::core::store::merge(vec![waiting], scan.sessions, scan.agents);
 
         assert_eq!(merged.len(), 1, "the agent must not open a second row");
         assert_eq!(merged[0].state, SessionState::WaitingOnYou);
