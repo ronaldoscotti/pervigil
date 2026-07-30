@@ -124,7 +124,6 @@ impl Transcript {
             last_active: self.last_active,
             git_branch: self.git_branch.clone(),
             terminal: None,
-            wait: None,
         })
     }
 

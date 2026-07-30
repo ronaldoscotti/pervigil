@@ -2,16 +2,18 @@ use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
-use super::event::{NotificationKind, SessionId, Timestamp};
+use super::event::{SessionId, Timestamp};
 use super::terminal::Terminal;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SessionState {
     Working,
-    /// Claude explicitly needs you — a permission prompt or the away notification.
+    /// Claude explicitly needs an answer from you — a permission prompt, or any
+    /// notification whose kind this version does not recognise.
     WaitingOnYou,
-    /// The turn finished; a live session sits at its prompt, your move. Softer than
-    /// `WaitingOnYou`, which stays reserved for Claude's own notifications.
+    /// A live session sitting at its prompt, your move: the turn finished, or the idle
+    /// nudge that follows one. Softer than `WaitingOnYou`, which is reserved for Claude
+    /// actually waiting on an answer.
     YourTurn,
     Idle,
 }
@@ -32,9 +34,6 @@ pub struct Session {
     /// Where it runs, for click-to-focus. `None` for transcript-derived sessions and
     /// sessions started before the shim captured it.
     pub terminal: Option<Terminal>,
-    /// Which notification opened the current wait. Meaningless unless `state` is
-    /// `WaitingOnYou`, and `None` for a log line written before the shim recorded it.
-    pub wait: Option<NotificationKind>,
 }
 
 /// What the dismiss (check) action does to a session.

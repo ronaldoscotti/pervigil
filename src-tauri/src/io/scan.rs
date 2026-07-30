@@ -303,7 +303,6 @@ mod tests {
             title: Some("Run the migration".into()),
             git_branch: None,
             terminal: None,
-            wait: None,
         };
 
         let scan = Scanner::default().scan(&projects.0, 0, 0);

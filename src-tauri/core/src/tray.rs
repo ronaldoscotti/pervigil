@@ -169,7 +169,6 @@ mod tests {
             title: Some(format!("do the {id} thing")),
             git_branch: None,
             terminal: None,
-            wait: None,
         }
     }
 

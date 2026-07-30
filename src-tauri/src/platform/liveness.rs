@@ -64,7 +64,6 @@ mod tests {
             title: None,
             git_branch: None,
             terminal: None,
-            wait: None,
         }
     }
 

@@ -91,9 +91,9 @@ fn an_idle_nudge_beside_a_working_agent_is_not_blocked_on_you() {
         snapshot.sessions[0].name, "run the migration",
         "the agent's file must not rename the row to its branch"
     );
-    assert!(
-        snapshot.waiting_share < 1.0,
-        "and the lane agrees: {:?}",
+    assert_eq!(
+        snapshot.waiting_share, 0.0,
+        "and the lane agrees, with no amber at all: {:?}",
         snapshot.segments
     );
 

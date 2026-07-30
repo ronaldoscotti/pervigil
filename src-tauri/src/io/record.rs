@@ -4,7 +4,7 @@ use std::path::Path;
 
 use serde::Deserialize;
 
-use crate::core::event::{Event, NotificationKind, Timestamp};
+use crate::core::event::{Event, NotificationKind, SessionSource, Timestamp};
 use crate::core::terminal::Terminal;
 
 #[derive(Deserialize)]
@@ -14,6 +14,8 @@ struct Hook {
     /// `permission_prompt`, `idle_prompt`, or whatever Claude Code adds next. Only
     /// `Notification` carries it.
     notification_type: Option<String>,
+    /// `startup`, `resume`, `clear` or `compact`. Only `SessionStart` carries it.
+    source: Option<String>,
 }
 
 /// Why a hook payload produced no event. Three different operational problems: a
@@ -58,13 +60,12 @@ pub fn build_event(
             pid,
             at,
             term: term.some(),
+            source: SessionSource::from_hook(hook.source.as_deref()),
         }),
         "Notification" => Ok(Event::Notification {
             id,
             at,
-            kind: Some(NotificationKind::from_hook(
-                hook.notification_type.as_deref(),
-            )),
+            kind: NotificationKind::from_hook(hook.notification_type.as_deref()),
         }),
         "Stop" => Ok(Event::Stop { id, at }),
         "UserPromptSubmit" => Ok(Event::UserPromptSubmit { id, at }),
@@ -107,6 +108,7 @@ mod tests {
                 pid: Some(42),
                 at: 1_000,
                 term: Some(term),
+                source: None,
             }
         );
     }
@@ -134,14 +136,35 @@ mod tests {
         );
         assert_eq!(
             kind_of(r#"{"session_id":"s1","notification_type":"something_new"}"#),
-            Some(NotificationKind::Permission),
-            "a type we do not know may be a block, so it is treated as one"
+            None,
+            "a type we do not know is recorded as unknown, not guessed at"
         );
+        assert_eq!(kind_of(r#"{"session_id":"s1"}"#), None);
+    }
+
+    #[test]
+    fn how_the_session_started_is_recorded() {
+        let source_of = |payload: &str| match build_event(
+            "SessionStart",
+            payload,
+            1,
+            None,
+            Terminal::default(),
+        ) {
+            Ok(Event::SessionStart { source, .. }) => source,
+            other => panic!("expected a session start, got {other:?}"),
+        };
+
+        for opened in ["startup", "resume", "clear"] {
+            let payload = format!(r#"{{"session_id":"s1","source":"{opened}"}}"#);
+            assert_eq!(source_of(&payload), Some(SessionSource::Opened));
+        }
         assert_eq!(
-            kind_of(r#"{"session_id":"s1"}"#),
-            Some(NotificationKind::Permission),
-            "and so is a payload that names no type at all"
+            source_of(r#"{"session_id":"s1","source":"compact"}"#),
+            Some(SessionSource::Compact),
+            "compaction is the one source that happens mid-turn"
         );
+        assert_eq!(source_of(r#"{"session_id":"s1"}"#), None);
     }
 
     #[test]
@@ -172,7 +195,7 @@ mod tests {
         assert_eq!(
             notification,
             Event::Notification {
-                kind: Some(NotificationKind::Permission),
+                kind: None,
                 id: "s1".into(),
                 at: 2_000
             }

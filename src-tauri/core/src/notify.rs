@@ -61,7 +61,6 @@ mod tests {
             title: Some("do the thing".into()),
             git_branch: None,
             terminal: None,
-            wait: None,
         }
     }
 
@@ -114,7 +113,6 @@ mod tests {
             title: None,
             git_branch: None,
             terminal: None,
-            wait: None,
         };
 
         assert_eq!(name(&session), "abcdef12");

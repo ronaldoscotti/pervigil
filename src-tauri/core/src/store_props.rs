@@ -24,6 +24,7 @@ fn events() -> impl Strategy<Value = Vec<Event>> {
                             pid: Some(pid),
                             at,
                             term: None,
+                            source: None,
                         },
                         1 => Event::Notification {
                             id,

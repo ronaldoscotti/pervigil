@@ -1,7 +1,8 @@
 # Spec — the two kinds of notification, 2026-07-29
 
-**Status:** approved to implement (human, 2026-07-29 — "keep going", with the open
-question below left at its assumed answer).
+**Status:** implemented. Approved 2026-07-29 ("keep going"); the open question below
+was then decided the other way, also by the human ("do it"), and a second report
+during implementation extended it to `SessionStart`.
 
 ## Order of work
 
@@ -72,14 +73,18 @@ pub enum NotificationKind { Permission, Idle }
 `Option`, and `#[serde(default)]`, because the log retains 30 days and every line
 already written has no kind.
 
-### 2. Unknown maps to `Permission`
+### 2. The writer records what it saw; the reader defaults
 
-`permission_prompt` → `Permission`. `idle_prompt` → `Idle`. Anything else, including
-a missing field, an old log line, and any type Claude Code adds later → `Permission`.
+`permission_prompt` → `Permission`. `idle_prompt` → `Idle`. Anything else — a missing
+field, a type Claude Code adds later — is recorded as **absent**, not guessed at. The
+log must not contain a claim the payload never made; a reader a year from now cannot
+tell a real `Permission` from a shim's guess, and the log is the only record there is.
+
+Reading an absent kind is where the default lives, and it goes to `Permission`.
 
 The two errors are not symmetric. Reading a nudge as a block over-reports, which is
 today's behaviour and merely noisy. Reading a block as a nudge hides the one thing
-the panel exists to show. So the fallback goes to the side that cannot hide a block,
+the panel exists to show. So the default goes to the side that cannot hide a block,
 and a new upstream notification type degrades to noise rather than silence.
 
 Consequence worth naming: an `auth_success` notification will paint a wait it should
@@ -91,11 +96,12 @@ not. It decays on the existing 30-minute `WAITING_TTL_SECS`, and it is rare.
   no hook, so a record written after it is the only proof the turn carried on. A
   background agent's records prove nothing about whether you answered: it is a
   different agent, running whether you are there or not.
-- **`Idle`** — any activity in the session, an agent's included. The nudge says the
-  main loop is idle; an agent writing means the session is not.
+- **`Idle`** — ~~any activity in the session, an agent's included~~. **Superseded by
+  decision 5:** an `Idle` notification stopped opening a wait at all, so there is
+  nothing here to clear.
 
-This is the whole fix. It needs `Session` and the lane's `activity` to say whether
-a record came from a sidechain file, which the scanner knows from the path it opened.
+It needs the lane's `activity` to say whether a record came from a sidechain file,
+which the scanner knows from the path it opened.
 
 ### 4. Sidechain-ness is decided by path, not by content
 
@@ -104,30 +110,57 @@ the whole file. That is fragile: one inlined sidechain record in a main transcri
 which older Claude Code wrote, and a resumed old session still holds — would mark the
 whole file. The scanner opened `<session>/subagents/agent-*.jsonl` or it did not.
 
+### 5. The idle nudge is not a wait at all — decided yes, 2026-07-29
+
+The question put to the human was whether `idle_prompt` should keep becoming
+`WaitingOnYou` (merely clearable by any activity) or map to the softer `YourTurn`
+that already exists. Answer: `YourTurn`.
+
+What it costs: the panel's headline changes for 166 of 185 notifications a day —
+fewer amber rows, a smaller tray badge, and no desktop notification when you simply
+walked away from an idle session. That was accepted.
+
+What it bought: the wait is never opened, so nothing has to reason about who may
+close it. `Session::wait` and the kind-aware branch in `answered` were both deleted;
+what survives is one rule, stated once and mirrored on both surfaces —
+
+> A record in the session's own transcript can end a wait. An agent's records never
+> can, but they do prove the session is not sitting quiet.
+
+The lane paints three states and has no `YourTurn`, so the nudge reads `Idle` there
+and `YourTurn` on the row. Both say: not blocked.
+
+### 6. The same shape, on `SessionStart`
+
+Reported while the above was being implemented: a project opened and a session
+resumed, nothing typed, and the row read `Working` for twenty minutes. Same root as
+decision 1 — the event vocabulary was too coarse and the shim was dropping the field
+that disambiguates.
+
+`SessionStart` fires for `startup`, `resume`, `clear` and `compact`. Only the last
+happens mid-turn. So the shim records `source`, folded to one of two things Specola
+cares about (`Opened`, `Compact`), and:
+
+- `Opened` → `Idle`. A live session at its prompt with nothing running.
+- `Compact` → `Working`. Compaction interrupts a turn already in flight.
+- absent → `Working`, the old reading, because 30 days of lines have no source and
+  neither error hides a block.
+
 ## Test plan
 
-Red first, one test per claim:
+Red first, one test per claim. What was written:
 
-1. A `permission_prompt` notification followed by subagent records only → the row
-   stays `WaitingOnYou`. (The bug this spec exists to prevent.)
-2. The same, followed by main-transcript records → `Working`, as today.
-3. An `idle_prompt` notification followed by subagent records → `Working`.
-4. A notification with no kind — an old log line — behaves as `Permission`.
-5. The lane agrees with the row in all four.
-6. A round-trip of every `Event` variant through the log format, kind included.
-
-## Open question for the human gate
-
-An `idle_prompt` notification currently becomes `WaitingOnYou`, which is a
-deliberate product decision — `SessionState`'s own doc calls it "a permission prompt
-or the away notification". The softer `YourTurn` already exists for "the turn
-finished, your move".
-
-Mapping `Idle` → `YourTurn` would be more honest and would fix the reported symptom
-at the source, with no reasoning about who cleared what. It also changes the panel's
-headline for 166 of 185 notifications a day: fewer amber rows, a smaller tray badge,
-no desktop notification when you simply walked away.
-
-This spec assumes **no** — `Idle` stays `WaitingOnYou` and is merely clearable by
-any activity — because that preserves the existing decision. Overturning it is a
-product call, not a bug fix.
+1. A permission prompt followed by an agent's records only → the row stays
+   `WaitingOnYou`. *(The bug this spec exists to prevent — watched failing first.)*
+2. The same, followed by main-transcript records → `Working`, as before.
+3. An idle nudge → `YourTurn`; a permission prompt → `WaitingOnYou`; no kind →
+   `WaitingOnYou`.
+4. An agent's records make a `YourTurn` or `Idle` session `Working`.
+5. The lane agrees with the row on both notifications.
+6. `SessionStart`: `Opened` → `Idle`, `Compact` → `Working`, absent → `Working`.
+7. The shim maps `notification_type` and `source`, and records neither when the
+   payload names something this version does not know.
+8. Every `Event` variant round-trips through the log format, new fields included.
+9. End to end through `App::snapshot`, against a temp `HOME`: the reported agent
+   session (`tests/background_agent.rs`) and the reported resumed session
+   (`tests/opened_session.rs`).
