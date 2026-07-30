@@ -108,9 +108,13 @@ impl Scanner {
                 continue;
             }
             if by_agent {
-                // An agent file has no title of its own and would offer the branch
-                // name; the session's real transcript must name the row.
+                // An agent file describes the agent, not the session: its title would be
+                // the branch, and its cwd is often a subdirectory the agent was pointed
+                // at — 33 of 200 files on this machine — which `project()` would turn
+                // into a project that does not exist. Both come from the session's own
+                // transcript or its hook, or the row is dropped as context-less.
                 session.title = None;
+                session.cwd = String::new();
                 agents.push(session);
             } else {
                 sessions.push(session);
@@ -335,6 +339,10 @@ mod tests {
         assert_eq!(
             scan.agents[0].title, None,
             "an agent file offers only the branch, which must not name the row"
+        );
+        assert_eq!(
+            scan.agents[0].cwd, "",
+            "nor its own cwd, which is often a subdirectory the agent was pointed at"
         );
         // read_dir has no order and the lane sorts its own ticks, so only the contents
         // are asserted.

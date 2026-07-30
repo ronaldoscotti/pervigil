@@ -348,6 +348,12 @@ fn ensure(sessions: &mut Vec<Session>, id: &SessionId, at: Timestamp) {
     }
 }
 
+fn blocked(sessions: &[Session], id: &SessionId) -> bool {
+    sessions
+        .iter()
+        .any(|s| &s.id == id && s.state == SessionState::WaitingOnYou)
+}
+
 fn transition(sessions: &mut [Session], id: &SessionId, state: SessionState, at: Timestamp) {
     if let Some(session) = sessions.iter_mut().find(|s| &s.id == id) {
         session.state = state;
@@ -393,7 +399,12 @@ pub fn fold(events: &[Event], _now: Timestamp, prefs: &ViewPrefs) -> Vec<Session
                     Some(NotificationKind::Idle) => SessionState::YourTurn,
                     _ => SessionState::WaitingOnYou,
                 };
-                transition(&mut sessions, id, state, *at)
+                // A nudge never downgrades a block that is still open. Claude Code does
+                // not appear to raise one while a prompt is pending, but a prompt can
+                // sit for hours, and only answering it or the TTL may end it.
+                if !(state == SessionState::YourTurn && blocked(&sessions, id)) {
+                    transition(&mut sessions, id, state, *at);
+                }
             }
             Event::Stop { id, at } => transition(&mut sessions, id, SessionState::YourTurn, *at),
             Event::UserPromptSubmit { id, at } => {
@@ -466,8 +477,12 @@ pub fn retain_within(sessions: &mut Vec<Session>, from: Timestamp) {
 /// removes them; `Read` keeps them but demotes to idle — a "mark as read". Applied
 /// after [`merge`] too, so it also covers transcript-only sessions — which never pass
 /// through [`fold`] and would otherwise ignore a dismiss.
+/// Compares `since`, not `last_active`: "acts again" means the session changed state,
+/// not that bytes appeared. A background agent writes every few seconds, and against
+/// `last_active` — which now takes the freshest transcript — that made a dismissed row
+/// reappear on the next poll and stay undismissable for as long as the agent ran.
 pub fn apply_dismissed(sessions: &mut Vec<Session>, prefs: &ViewPrefs) {
-    let dismissed = |session: &Session| matches!(prefs.dismissed.get(&session.id), Some(at) if session.last_active <= *at);
+    let dismissed = |session: &Session| matches!(prefs.dismissed.get(&session.id), Some(at) if session.since <= *at);
     match prefs.dismiss_mode {
         DismissMode::Hide => sessions.retain(|session| !dismissed(session)),
         DismissMode::Read => {
@@ -1224,6 +1239,73 @@ mod tests {
             SessionState::Working,
             "a line written before the source was recorded keeps its old reading"
         );
+    }
+
+    /// An agent writes every few seconds. Against `last_active` that revoked an explicit
+    /// dismiss on the next poll, and kept revoking it for as long as the agent ran.
+    #[test]
+    fn a_dismissed_session_stays_dismissed_while_its_agent_writes() {
+        let dismissed_at = 1_000;
+        let mut sessions = vec![Session {
+            state: SessionState::Working,
+            since: 900,
+            last_active: 1_500,
+            ..session("s1", SessionState::Working, None, Some(10))
+        }];
+        let prefs = ViewPrefs {
+            dismissed: HashMap::from([("s1".to_string(), dismissed_at)]),
+            ..Default::default()
+        };
+
+        apply_dismissed(&mut sessions, &prefs);
+
+        assert!(
+            sessions.is_empty(),
+            "the agent's writes are not the session acting again"
+        );
+    }
+
+    #[test]
+    fn a_dismissed_session_returns_when_it_changes_state() {
+        let mut sessions = vec![Session {
+            state: SessionState::WaitingOnYou,
+            since: 1_100,
+            last_active: 1_100,
+            ..session("s1", SessionState::WaitingOnYou, None, Some(10))
+        }];
+        let prefs = ViewPrefs {
+            dismissed: HashMap::from([("s1".to_string(), 1_000)]),
+            ..Default::default()
+        };
+
+        apply_dismissed(&mut sessions, &prefs);
+
+        assert_eq!(sessions.len(), 1, "it blocked on you after the dismiss");
+    }
+
+    #[test]
+    fn an_idle_nudge_does_not_downgrade_a_block_that_is_still_open() {
+        let events = vec![
+            Event::Notification {
+                id: "s1".into(),
+                at: 100,
+                kind: Some(NotificationKind::Permission),
+            },
+            Event::Notification {
+                id: "s1".into(),
+                at: 160,
+                kind: Some(NotificationKind::Idle),
+            },
+        ];
+
+        let sessions = fold_default(&events, 200);
+
+        assert_eq!(
+            sessions[0].state,
+            SessionState::WaitingOnYou,
+            "the prompt is still pending; only answering it or the TTL ends it"
+        );
+        assert_eq!(sessions[0].since, 100, "and the wait keeps its own clock");
     }
 
     #[test]
