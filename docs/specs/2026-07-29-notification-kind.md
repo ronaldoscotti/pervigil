@@ -221,11 +221,19 @@ session's own transcript whenever one of its agents moved, whatever its mtime sa
 the row always comes from there. Keyed by path, so it cannot double-read a file the
 walk already found.
 
-### Retained usage is bounded by the window floor
+### Retained usage is bounded by the widest span, not by the caller's
 
 Transcripts are read from byte zero, so every entry a file ever held was kept and
 re-cloned into every snapshot, once a second, for as long as the app ran: **73,174
-entries against 1,212** with the floor applied.
+entries against 1,212** with a floor applied.
+
+The floor cannot be the calling span's. One `Scanner` serves every span and outlives all
+of them — the tray ticks on `Today` while the panel may be on `Week` — so trimming to
+whichever call came first destroyed what the wider one still needed, and `consumed` had
+moved past those bytes for good. That shipped for one commit and under-reported cost and
+tokens on the week view for every transcript the tray had already touched. The retention
+floor is now passed in as the widest window any caller can ask for, separately from the
+two floors that decide what a given call lists and prices.
 
 ### The walk became a sweep
 

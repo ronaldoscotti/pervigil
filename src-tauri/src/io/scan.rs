@@ -17,10 +17,11 @@ use super::transcript::Transcript;
 /// is one file and is read every poll regardless.
 const SWEEP_EVERY: u32 = 10;
 
-/// Polls a file may go without growing before it is left to the sweep. Records arrive
-/// every second or two while a session or an agent is working, but a slow tool call is
-/// quiet for longer, and demoting a live file would delay the appended bytes.
-const HOT_POLLS: u32 = 30;
+/// Polls a file may go without growing before it is left to the sweep. Generous on
+/// purpose: a session sitting at a permission prompt is quiet *by definition*, and it is
+/// the one file whose next write — you answering — must reach the panel at once rather
+/// than on the next sweep. Ten minutes of files, which is a handful.
+const HOT_POLLS: u32 = 600;
 
 #[derive(Default)]
 struct Cached {
@@ -57,17 +58,18 @@ impl Cached {
         let Ok(mut file) = File::open(path) else {
             return;
         };
-        let (len, mtime) = match file.metadata() {
-            Ok(meta) => (meta.len(), modified_from(meta)),
-            Err(_) => (0, 0),
+        // A file we cannot stat tells us nothing; guessing zero would wipe the parsed
+        // transcript and drop the session out of the window until the next sweep.
+        let Ok(meta) = file.metadata() else {
+            return;
         };
-        self.mtime = self.mtime.max(mtime);
+        let (len, mtime) = (meta.len(), modified_from(meta));
         if len < self.consumed {
             let kept = std::mem::take(&mut self.quiet);
             *self = Cached::default();
             self.quiet = kept;
-            self.mtime = mtime;
         }
+        self.mtime = self.mtime.max(mtime);
         if len == self.consumed || file.seek(SeekFrom::Start(self.consumed)).is_err() {
             return;
         }
@@ -113,10 +115,21 @@ pub struct Scanner {
 }
 
 impl Scanner {
-    /// Two floors: between them a transcript is priced but not listed. Files
-    /// untouched since the lower one are skipped — append-only, so they cannot hold
-    /// anything in either window.
-    pub fn scan(&mut self, root: &Path, sessions_since: Timestamp, usage_since: Timestamp) -> Scan {
+    /// Two floors: between them a transcript is priced but not listed. Files untouched
+    /// since the lower one are skipped — append-only, so they cannot hold anything in
+    /// either window.
+    ///
+    /// `keep_since` is separate and must be the widest window any caller can ask for,
+    /// because one `Scanner` serves them all: the tray ticks on `Today` while the panel
+    /// may be on `Week`, and trimming to whichever call came first would destroy what
+    /// the wider one still needs. `consumed` has moved past those bytes for good.
+    pub fn scan(
+        &mut self,
+        root: &Path,
+        sessions_since: Timestamp,
+        usage_since: Timestamp,
+        keep_since: Timestamp,
+    ) -> Scan {
         let floor = usage_since.min(sessions_since);
         // A `stat` per candidate file per poll was the whole cost of this walk — 14ms of
         // 15ms over 740 files here, and that count grows with every session ever created.
@@ -147,7 +160,7 @@ impl Scanner {
             if sweep || cached.quiet < HOT_POLLS {
                 cached.absorb_appended(&path);
             }
-            cached.forget_before(floor);
+            cached.forget_before(keep_since);
             let modified = modified.max(cached.mtime);
 
             let Some(mut session) = cached.transcript.session() else {
@@ -185,7 +198,14 @@ impl Scanner {
                     agents.push(session);
                 }
             } else {
-                rows.insert(session.id.clone(), session);
+                // Last-write-wins over an unordered walk would flip a row's title and cwd
+                // between polls if a session id ever appeared in two transcripts.
+                match rows.get_mut(&session.id) {
+                    Some(row) if row.last_active >= session.last_active => {}
+                    _ => {
+                        rows.insert(session.id.clone(), session);
+                    }
+                }
             }
         }
 
@@ -366,7 +386,7 @@ mod tests {
         let projects = TempProjects::new("find");
         projects.append(FIRST);
 
-        let scan = Scanner::default().scan(&projects.0, 0, 0);
+        let scan = Scanner::default().scan(&projects.0, 0, 0, 0);
 
         assert_eq!(scan.sessions.len(), 1);
         assert_eq!(scan.sessions[0].id, "s1");
@@ -380,7 +400,7 @@ mod tests {
         projects.append(FIRST);
         projects.append_subagent(SUBAGENT);
 
-        let scan = Scanner::default().scan(&projects.0, 0, 0);
+        let scan = Scanner::default().scan(&projects.0, 0, 0, 0);
 
         assert_eq!(
             scan.usage["s1"].len(),
@@ -417,7 +437,7 @@ mod tests {
             terminal: None,
         };
 
-        let scan = Scanner::default().scan(&projects.0, 0, 0);
+        let scan = Scanner::default().scan(&projects.0, 0, 0, 0);
         let merged = crate::core::store::merge(vec![waiting], scan.sessions, scan.agents);
 
         assert_eq!(merged.len(), 1, "the agent must not open a second row");
@@ -439,7 +459,7 @@ mod tests {
         projects.append(FIRST);
         projects.append_subagent(SUBAGENT);
 
-        let scan = Scanner::default().scan(&projects.0, 0, 0);
+        let scan = Scanner::default().scan(&projects.0, 0, 0, 0);
 
         assert_eq!(scan.sessions.len(), 1, "one row from the main transcript");
         assert_eq!(scan.sessions[0].last_active, 1784800801);
@@ -485,7 +505,7 @@ mod tests {
         projects.backdate(projects.transcript(), floor - 60 * 60);
 
         // Both floors: below either of them the walk would not open the file at all.
-        let scan = Scanner::default().scan(&projects.0, floor, floor);
+        let scan = Scanner::default().scan(&projects.0, floor, floor, 0);
 
         assert_eq!(scan.sessions.len(), 1, "the session is listed");
         assert_eq!(
@@ -496,17 +516,40 @@ mod tests {
         assert_eq!(scan.sessions[0].cwd, "/Users/x/specola");
     }
 
+    /// The scanner outlives every span the panel can be set to, and the tray ticks on
+    /// `Today` while the panel may be on `Week`. Trimming to the floor of whichever call
+    /// came first would delete what the wider one still needs, and `consumed` has moved
+    /// past those bytes for good.
+    #[test]
+    fn a_narrow_span_does_not_destroy_what_a_wider_one_still_needs() {
+        let projects = TempProjects::new("floors-collide");
+        projects.append(FIRST);
+        let mut scanner = Scanner::default();
+
+        // the tray, on Today; the panel may still ask for Week, so that is what may be
+        // forgotten — never today's floor.
+        let week_start = 0;
+        scanner.scan(&projects.0, 1784800802, 1784800802, week_start);
+        let week = scanner.scan(&projects.0, week_start, 1784800802, week_start);
+
+        assert_eq!(
+            week.usage["s1"].len(),
+            1,
+            "the week view must still see what today's floor was above"
+        );
+    }
+
     #[test]
     fn usage_older_than_the_floor_is_not_kept_or_re_cloned() {
         let projects = TempProjects::new("forget");
         projects.append(FIRST);
         let mut scanner = Scanner::default();
 
-        assert_eq!(scanner.scan(&projects.0, 0, 0).usage["s1"].len(), 1);
+        assert_eq!(scanner.scan(&projects.0, 0, 0, 0).usage["s1"].len(), 1);
 
-        // A later poll whose floors are both past that entry must not carry it around:
+        // A later poll whose floors are all past that entry must not carry it around:
         // the panel polls every second for as long as the app runs.
-        let scan = scanner.scan(&projects.0, 1784800802, 1784800802);
+        let scan = scanner.scan(&projects.0, 1784800802, 1784800802, 1784800802);
 
         assert!(
             scan.usage
@@ -527,7 +570,7 @@ mod tests {
         let mut scanner = Scanner::default();
 
         assert_eq!(
-            scanner.scan(&projects.0, 0, 0).usage.len(),
+            scanner.scan(&projects.0, 0, 0, 0).usage.len(),
             1,
             "first poll sweeps"
         );
@@ -536,14 +579,14 @@ mod tests {
 
         for poll in 1..SWEEP_EVERY {
             assert_eq!(
-                scanner.scan(&projects.0, 0, 0).usage.len(),
+                scanner.scan(&projects.0, 0, 0, 0).usage.len(),
                 1,
                 "poll {poll} serves the files it already knows"
             );
         }
 
         assert_eq!(
-            scanner.scan(&projects.0, 0, 0).usage.len(),
+            scanner.scan(&projects.0, 0, 0, 0).usage.len(),
             2,
             "and the sweep picks up the new one"
         );
@@ -556,7 +599,7 @@ mod tests {
         let projects = TempProjects::new("hot");
         projects.append(FIRST);
         let mut scanner = Scanner::default();
-        scanner.scan(&projects.0, 0, 0);
+        scanner.scan(&projects.0, 0, 0, 0);
 
         for poll in 1..SWEEP_EVERY {
             projects.append(concat!(
@@ -564,7 +607,7 @@ mod tests {
                 "\n",
             ));
             assert_eq!(
-                scanner.scan(&projects.0, 0, 0).usage["s1"].len(),
+                scanner.scan(&projects.0, 0, 0, 0).usage["s1"].len(),
                 1 + poll as usize,
                 "poll {poll} must not wait for a sweep"
             );
@@ -576,13 +619,13 @@ mod tests {
         let projects = TempProjects::new("append");
         projects.append(FIRST);
         let mut scanner = Scanner::default();
-        scanner.scan(&projects.0, 0, 0);
+        scanner.scan(&projects.0, 0, 0, 0);
 
         projects.append(concat!(
             r#"{"type":"assistant","sessionId":"s1","timestamp":"2026-07-23T11:00:00.000Z","message":{"model":"claude-opus-4-8","usage":{"output_tokens":20}}}"#,
             "\n",
         ));
-        let scan = scanner.scan(&projects.0, 0, 0);
+        let scan = scanner.scan(&projects.0, 0, 0, 0);
 
         assert_eq!(
             scan.usage["s1"].len(),
@@ -598,7 +641,7 @@ mod tests {
         projects.append(r#"{"type":"assistant","sessionId":"s1","timesta"#);
         let mut scanner = Scanner::default();
 
-        assert_eq!(scanner.scan(&projects.0, 0, 0).usage["s1"].len(), 1);
+        assert_eq!(scanner.scan(&projects.0, 0, 0, 0).usage["s1"].len(), 1);
 
         projects.append(concat!(
             r#"mp":"2026-07-23T11:00:00.000Z","message":{"model":"claude-opus-4-8","usage":{"output_tokens":20}}}"#,
@@ -606,7 +649,7 @@ mod tests {
         ));
 
         assert_eq!(
-            scanner.scan(&projects.0, 0, 0).usage["s1"].len(),
+            scanner.scan(&projects.0, 0, 0, 0).usage["s1"].len(),
             2,
             "the line completes on the next poll"
         );
@@ -619,7 +662,7 @@ mod tests {
         let far_future = u64::MAX / 2;
 
         assert!(Scanner::default()
-            .scan(&projects.0, far_future, far_future)
+            .scan(&projects.0, far_future, far_future, 0)
             .sessions
             .is_empty());
     }
@@ -630,7 +673,7 @@ mod tests {
         projects.append(FIRST);
         let far_future = u64::MAX / 2;
 
-        let scan = Scanner::default().scan(&projects.0, far_future, 0);
+        let scan = Scanner::default().scan(&projects.0, far_future, 0, 0);
 
         assert!(scan.sessions.is_empty(), "too old for the session window");
         assert_eq!(scan.usage["s1"].len(), 1, "but its cost still counts");
@@ -638,7 +681,7 @@ mod tests {
 
     #[test]
     fn a_missing_projects_directory_is_not_an_error() {
-        let scan = Scanner::default().scan(Path::new("/nope/not/here"), 0, 0);
+        let scan = Scanner::default().scan(Path::new("/nope/not/here"), 0, 0, 0);
 
         assert!(scan.sessions.is_empty());
     }

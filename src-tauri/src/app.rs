@@ -261,10 +261,14 @@ impl App {
         // a transcript quiet since this morning is still today's spend, and the
         // mtime gate would otherwise never open its file at all.
         let midnight = start_of_day(now).timestamp().max(0) as Timestamp;
+        // The scanner is shared by every span and outlives all of them, so what it may
+        // forget is bounded by the widest one — not by whichever span asked first.
+        let keep_since = bounds(Span::Week, now).0;
         let scan = self.scanner.lock().expect("scanner lock").scan(
             &self.home.join(PROJECTS),
             from,
             midnight,
+            keep_since,
         );
         let spent: Vec<&UsageEntry> = scan.usage.values().flatten().collect();
 
