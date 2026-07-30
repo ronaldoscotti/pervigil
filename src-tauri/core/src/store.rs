@@ -154,15 +154,18 @@ fn extend(segments: &mut Vec<Segment>, state: SessionState, from: Timestamp, to:
 }
 
 /// Union both discovery sources by session id. Hooks win on state and pid;
-/// transcripts add the title and any session hooks never saw. Does not sort.
+/// transcripts add the title, the freshest recency, and any session hooks never saw.
+/// Does not sort.
 pub fn merge(mut hooks: Vec<Session>, transcripts: Vec<Session>) -> Vec<Session> {
     for transcript in transcripts {
         match hooks.iter_mut().find(|hook| hook.id == transcript.id) {
             Some(hook) => {
+                // Recency, unlike state, takes whichever source is fresher: hook events
+                // are sparse, and a session can own several transcript files.
+                hook.last_active = hook.last_active.max(transcript.last_active);
                 if answered(hook, &transcript) {
                     hook.state = SessionState::Working;
                     hook.since = transcript.last_active;
-                    hook.last_active = hook.last_active.max(transcript.last_active);
                 }
                 hook.title = hook.title.take().or(transcript.title);
                 hook.git_branch = hook.git_branch.take().or(transcript.git_branch);
@@ -846,6 +849,41 @@ mod tests {
         let merged = merge(hooks, transcripts);
 
         assert_eq!(merged[0].state, SessionState::YourTurn);
+    }
+
+    #[test]
+    fn recency_takes_the_freshest_of_a_sessions_transcripts() {
+        // A session's main transcript and its background agents' files arrive as
+        // several rows with one id. The row must carry the latest of them: on the
+        // stale one it drops out of a narrow window and stays dismissed, both of
+        // which read as "nothing is happening here" while an agent works.
+        let main = Session {
+            since: 36_000,
+            last_active: 36_000,
+            ..session("s1", SessionState::Idle, Some("Fix login"), None)
+        };
+        let agent = Session {
+            since: 43_200,
+            last_active: 43_200,
+            ..session("s1", SessionState::Idle, None, None)
+        };
+
+        let mut merged = merge(Vec::new(), vec![main, agent]);
+
+        assert_eq!(merged.len(), 1, "one session, not one row per file");
+        assert_eq!(merged[0].last_active, 43_200);
+        assert_eq!(
+            merged[0].title.as_deref(),
+            Some("Fix login"),
+            "the agent lends no name"
+        );
+
+        retain_within(&mut merged, 40_000);
+        assert_eq!(
+            merged.len(),
+            1,
+            "so it stays inside a window it was active in"
+        );
     }
 
     #[test]
