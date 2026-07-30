@@ -24,6 +24,11 @@ use specola_lib::core::span::Span;
 
 /// A fixed clock, comfortably in the past so the fixtures' real file mtimes always clear
 /// the scanner's window gate. Every timestamp below is an offset from it.
+///
+/// Being in the past is only safe because `App::at` no longer prunes the log against the
+/// wall clock — it did, and these fixtures would have started emptying themselves once
+/// they aged past retention. Anything that reintroduces a wall clock under `check` puts
+/// an expiry date on this file.
 const NOW: i64 = 1_785_000_000;
 
 fn at(offset: i64) -> i64 {
@@ -144,10 +149,20 @@ impl Home {
 /// path to the shim; `todayCost` is counted from *local* midnight, so it moves with the
 /// runner's timezone. None of them belongs in a file two machines compare.
 fn redact(mut snapshot: serde_json::Value) -> serde_json::Value {
+    // Indexing a JSON object *creates* a missing key, so a renamed field would turn
+    // redaction into a no-op and bake an absolute path into a committed fixture. Fail
+    // here instead, where the message names the cause.
+    for field in ["hookSnippet", "todayCost"] {
+        assert!(
+            snapshot.get(field).is_some(),
+            "no `{field}` to redact — was it renamed? redacting would silently do nothing"
+        );
+    }
     snapshot["hookSnippet"] = serde_json::json!("<snippet>");
     snapshot["todayCost"] = serde_json::json!("<local midnight>");
     if let Some(sessions) = snapshot["sessions"].as_array_mut() {
         for session in sessions {
+            assert!(session.get("focus").is_some(), "no `focus` to redact");
             session["focus"] = serde_json::json!("<focus>");
         }
     }
@@ -189,25 +204,27 @@ fn check(name: &str, home: PathBuf, span: Span) {
     round_floats(&mut actual);
     let pretty = serde_json::to_string_pretty(&actual).unwrap() + "\n";
     let path = goldens().join(format!("{name}.json"));
+    std::fs::remove_dir_all(&home).ok();
 
-    if std::env::var("UPDATE_GOLDENS").is_ok() {
+    // Only a literal 1. An exported `UPDATE_GOLDENS=0` left in a shell would otherwise
+    // turn every `cargo test` into a silent rewrite of the files it should be checking.
+    if std::env::var("UPDATE_GOLDENS").as_deref() == Ok("1") {
         std::fs::create_dir_all(goldens()).unwrap();
         std::fs::write(&path, &pretty).unwrap();
-    } else {
-        // Git may check the file out with CRLF; the comparison is about the day, not
-        // about which platform cloned the repo.
-        let expected = std::fs::read_to_string(&path)
-            .unwrap_or_else(|_| {
-                panic!("no golden at {path:?} — run with UPDATE_GOLDENS=1 and read the diff")
-            })
-            .replace("\r\n", "\n");
-        assert_eq!(
-            pretty, expected,
-            "snapshot changed for {name}; if you meant it, UPDATE_GOLDENS=1 and read the diff"
-        );
+        return;
     }
 
-    std::fs::remove_dir_all(&home).ok();
+    // Git may check the file out with CRLF; the comparison is about the day, not
+    // about which platform cloned the repo.
+    let expected = std::fs::read_to_string(&path)
+        .unwrap_or_else(|_| {
+            panic!("no golden at {path:?} — run with UPDATE_GOLDENS=1 and read the diff")
+        })
+        .replace("\r\n", "\n");
+    assert_eq!(
+        pretty, expected,
+        "snapshot changed for {name}; if you meant it, UPDATE_GOLDENS=1 and read the diff"
+    );
 }
 
 /// Claude is asking for permission and nothing has answered it. The one thing the panel

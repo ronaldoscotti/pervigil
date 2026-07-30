@@ -62,7 +62,8 @@ describe("money", () => {
 
   it("drops the sign on negative zero", () => {
     // A window with nothing priced arrives as -0.0: Rust's `Sum` for floats uses
-    // negative zero as its identity. "-$0.00" in the footer would read as a refund.
+    // negative zero as its identity, and "-$0.00" in the footer would read as a refund.
+    // `toFixed` already drops it — this pins behaviour nothing in `money` asks for.
     expect(money(-0)).toBe("$0.00");
   });
 });

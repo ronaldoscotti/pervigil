@@ -70,6 +70,18 @@ constant, so `since`, the lane's bounds and the elapsed columns are deterministi
 Fixture files' real mtimes are always *later* than the fixed clock, which is what keeps
 them clearing the scanner's window gate.
 
+That only works if nothing under test reads the *real* clock, and something did.
+`App::at` pruned the event log to `RETENTION_SECS` against `Local::now()` before the
+snapshot was ever taken, so the fixtures had an expiry date: around 2026-08-24 their
+hook events would have started disappearing under every runner's wall clock and all four
+goldens would have broken with no commit to blame. Pruning is launch housekeeping, so it
+moved to `App::new`, and `App::at` no longer touches the caller's log.
+
+The general shape is worth more than the fix: **a fixed clock in the test is only half
+the job — the production path has to be free of wall clocks too.** A test whose failure
+date is a function of when it was written cannot be caught by rerunning it, by CI, or by
+review. It is found by asking what reads `now()` between the fixture and the assertion.
+
 **Three fields are redacted, and the third was found the hard way.** `focus` follows the
 platform's capabilities and `hookSnippet` carries an absolute path to the shim. The third
 is `todayCost`, which is counted from *local* midnight and therefore moves with the
@@ -100,9 +112,10 @@ other kind of test — a flaky golden is worse than none, because it teaches peo
 rerun CI instead of reading it.
 
 **`cost: -0.0` in a golden is not a defect.** Rust's `Sum` for floats uses `-0.0` as its
-identity, so a window with nothing priced sums to negative zero. `money()` drops the
-sign, and `format.test.ts` pins that — "-$0.00" in the footer would read as a refund.
-The golden keeps the raw value, because it shows what the frontend is actually handed.
+identity, so a window with nothing priced sums to negative zero. `toFixed` drops the sign
+on the way to the footer, where "-$0.00" would read as a refund — nothing in `money()`
+asks for that, which is exactly why `format.test.ts` pins it. The golden keeps the raw
+value, because it shows what the frontend is actually handed.
 
 **One caveat about reading goldens from the frontend.** Vite's JSON *import* normalises
 `-0` to `0`, while the running app receives its snapshot over IPC and `JSON.parse`

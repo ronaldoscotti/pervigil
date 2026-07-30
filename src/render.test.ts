@@ -96,13 +96,17 @@ describe("a project just opened", () => {
 
   test("renders an empty window's cost as a plain zero", () => {
     // The golden carries `-0.0` — Rust's `Sum` for floats uses negative zero as its
-    // identity. The sign must not reach the footer; `money` is where that is pinned.
+    // identity. `toFixed` drops the sign rather than any guard in `money`, which is why
+    // `format.test.ts` pins it: it is inherited behaviour, not a decision.
     expect(document.getElementById("cost")?.textContent).toBe("$0.00");
   });
 });
 
 describe("an ordinary day", () => {
-  beforeEach(() => draw("a-working-day", "today"));
+  // "4h", matching the span the golden was captured under. Rendering it as "today"
+  // would label a 24-hour window over four hours of data — the exact drift the shared
+  // fixture exists to prevent.
+  beforeEach(() => draw("a-working-day"));
 
   test("puts the blocked session first, whatever its recency", () => {
     expect(rows().map((row) => text(row, ".state"))).toEqual([
