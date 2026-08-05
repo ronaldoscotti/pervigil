@@ -17,7 +17,10 @@ pub struct SystemProcesses;
 pub fn settle_dead(sessions: &mut [Session], check: &impl ProcessCheck) -> HashSet<SessionId> {
     let mut dead = HashSet::new();
     for session in sessions {
-        if session.pid.is_some_and(|pid| check.is_alive(pid) == Some(false)) {
+        if session
+            .pid
+            .is_some_and(|pid| check.is_alive(pid) == Some(false))
+        {
             session.state = SessionState::Idle;
             dead.insert(session.id.clone());
         }
