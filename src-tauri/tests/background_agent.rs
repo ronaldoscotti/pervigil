@@ -85,10 +85,8 @@ fn an_idle_nudge_beside_a_working_agent_is_not_blocked_on_you() {
     let snapshot = app.snapshot(Span::FourHours, Local::now());
 
     assert_eq!(snapshot.sessions.len(), 1, "{:?}", snapshot.sessions);
-    // Your move, and nothing is blocked on you — which is the whole complaint. Not
-    // `Working`: the agent is working, the session is not, and its records are never
-    // allowed to speak for the session's state.
-    assert_eq!(snapshot.sessions[0].state, SessionState::YourTurn);
+    // The nudge fired because the main loop went quiet; the agent it dispatched has not.
+    assert_eq!(snapshot.sessions[0].state, SessionState::Working);
     assert_eq!(snapshot.waiting, 0, "nothing here is waiting on the user");
     assert_eq!(
         snapshot.sessions[0].name, "run the migration",

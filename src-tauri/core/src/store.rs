@@ -17,6 +17,11 @@ pub struct Segment {
 /// then goes silent (killed terminal, no `Stop` ever) is stale, not a day-long wait.
 const WAITING_TTL_SECS: Timestamp = 30 * 60;
 
+/// How long a background agent's last record still counts as work. No hook fires when an
+/// agent ends, so silence is the only signal — and 213s is the widest gap measured
+/// between one agent's records.
+const AGENT_FRESH_SECS: Timestamp = 5 * 60;
+
 /// Takes no [`ViewPrefs`] on purpose: the lane is a record of the day, so dismissed
 /// and hidden sessions still count. A `WaitingOnYou` state decays to idle after
 /// [`WAITING_TTL_SECS`] of silence, so a session that was notified and then died —
@@ -43,6 +48,10 @@ pub fn timeline(
     }
     for (id, at, origin) in activity.iter().filter(|(_, at, _)| *at <= to) {
         ticks.push(Tick::Active(id, *at, *origin));
+        let expiry = at + AGENT_FRESH_SECS;
+        if *origin == Origin::Agent && expiry <= to {
+            ticks.push(Tick::Expire(id, expiry));
+        }
     }
     // Activity is applied before the events of the same instant: the assistant record
     // that triggers a permission prompt shares its second, and must not cancel it.
@@ -71,12 +80,9 @@ pub fn timeline(
                     },
                 );
             }
-            Tick::Active(id, _, origin) => {
-                if states
-                    .get(id)
-                    .is_some_and(|wait| wait.moves_to_working(*origin))
-                {
-                    states.insert(id, Wait::working());
+            Tick::Active(id, at, origin) => {
+                if let Some(next) = states.get(id).and_then(|wait| wait.after(*origin, *at)) {
+                    states.insert(id, next);
                 }
             }
             // Only a wait carries an expiry: ignore one the session has already left or
@@ -114,12 +120,22 @@ impl Wait {
         }
     }
 
-    /// The lane's half of [`moves_to_working`], and the same single rule.
-    fn moves_to_working(&self, origin: Origin) -> bool {
-        matches!(
-            (origin, self.state),
-            (Origin::Main, SessionState::WaitingOnYou)
-        )
+    /// The lane's half of [`moves_to_working`]. `None` leaves the state alone.
+    fn after(&self, origin: Origin, at: Timestamp) -> Option<Self> {
+        let agent_at_work = || {
+            Some(Self {
+                state: SessionState::Working,
+                expiry: at + AGENT_FRESH_SECS,
+            })
+        };
+        match (origin, self.state) {
+            (Origin::Main, SessionState::WaitingOnYou) => Some(Self::working()),
+            (Origin::Agent, SessionState::Idle) => agent_at_work(),
+            // A `Working` with no expiry is the turn's own: it must not inherit the
+            // agent's decay.
+            (Origin::Agent, SessionState::Working) if self.expiry != 0 => agent_at_work(),
+            _ => None,
+        }
     }
 }
 
@@ -218,18 +234,19 @@ fn extend(segments: &mut Vec<Segment>, state: SessionState, from: Timestamp, to:
 /// Does not sort.
 ///
 /// `agents` are the rows read from a session's background-agent files. They carry the
-/// same session id and count for recency and cost, but they are kept apart because
-/// they are not evidence about you: see [`moves_to_working`].
+/// same session id and count for recency and cost, and they say work is happening while
+/// they are still arriving — but never that you answered: see [`moves_to_working`].
 pub fn merge(
     mut hooks: Vec<Session>,
     transcripts: Vec<Session>,
     agents: Vec<Session>,
+    now: Timestamp,
 ) -> Vec<Session> {
     for transcript in transcripts {
-        absorb(&mut hooks, transcript, Origin::Main);
+        absorb(&mut hooks, transcript, Origin::Main, now);
     }
     for agent in agents {
-        absorb(&mut hooks, agent, Origin::Agent);
+        absorb(&mut hooks, agent, Origin::Agent, now);
     }
     hooks
 }
@@ -242,15 +259,18 @@ pub enum Origin {
     Agent,
 }
 
-fn absorb(hooks: &mut Vec<Session>, transcript: Session, origin: Origin) {
+fn absorb(hooks: &mut Vec<Session>, transcript: Session, origin: Origin, now: Timestamp) {
     match hooks.iter_mut().find(|hook| hook.id == transcript.id) {
         Some(hook) => {
             // Recency, unlike state, takes whichever source is fresher: hook events
             // are sparse, and a session can own several transcript files.
             hook.last_active = hook.last_active.max(transcript.last_active);
-            if moves_to_working(hook, &transcript, origin) {
+            if moves_to_working(hook, &transcript, origin, now) {
                 hook.state = SessionState::Working;
-                hook.since = transcript.last_active;
+                // An agent says work is happening, not when the turn it outlived ended.
+                if origin == Origin::Main {
+                    hook.since = transcript.last_active;
+                }
             }
             hook.title = hook.title.take().or(transcript.title);
             hook.git_branch = hook.git_branch.take().or(transcript.git_branch);
@@ -267,19 +287,22 @@ fn absorb(hooks: &mut Vec<Session>, transcript: Session, origin: Origin) {
 ///
 /// Approving a permission prompt fires no hook, so a record in the session's *own*
 /// transcript is the only proof you answered. A background agent's records prove
-/// something else entirely: it writes whether you answered or walked away, so it can
-/// never clear a wait — but it is proof the session is not sitting quiet.
+/// something else: it writes whether you answered or walked away, so it can never clear
+/// a wait — but while they keep arriving they are proof the session is not sitting quiet.
 ///
-/// What is absent is the point. An agent's records cannot end a block, and they cannot
-/// revive a turn that finished either: `Stop` means the turn ended, whatever a
-/// background agent it spawned is still doing beside it. Those records still count for
-/// the session's recency and its spend — they just do not speak for its state.
-fn moves_to_working(hook: &Session, transcript: &Session, origin: Origin) -> bool {
-    transcript.last_active > hook.since
-        && matches!(
-            (origin, hook.state),
-            (Origin::Main, SessionState::WaitingOnYou)
-        )
+/// That is why an agent outliving its turn reads as work: the row said your move about a
+/// session nobody was waiting on. [`AGENT_FRESH_SECS`] of silence hands the turn back.
+fn moves_to_working(hook: &Session, transcript: &Session, origin: Origin, now: Timestamp) -> bool {
+    if transcript.last_active <= hook.since {
+        return false;
+    }
+    match (origin, hook.state) {
+        (Origin::Main, SessionState::WaitingOnYou) => true,
+        (Origin::Agent, SessionState::YourTurn | SessionState::Idle) => {
+            now.saturating_sub(transcript.last_active) <= AGENT_FRESH_SECS
+        }
+        _ => false,
+    }
 }
 
 /// The list's whole order, in one place: waiting-on-you, then pinned, then recency.
@@ -932,7 +955,7 @@ mod tests {
             ..session("s1", SessionState::Idle, Some("working"), None)
         }];
 
-        let merged = merge(hooks, transcripts, Vec::new());
+        let merged = merge(hooks, transcripts, Vec::new(), 1_224);
 
         assert_eq!(merged[0].state, SessionState::Working);
         assert_eq!(
@@ -955,7 +978,7 @@ mod tests {
             ..session("s1", SessionState::Idle, Some("blocked"), None)
         }];
 
-        let merged = merge(hooks, transcripts, Vec::new());
+        let merged = merge(hooks, transcripts, Vec::new(), 2_000);
 
         assert_eq!(
             merged[0].state,
@@ -980,7 +1003,7 @@ mod tests {
             ..session("s1", SessionState::Idle, Some("done"), None)
         }];
 
-        let merged = merge(hooks, transcripts, Vec::new());
+        let merged = merge(hooks, transcripts, Vec::new(), 1_050);
 
         assert_eq!(merged[0].state, SessionState::YourTurn);
     }
@@ -1032,40 +1055,95 @@ mod tests {
         );
     }
 
-    /// A turn that ended stays ended. An agent the session spawned writes whether or not
-    /// the turn is over, so its records speak for the agent and never for the session's
-    /// state — they carry only its recency and its spend.
+    /// Reported: a session read as your move for as long as the agent it dispatched ran.
     #[test]
-    fn an_agents_records_do_not_revive_a_turn_that_finished() {
+    fn an_agent_still_writing_is_work_even_though_the_turn_ended() {
         for state in [SessionState::YourTurn, SessionState::Idle] {
-            let merged = merge(quiet(state, 1_000), Vec::new(), agent_row(1_060));
+            let merged = merge(quiet(state, 1_000), Vec::new(), agent_row(1_060), 1_100);
 
-            assert_eq!(merged[0].state, state, "state is the hooks' to say");
+            assert_eq!(merged[0].state, SessionState::Working);
             assert_eq!(
-                merged[0].last_active, 1_060,
+                merged[0].since, 1_000,
+                "the turn ended when it ended; the agent does not re-date it"
+            );
+            assert_eq!(merged[0].last_active, 1_060);
+        }
+    }
+
+    /// The other half: no hook fires when an agent ends, so silence is the only signal.
+    #[test]
+    fn an_agent_that_went_quiet_hands_the_turn_back() {
+        for state in [SessionState::YourTurn, SessionState::Idle] {
+            let wrote_at = 1_060;
+            let merged = merge(
+                quiet(state, 1_000),
+                Vec::new(),
+                agent_row(wrote_at),
+                wrote_at + AGENT_FRESH_SECS + 1,
+            );
+
+            assert_eq!(merged[0].state, state, "state is the hooks' to say again");
+            assert_eq!(
+                merged[0].last_active, wrote_at,
                 "but the records still happened"
             );
         }
     }
 
+    /// The lane's half of the same rule.
     #[test]
-    fn the_lane_agrees_that_an_agent_does_not_revive_a_stopped_session() {
+    fn the_lane_paints_an_agents_work_and_lets_it_decay() {
         let stopped = vec![Event::Stop {
             id: "s1".into(),
             at: 0,
         }];
+        let last_wrote = 5 * 60;
         let writing: Vec<_> = (1..=5)
             .map(|minute| ("s1".to_string(), minute * 60, Origin::Agent))
             .collect();
 
-        let segments = timeline(&stopped, &writing, 0, 600);
+        let segments = timeline(&stopped, &writing, 0, last_wrote + AGENT_FRESH_SECS + 60);
+
+        assert_eq!(
+            segments,
+            vec![
+                Segment {
+                    state: SessionState::Idle,
+                    from: 0,
+                    to: 60
+                },
+                Segment {
+                    state: SessionState::Working,
+                    from: 60,
+                    to: last_wrote + AGENT_FRESH_SECS
+                },
+                Segment {
+                    state: SessionState::Idle,
+                    from: last_wrote + AGENT_FRESH_SECS,
+                    to: last_wrote + AGENT_FRESH_SECS + 60
+                },
+            ],
+            "green while the agent wrote, and only while"
+        );
+    }
+
+    /// A running turn must not inherit the agent's decay and go quiet mid-turn.
+    #[test]
+    fn an_agent_record_does_not_put_a_running_turn_on_a_clock() {
+        let events = vec![Event::UserPromptSubmit {
+            id: "s1".into(),
+            at: 0,
+        }];
+        let one_record = vec![("s1".to_string(), 10, Origin::Agent)];
+
+        let segments = timeline(&events, &one_record, 0, 4 * AGENT_FRESH_SECS);
 
         assert_eq!(
             segments,
             vec![Segment {
-                state: SessionState::Idle,
+                state: SessionState::Working,
                 from: 0,
-                to: 600
+                to: 4 * AGENT_FRESH_SECS
             }]
         );
     }
@@ -1076,6 +1154,7 @@ mod tests {
             quiet(SessionState::WaitingOnYou, 1_000),
             Vec::new(),
             agent_row(1_060),
+            1_100,
         );
 
         assert_eq!(
@@ -1135,7 +1214,7 @@ mod tests {
             ..session("s1", SessionState::Idle, None, None)
         };
 
-        let mut merged = merge(Vec::new(), vec![main], vec![agent]);
+        let mut merged = merge(Vec::new(), vec![main], vec![agent], 43_200);
 
         assert_eq!(merged.len(), 1, "one session, not one row per file");
         assert_eq!(merged[0].last_active, 43_200);
@@ -1157,7 +1236,7 @@ mod tests {
     fn a_transcript_only_session_survives_the_merge() {
         let transcripts = vec![session("t1", SessionState::Idle, Some("Fix login"), None)];
 
-        let merged = merge(Vec::new(), transcripts, Vec::new());
+        let merged = merge(Vec::new(), transcripts, Vec::new(), 100);
 
         assert_eq!(merged.len(), 1);
         assert_eq!(merged[0].state, SessionState::Idle);
@@ -1175,7 +1254,7 @@ mod tests {
             None,
         )];
 
-        let merged = merge(hooks, transcripts, Vec::new());
+        let merged = merge(hooks, transcripts, Vec::new(), 100);
 
         assert_eq!(merged.len(), 1, "same id must not duplicate");
         assert_eq!(merged[0].state, SessionState::WaitingOnYou);
@@ -1218,7 +1297,7 @@ mod tests {
         }];
         let transcripts = vec![session("s1", SessionState::Idle, Some("Fix login"), None)];
 
-        let merged = merge(hooks, transcripts, Vec::new());
+        let merged = merge(hooks, transcripts, Vec::new(), 100);
 
         assert_eq!(merged.len(), 1);
         assert_eq!(merged[0].cwd, "/s1", "cwd comes from the transcript");

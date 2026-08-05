@@ -239,9 +239,15 @@ export function render(snapshot: Snapshot, span: Span) {
 
   const total = snapshot.sessions.length;
   const yourTurn = snapshot.sessions.filter((s) => s.state === "YourTurn").length;
+  const busy = snapshot.sessions.filter((s) => s.state === "Working").length;
   const count = t(total === 1 ? "sessionsOne" : "sessionsMany", { n: total });
+  // A session with an agent churning in it is not one of the quiet ones.
   const tail =
-    yourTurn > 0 ? t("yourTurnCount", { n: yourTurn }) : t("quiet", { n: total - snapshot.waiting });
+    yourTurn > 0
+      ? t("yourTurnCount", { n: yourTurn })
+      : busy > 0
+        ? t("workingCount", { n: busy })
+        : t("quiet", { n: total - snapshot.waiting });
   el("tally").textContent = `${count} · ${tail}`;
 
   el("lane-label").textContent = t(SPAN_KEY[span]);
