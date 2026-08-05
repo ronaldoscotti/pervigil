@@ -40,7 +40,7 @@ fn a_killed_terminal_never_sends_stop_and_stays_working() {
     let sessions = fold(&full_day(), NOW, &ViewPrefs::default());
     let killed = sessions.iter().find(|s| s.id == "s-killed").unwrap();
 
-    // fold has no way to know the process died — liveness (M5) is what hides it.
+    // fold has no way to know the process died — liveness is what settles it to idle.
     assert_eq!(killed.state, SessionState::Working);
 }
 

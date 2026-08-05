@@ -1,4 +1,7 @@
-use crate::core::session::Session;
+use std::collections::HashSet;
+
+use crate::core::event::SessionId;
+use crate::core::session::{Session, SessionState};
 
 pub trait ProcessCheck {
     /// `None` when this platform can't determine liveness.
@@ -7,18 +10,19 @@ pub trait ProcessCheck {
 
 pub struct SystemProcesses;
 
-/// Hide sessions whose process is *known* dead. Anything else — no pid, or a
-/// platform that can't answer — is kept: absence of proof is not proof of death,
-/// and hiding a transcript-derived session would silently break the
-/// hooks-not-installed path.
-///
-/// Only the list is filtered. Cost comes from transcripts, so a dead session's
-/// spend still counts toward the totals.
-pub fn retain_live(sessions: &mut Vec<Session>, check: &impl ProcessCheck) {
-    sessions.retain(|session| match session.pid {
-        Some(pid) => check.is_alive(pid) != Some(false),
-        None => true,
-    });
+/// Read sessions whose process is *known* dead as idle, and return their ids. They are
+/// not removed: the panel is the record of a day, and closing a window does not un-happen
+/// it. Anything else — no pid, or a platform that can't answer — is left alone, since
+/// absence of proof is not proof of death.
+pub fn settle_dead(sessions: &mut [Session], check: &impl ProcessCheck) -> HashSet<SessionId> {
+    let mut dead = HashSet::new();
+    for session in sessions {
+        if session.pid.is_some_and(|pid| check.is_alive(pid) == Some(false)) {
+            session.state = SessionState::Idle;
+            dead.insert(session.id.clone());
+        }
+    }
+    dead
 }
 
 #[cfg(unix)]
@@ -67,34 +71,62 @@ mod tests {
         }
     }
 
-    fn survivors(pid: Option<u32>, alive: Option<bool>) -> usize {
+    fn settled(pid: Option<u32>, alive: Option<bool>) -> Vec<Session> {
         let mut sessions = vec![session(pid)];
-        retain_live(&mut sessions, &Fake(alive));
-        sessions.len()
-    }
+        let dead = settle_dead(&mut sessions, &Fake(alive));
 
-    #[test]
-    fn a_live_process_keeps_its_session() {
-        assert_eq!(survivors(Some(42), Some(true)), 1);
-    }
-
-    #[test]
-    fn a_dead_process_hides_its_session() {
-        assert_eq!(survivors(Some(42), Some(false)), 0);
-    }
-
-    #[test]
-    fn a_session_with_no_pid_is_kept() {
         assert_eq!(
-            survivors(None, Some(false)),
-            1,
-            "transcript-derived sessions carry no pid and must survive"
+            dead.contains(&sessions[0].id),
+            sessions[0].state == SessionState::Idle,
+            "the reported set and the settled state must say the same thing"
+        );
+        sessions
+    }
+
+    fn state(pid: Option<u32>, alive: Option<bool>) -> SessionState {
+        settled(pid, alive)[0].state
+    }
+
+    #[test]
+    fn a_live_process_keeps_its_session_as_it_is() {
+        assert_eq!(state(Some(42), Some(true)), SessionState::Working);
+    }
+
+    /// The reported bug: closing the window erased the project from panel and settings.
+    #[test]
+    fn a_dead_process_settles_its_session_to_idle_without_dropping_it() {
+        let sessions = settled(Some(42), Some(false));
+
+        assert_eq!(sessions.len(), 1, "the day it worked still happened");
+        assert_eq!(sessions[0].state, SessionState::Idle);
+    }
+
+    /// Why the state moves at all: a killed terminal fires no `Stop`, and a row still
+    /// claiming a block would badge the tray forever.
+    #[test]
+    fn a_dead_process_cannot_still_be_blocked_on_you() {
+        let mut sessions = vec![Session {
+            state: SessionState::WaitingOnYou,
+            ..session(Some(42))
+        }];
+
+        settle_dead(&mut sessions, &Fake(Some(false)));
+
+        assert_eq!(sessions[0].state, SessionState::Idle);
+    }
+
+    #[test]
+    fn a_session_with_no_pid_is_left_alone() {
+        assert_eq!(
+            state(None, Some(false)),
+            SessionState::Working,
+            "transcript-derived sessions carry no pid and nothing is known about them"
         );
     }
 
     #[test]
-    fn a_platform_that_cannot_answer_keeps_the_session() {
-        assert_eq!(survivors(Some(42), None), 1);
+    fn a_platform_that_cannot_answer_leaves_the_session_alone() {
+        assert_eq!(state(Some(42), None), SessionState::Working);
     }
 
     #[cfg(unix)]

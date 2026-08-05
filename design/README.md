@@ -58,6 +58,9 @@ This file is the **frozen M2 direction**, not a mirror of the app. The live UI
   to a filter that governs one of them reads as a bug.
 - **Lane header** — labelled by the selected span (`Last 4 hours` / `Today` / `This week`)
   rather than a fixed `LAST 6 HOURS`.
+- **`×N` counts rows, not live sessions** — the panel keeps a session whose process is gone
+  (it settles to idle, it is not dropped), so the chip counts what the window is drawing.
+  Two rows of one project need telling apart whether or not both are still running.
 
 Everything else — the palette, the lamp metaphor, the type pairing, the combined lane, and
 the branch-chip-only-when-it-disambiguates rule — shipped as drawn.

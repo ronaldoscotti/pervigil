@@ -42,8 +42,8 @@ fn iso(epoch: i64) -> String {
 }
 
 /// A `$HOME` built for one scenario. Written per test rather than committed, because the
-/// hook log has to carry this process's pid — liveness retires a session whose process
-/// is gone, and a committed pid is always gone.
+/// hook log has to carry this process's pid — liveness settles a session whose process
+/// is gone to idle, and a committed pid is always gone.
 struct Home {
     root: PathBuf,
     events: Vec<String>,
