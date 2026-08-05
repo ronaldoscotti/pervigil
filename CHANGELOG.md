@@ -12,7 +12,8 @@ The 0.1.x entries below were written by hand, before that was wired up.
 
 ### Fixed
 
-* two sessions the panel was reading wrong ([#29](https://github.com/ronaldoscotti/specola/issues/29)) ([edb11c0](https://github.com/ronaldoscotti/specola/commit/edb11c0653d7ee57c3a9a59c15708d08b2e34459))
+* keep a session on the day after its window closes ([#29](https://github.com/ronaldoscotti/specola/issues/29)) ([edb11c0](https://github.com/ronaldoscotti/specola/commit/edb11c0653d7ee57c3a9a59c15708d08b2e34459))
+* read a running background agent as work, not your turn ([#29](https://github.com/ronaldoscotti/specola/issues/29)) ([edb11c0](https://github.com/ronaldoscotti/specola/commit/edb11c0653d7ee57c3a9a59c15708d08b2e34459))
 
 ## [0.2.0](https://github.com/ronaldoscotti/specola/compare/v0.1.2...v0.2.0) (2026-07-30)
 
