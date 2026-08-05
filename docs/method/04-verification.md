@@ -61,8 +61,8 @@ a committed one. That is the whole risk of this technique and it is worth statin
 ## The decisions inside it
 
 **Fixture homes are generated, not committed.** The hook log has to carry a live pid:
-`retain_live` retires a session whose process is gone, and a committed pid is always
-gone. So the tree is written per test from a builder, with `std::process::id()`
+`settle_dead` reads a session whose process is gone as idle, and a committed pid is
+always gone. So the tree is written per test from a builder, with `std::process::id()`
 substituted in.
 
 **The clock is fixed and in the past.** Every fixture timestamp is an offset from one

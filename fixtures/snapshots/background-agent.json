@@ -21,6 +21,11 @@
     {
       "from": 1784999460,
       "state": "Idle",
+      "to": 1784999880
+    },
+    {
+      "from": 1784999880,
+      "state": "Working",
       "to": 1785000000
     }
   ],
@@ -35,7 +40,7 @@
       "project": "web",
       "siblings": 1,
       "since": 1784999460,
-      "state": "YourTurn"
+      "state": "Working"
     }
   ],
   "todayCost": "<local midnight>",

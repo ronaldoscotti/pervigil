@@ -66,15 +66,15 @@ describe("a session blocked on you", () => {
 describe("a session whose background agent is working", () => {
   beforeEach(() => draw("background-agent"));
 
-  test("is your turn, and nothing is waiting on you", () => {
-    // The reported bug read this row as "Waiting on you" while an agent churned.
-    expect(text(rows()[0], ".state")).toBe("Your turn");
+  test("is working, and nothing is waiting on you", () => {
+    // The turn ended; the agent it dispatched did not.
+    expect(text(rows()[0], ".state")).toBe("Working");
     expect(document.getElementById("waiting")?.textContent).toBe("0");
     expect(document.getElementById("waiting")?.classList.contains("quiet")).toBe(true);
   });
 
-  test("tallies as your turn rather than as quiet", () => {
-    expect(document.getElementById("tally")?.textContent).toBe("1 session · 1 your turn");
+  test("tallies as working rather than as quiet", () => {
+    expect(document.getElementById("tally")?.textContent).toBe("1 session · 1 working");
   });
 
   test("bills the agent's spend to the session that spawned it", () => {

@@ -18,7 +18,7 @@ use crate::core::tray::{tray_view, TrayStrings, TrayView};
 use crate::io;
 use crate::io::scan::Scanner;
 use crate::platform::focuser::{self, Caps, Reach, Strategy, WindowFocuser};
-use crate::platform::liveness::{retain_live, SystemProcesses};
+use crate::platform::liveness::{settle_dead, SystemProcesses};
 
 const LOG: &str = ".specola/events.jsonl";
 const PROJECTS: &str = ".claude/projects";
@@ -36,7 +36,7 @@ pub struct SessionView {
     pub branch: Option<String>,
     pub state: SessionState,
     pub since: Timestamp,
-    /// Live sessions in the same project. The branch chip and `×N` earn their space
+    /// Rows this project has in the window. The branch chip and `×N` earn their space
     /// only above 1 — see `design/README.md`.
     pub siblings: usize,
     /// `None` when nothing in this session can be priced; the row shows `—`.
@@ -86,6 +86,7 @@ pub struct Snapshot {
 struct Target {
     cwd: String,
     terminal: Option<Terminal>,
+    dead: bool,
 }
 
 /// The result of a click, for the UI's toast. `resume` is present whenever the user
@@ -238,8 +239,9 @@ impl App {
         let target = self.targets.lock().expect("targets lock").get(id).cloned();
         let cwd = target.as_ref().map(|t| t.cwd.as_str()).unwrap_or("");
         let terminal = target.as_ref().and_then(|t| t.terminal.as_ref());
+        let dead = target.as_ref().is_some_and(|t| t.dead);
 
-        let strategy = focuser::select(terminal, cwd, id, self.caps);
+        let strategy = reach(dead, terminal, cwd, id, self.caps);
         let resume = match &strategy {
             Strategy::Clipboard { resume } => resume.clone(),
             _ => focuser::resume_command(cwd, id),
@@ -279,9 +281,13 @@ impl App {
         let config = self.config.lock().expect("config lock").clone();
         let prefs = config.view_prefs();
 
-        let mut sessions =
-            store::merge(store::fold(&events, to, &prefs), scan.sessions, scan.agents);
-        retain_live(&mut sessions, &SystemProcesses);
+        let mut sessions = store::merge(
+            store::fold(&events, to, &prefs),
+            scan.sessions,
+            scan.agents,
+            to,
+        );
+        let dead = settle_dead(&mut sessions, &SystemProcesses);
         let retired = store::superseded(&events);
         sessions.retain(|session| !retired.contains(&session.id));
         store::apply_dismissed(&mut sessions, &prefs);
@@ -316,6 +322,7 @@ impl App {
                     Target {
                         cwd: s.cwd.clone(),
                         terminal: terminal_of(s),
+                        dead: dead.contains(&s.id),
                     },
                 )
             })
@@ -351,6 +358,8 @@ impl App {
                 branch: session.git_branch.clone(),
                 state: session.state,
                 since: session.since,
+                // Rows drawn, not sessions alive: the chip has to disambiguate what is on
+                // screen, and a finished session is on screen now.
                 siblings: projects.iter().filter(|other| *other == project).count(),
                 // Scoped to the same window as the footer — a row must not show a
                 // session's whole lifetime cost against a "last 4 hours" filter.
@@ -362,7 +371,8 @@ impl App {
                         .collect();
                     pricing::total(&self.prices, &windowed)
                 }),
-                focus: focuser::select(
+                focus: reach(
+                    dead.contains(&session.id),
                     terminal_of(session).as_ref(),
                     &session.cwd,
                     &session.id,
@@ -453,6 +463,23 @@ fn record_path() -> String {
         .and_then(|exe| exe.parent().map(|dir| dir.join("record")))
         .map(|path| path.to_string_lossy().into_owned())
         .unwrap_or_else(|| "record".to_string())
+}
+
+/// How a click reaches a session. A gone process has no pane to raise, whatever terminal
+/// hint it left behind, so the floor is the resume command.
+fn reach(
+    dead: bool,
+    terminal: Option<&Terminal>,
+    cwd: &str,
+    id: &str,
+    caps: Caps,
+) -> focuser::Strategy {
+    if dead {
+        return Strategy::Clipboard {
+            resume: focuser::resume_command(cwd, id),
+        };
+    }
+    focuser::select(terminal, cwd, id, caps)
 }
 
 /// Try the chosen tier; if a precise raise fails (a stale pane, an unreachable app),
@@ -557,6 +584,19 @@ mod tests {
             "a real failure must not read as a copy"
         );
         assert_eq!(result.resume.as_deref(), Some("claude --resume s1"));
+    }
+
+    /// Its pane died with its process, however good the hint left behind looks.
+    #[test]
+    fn a_dead_session_is_only_ever_a_resume_command() {
+        let pane = Terminal {
+            tmux_pane: Some("%3".into()),
+            ..Default::default()
+        };
+
+        let strategy = reach(true, Some(&pane), "/p", "s1", Caps::detect());
+
+        assert_eq!(strategy.label(), "Copy resume command");
     }
 
     #[test]

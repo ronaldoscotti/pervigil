@@ -182,6 +182,13 @@ impl Scanner {
                     .iter()
                     .map(|entry| (session.id.clone(), entry.at, origin)),
             );
+            // A tool result carries no usage block, so a priced record is not the only
+            // proof the file moved — and the row reads recency off exactly this. Bounded
+            // by `keep_since` for the same reason the usage is.
+            let priced = cached.transcript.usage.last().map_or(0, |entry| entry.at);
+            if session.last_active > priced && session.last_active >= keep_since {
+                activity.push((session.id.clone(), session.last_active, origin));
+            }
 
             let inside = modified >= sessions_since;
             if inside {
@@ -319,6 +326,12 @@ mod tests {
         "\n",
     );
 
+    /// The record a long tool call ends with: timestamped, unpriced.
+    const TOOL_RESULT: &str = concat!(
+        r#"{"type":"user","isSidechain":true,"agentId":"abc123","sessionId":"s1","timestamp":"2026-07-23T12:05:00.000Z"}"#,
+        "\n",
+    );
+
     const SECOND: &str = concat!(
         r#"{"type":"user","sessionId":"s2","cwd":"/Users/x/other","timestamp":"2026-07-23T10:00:00.000Z"}"#,
         "\n",
@@ -438,7 +451,8 @@ mod tests {
         };
 
         let scan = Scanner::default().scan(&projects.0, 0, 0, 0);
-        let merged = crate::core::store::merge(vec![waiting], scan.sessions, scan.agents);
+        let merged =
+            crate::core::store::merge(vec![waiting], scan.sessions, scan.agents, notified_at + 60);
 
         assert_eq!(merged.len(), 1, "the agent must not open a second row");
         assert_eq!(merged[0].state, SessionState::WaitingOnYou);
@@ -485,6 +499,26 @@ mod tests {
             "the lane is told which file each record came from"
         );
         assert_eq!(scan.usage["s1"].len(), 2, "cost still counts both");
+    }
+
+    /// The row reads recency off every record; the lane used to see only priced ones, so
+    /// an agent inside a long tool call read as working on one and as gone on the other.
+    #[test]
+    fn an_unpriced_record_is_activity_too() {
+        let projects = TempProjects::new("tool-result");
+        projects.append(FIRST);
+        projects.append_subagent(SUBAGENT);
+        projects.append_subagent(TOOL_RESULT);
+
+        let scan = Scanner::default().scan(&projects.0, 0, 0, 0);
+
+        assert!(
+            scan.activity
+                .contains(&("s1".to_string(), 1_784_808_300, Origin::Agent)),
+            "the tool result is the newest thing that happened: {:?}",
+            scan.activity
+        );
+        assert_eq!(scan.usage["s1"].len(), 2, "and it is still not priced");
     }
 
     /// The mtime gate skips a file that cannot hold anything in the window — but a
